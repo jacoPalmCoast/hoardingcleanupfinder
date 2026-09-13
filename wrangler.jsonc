@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hoardingcleanupfinder",
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "./dist", "binding": "ASSETS" },
+  "observability": { "enabled": true },
+  "vars": {
+    "SITE_URL": "https://hoardingcleanupfinder.com",
+    "SITE_NAME": "Hoarding Cleanup Finder",
+    "FROM_EMAIL": "Hoarding Cleanup Finder <hello@hoardingcleanupfinder.com>",
+    "FEATURED_MONTHLY_USD": "49",
+    "FEATURED_ANNUAL_USD": "399"
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "hcf-db", "database_id": "79a4c570-3472-4ae4-8296-e50ce322a228", "migrations_dir": "migrations" }
+  ]
+}

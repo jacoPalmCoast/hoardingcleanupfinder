@@ -1,0 +1,37 @@
+---
+import { env } from '../lib/env';
+import { SERVICES } from '../data/services';
+interface Props { listingId?: number; city?: string; state?: string; heading?: string }
+const { listingId, city = '', state = '', heading = 'Request a quote' } = Astro.props;
+const siteKey = env.TURNSTILE_SITE_KEY ?? '';
+---
+
+<div class="card" id="quote">
+  <h3 style="margin-top:0">{heading}</h3>
+  <p class="small">We pass your request to {listingId ? 'this company' : 'up to three companies near you'}. No charge to you, and your details are not sold to anyone else.</p>
+  <form action="/api/lead" method="post">
+    <input type="hidden" name="listing_id" value={listingId ?? ''} />
+    <input type="hidden" name="return" value={Astro.url.pathname} />
+    <label for="lead_name">Your name</label>
+    <input id="lead_name" name="name" required maxlength="100" autocomplete="name" />
+    <label for="lead_email">Email</label>
+    <input id="lead_email" name="email" type="email" required maxlength="254" autocomplete="email" />
+    <label for="lead_phone">Phone <span class="small">(optional)</span></label>
+    <input id="lead_phone" name="phone" type="tel" maxlength="30" autocomplete="tel" />
+    <label for="lead_zip">ZIP code of the property</label>
+    <input id="lead_zip" name="zip" required inputmode="numeric" pattern="[0-9]{5}" maxlength="5" />
+    <input type="hidden" name="city" value={city} />
+    <input type="hidden" name="state" value={state} />
+    <label for="lead_service">What do you need?</label>
+    <select id="lead_service" name="service" required>
+      {SERVICES.map((s) => <option value={s.slug}>{s.name}</option>)}
+    </select>
+    <label for="lead_message">Anything we should know <span class="small">(optional)</span></label>
+    <textarea id="lead_message" name="message" maxlength="1500" placeholder="Size of the home, timing, whether insurance is involved."></textarea>
+    <div style="margin-top:12px">
+      {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-size="flexible"></div>}
+    </div>
+    <button class="btn" type="submit" style="margin-top:12px">Send request</button>
+  </form>
+</div>
+{siteKey && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}

@@ -1,0 +1,46 @@
+---
+import Base from '../layouts/Base.astro';
+import { SERVICES } from '../data/services';
+import { STATES } from '../data/states';
+import { env } from '../lib/env';
+const siteKey = env.TURNSTILE_SITE_KEY ?? '';
+const msg = Astro.url.searchParams.get('msg');
+---
+<Base title="Add your cleanup company (free)" description="Add a hoarding, biohazard or estate cleanup company to the directory. Free, reviewed within one business day.">
+  <h1>Add your company</h1>
+  <p class="lede">Listings are free. We review every submission within one business day and check the phone number and website before it goes live.</p>
+  {msg === 'submitted' && <div class="notice" role="status">Thanks. Your listing is in review. We will email you when it is live.</div>}
+  {msg === 'invalid' && <div class="notice error" role="alert">Something was missing or invalid. Check the fields and try again.</div>}
+  {msg === 'captcha' && <div class="notice error" role="alert">The spam check did not pass. Reload the page and try again.</div>}
+  {msg === 'duplicate' && <div class="notice warn" role="alert">A listing with that phone number already exists. Search for it and use "Claim this listing" instead.</div>}
+  <form action="/api/listing/submit" method="post" style="max-width:600px">
+    <label for="name">Company name</label>
+    <input id="name" name="name" required maxlength="120" />
+    <label for="phone">Phone</label>
+    <input id="phone" name="phone" type="tel" required maxlength="30" />
+    <label for="website">Website <span class="small">(optional)</span></label>
+    <input id="website" name="website" type="url" maxlength="200" placeholder="https://" />
+    <label for="email">Business email <span class="small">(for verification, not shown publicly unless you choose)</span></label>
+    <input id="email" name="email" type="email" required maxlength="254" />
+    <label for="address">Street address <span class="small">(optional; leave blank if you serve an area)</span></label>
+    <input id="address" name="address" maxlength="200" />
+    <label for="city">City</label>
+    <input id="city" name="city" required maxlength="80" />
+    <label for="state">State</label>
+    <select id="state" name="state" required>
+      <option value="">Choose</option>
+      {Object.entries(STATES).map(([c, n]) => <option value={c}>{n}</option>)}
+    </select>
+    <label for="zip">ZIP</label>
+    <input id="zip" name="zip" required inputmode="numeric" pattern="[0-9]{5}" maxlength="5" />
+    <fieldset style="border:0;padding:0;margin:14px 0 0">
+      <legend style="font-weight:600;font-size:.92rem">Services</legend>
+      {SERVICES.map((s) => <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="services" value={s.slug} style="width:auto;margin-right:8px" />{s.name}</label>)}
+    </fieldset>
+    <label for="description">One or two sentences about the company</label>
+    <textarea id="description" name="description" required maxlength="400" placeholder="Who you are, what you specialize in, how long you have been doing it."></textarea>
+    {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-size="flexible" style="margin-top:12px"></div>}
+    <button class="btn" type="submit" style="margin-top:12px">Submit for review</button>
+  </form>
+  {siteKey && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
+</Base>

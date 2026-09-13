@@ -1,0 +1,27 @@
+---
+import Base from '../../../layouts/Base.astro';
+import ListingCard from '../../../components/ListingCard.astro';
+import QuoteForm from '../../../components/QuoteForm.astro';
+import { getCity, listingsForCity, MIN_LISTINGS_FOR_PAGE } from '../../../lib/db';
+import { STATES, isState } from '../../../data/states';
+import { SERVICE_BY_SLUG } from '../../../data/services';
+
+const st = (Astro.params.st ?? '').toUpperCase();
+const citySlug = Astro.params.city ?? '';
+const svc = SERVICE_BY_SLUG[Astro.params.service ?? ''];
+if (!isState(st) || !svc) return new Response(null, { status: 404 });
+const city = await getCity(st, citySlug);
+if (!city) return new Response(null, { status: 404 });
+const listings = await listingsForCity(st, citySlug, svc.slug);
+if (listings.length < MIN_LISTINGS_FOR_PAGE) return new Response(null, { status: 404 });
+const title = `${svc.name} in ${city.name}, ${st}`;
+---
+<Base title={`${title} — ${listings.length} companies`} description={`${listings.length} ${svc.name.toLowerCase()} companies in ${city.name}, ${STATES[st]}. ${svc.description}`}>
+  <p class="crumbs"><a href="/">Home</a> › <a href={`/state/${st.toLowerCase()}`}>{STATES[st]}</a> › <a href={`/${st.toLowerCase()}/${citySlug}`}>{city.name}</a> › {svc.name}</p>
+  <h1>{title}</h1>
+  <p class="lede">{svc.description}</p>
+  <div class="two">
+    <section><div class="grid">{listings.map((l) => <ListingCard l={l} showCity={false} />)}</div></section>
+    <aside><QuoteForm city={city.name} state={st} heading={`Get ${svc.name.toLowerCase()} quotes`} /></aside>
+  </div>
+</Base>

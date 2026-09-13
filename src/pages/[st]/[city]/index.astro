@@ -1,0 +1,43 @@
+---
+import Base from '../../../layouts/Base.astro';
+import ListingCard from '../../../components/ListingCard.astro';
+import QuoteForm from '../../../components/QuoteForm.astro';
+import { getCity, listingsForCity, countByCityService, MIN_LISTINGS_FOR_PAGE } from '../../../lib/db';
+import { STATES, isState } from '../../../data/states';
+import { SERVICES } from '../../../data/services';
+import { env } from '../../../lib/env';
+
+const st = (Astro.params.st ?? '').toUpperCase();
+const citySlug = Astro.params.city ?? '';
+if (!isState(st)) return new Response(null, { status: 404 });
+const city = await getCity(st, citySlug);
+if (!city) return new Response(null, { status: 404 });
+const listings = await listingsForCity(st, citySlug);
+if (listings.length < MIN_LISTINGS_FOR_PAGE) return new Response(null, { status: 404 });
+const counts = await countByCityService(st, citySlug);
+const stateName = STATES[st];
+const title = `Hoarding cleanup in ${city.name}, ${st}`;
+const jsonld = {
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: `${title} — ${listings.length} companies`,
+  itemListElement: listings.slice(0, 20).map((l, i) => ({ '@type': 'ListItem', position: i + 1, url: `${env.SITE_URL}/company/${l.slug}`, name: l.name })),
+};
+---
+<Base title={`${title} — ${listings.length} companies`} description={`${listings.length} hoarding, biohazard and estate cleanup companies in ${city.name}, ${stateName}. Phone numbers, services and free quote requests.`} jsonld={jsonld}>
+  <p class="crumbs"><a href="/">Home</a> › <a href={`/state/${st.toLowerCase()}`}>{stateName}</a> › {city.name}</p>
+  <h1>{title}</h1>
+  <p class="lede">{city.intro ?? `${listings.length} companies serve ${city.name} and nearby. Call directly, or send one request and we will pass it to up to three of them.`}</p>
+  <div class="badges">
+    {SERVICES.filter((s) => (counts[s.slug] ?? 0) >= MIN_LISTINGS_FOR_PAGE).map((s) => (
+      <a class="badge" href={`/${st.toLowerCase()}/${citySlug}/${s.slug}`}>{s.name} ({counts[s.slug]})</a>
+    ))}
+  </div>
+  <div class="two">
+    <section>
+      <div class="grid">{listings.map((l) => <ListingCard l={l} showCity={false} />)}</div>
+      <p class="small" style="margin-top:16px">Featured companies pay for placement and are labeled. Everyone else is ordered by verification and review count. <a href="/about">How listings work.</a></p>
+    </section>
+    <aside><QuoteForm city={city.name} state={st} heading={`Get quotes in ${city.name}`} /></aside>
+  </div>
+</Base>

@@ -1,0 +1,73 @@
+---
+import Base from '../layouts/Base.astro';
+import SearchForm from '../components/SearchForm.astro';
+import { topCities, statesWithCounts } from '../lib/db';
+import { SERVICES } from '../data/services';
+import { STATES } from '../data/states';
+import { env } from '../lib/env';
+
+const [cities, states] = await Promise.all([topCities(24), statesWithCounts()]);
+const total = states.reduce((a, s) => a + s.n, 0);
+const jsonld = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: env.SITE_NAME,
+  url: env.SITE_URL,
+  potentialAction: { '@type': 'SearchAction', target: `${env.SITE_URL}/search?q={search_term_string}`, 'query-input': 'required name=search_term_string' },
+};
+---
+
+<Base
+  title="Hoarding Cleanup Finder — hoarding, biohazard and estate cleanup companies near you"
+  description="Find hoarding cleanup, biohazard cleanup, unattended death cleanup and estate cleanout companies across the United States. Free directory with plain cost guides."
+  jsonld={jsonld}
+>
+  <section class="hero">
+    <h1>Find a hoarding or biohazard cleanup company you can trust</h1>
+    <p class="lede">
+      {total > 0 ? `${total.toLocaleString()} cleanup companies` : 'Cleanup companies'} across the US, listed free. Search by city or ZIP, call directly, or send one request to several companies at once.
+    </p>
+    <SearchForm />
+    <p class="small">Not sure what kind of help you need? Start with <a href="/guides/how-to-choose-a-hoarding-cleanup-company">how to choose a cleanup company</a> or <a href="/guides/hoarding-cleanup-cost">what hoarding cleanup costs</a>.</p>
+  </section>
+
+  <section>
+    <h2>Services</h2>
+    <div class="grid">
+      {SERVICES.map((s) => (
+        <a class="card" href={`/services/${s.slug}`} style="text-decoration:none;color:inherit">
+          <h3 style="margin-top:0">{s.name}</h3>
+          <p class="small" style="margin:0">{s.description}</p>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  {cities.length > 0 && (
+    <section>
+      <h2>Cities</h2>
+      <ul class="list-links four">
+        {cities.map((c) => (
+          <li><a href={`/${c.state.toLowerCase()}/${c.slug}`}>{c.name}, {c.state}</a> <span class="small">({c.listing_count})</span></li>
+        ))}
+      </ul>
+    </section>
+  )}
+
+  {states.length > 0 && (
+    <section>
+      <h2>Browse by state</h2>
+      <ul class="list-links four">
+        {states.map((s) => (
+          <li><a href={`/state/${s.state.toLowerCase()}`}>{STATES[s.state]}</a> <span class="small">({s.n})</span></li>
+        ))}
+      </ul>
+    </section>
+  )}
+
+  <section class="prose">
+    <h2>How this directory works</h2>
+    <p>Every company here is listed free. We compile listings from public business records and the companies' own websites, then check the phone number and website before publishing. Companies can claim their listing to add photos, hours and a description, and can pay for a featured spot at the top of their city page. Featured placement is labeled; it never changes whether a company is listed.</p>
+    <p>If you run a cleanup company and something here is wrong, use the "report a correction" link on your listing and we will fix it within a day. If you want a listing removed, we will do that too.</p>
+  </section>
+</Base>

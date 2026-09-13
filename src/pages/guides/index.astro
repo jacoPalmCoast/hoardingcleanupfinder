@@ -1,0 +1,16 @@
+---
+import Base from '../../layouts/Base.astro';
+import { GUIDES } from '../../data/guides';
+---
+<Base title="Guides to hoarding, biohazard and estate cleanup" description="Plain guides on costs, insurance, choosing a company, and talking to family about hoarding.">
+  <h1>Guides</h1>
+  <p class="lede">Plain answers to the questions people ask before they call a cleanup company.</p>
+  <div class="grid">
+    {GUIDES.map((g) => (
+      <a class="card" href={`/guides/${g.slug}`} style="text-decoration:none;color:inherit">
+        <h3 style="margin-top:0">{g.title}</h3>
+        <p class="small" style="margin:0">{g.description}</p>
+      </a>
+    ))}
+  </div>
+</Base>

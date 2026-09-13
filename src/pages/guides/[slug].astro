@@ -1,0 +1,26 @@
+---
+import Base from '../../layouts/Base.astro';
+import SearchForm from '../../components/SearchForm.astro';
+import { GUIDE_BY_SLUG, GUIDES } from '../../data/guides';
+import { env } from '../../lib/env';
+const g = GUIDE_BY_SLUG[Astro.params.slug ?? ''];
+if (!g) return new Response(null, { status: 404 });
+const others = GUIDES.filter((x) => x.slug !== g.slug).slice(0, 4);
+const jsonld = { '@context': 'https://schema.org', '@type': 'Article', headline: g.title, description: g.description, dateModified: g.updated, author: { '@type': 'Organization', name: env.SITE_NAME }, publisher: { '@type': 'Organization', name: env.SITE_NAME } };
+---
+<Base title={g.title} description={g.description} jsonld={jsonld}>
+  <p class="crumbs"><a href="/">Home</a> › <a href="/guides">Guides</a> › {g.title}</p>
+  <article class="prose">
+    <h1>{g.title}</h1>
+    <p class="small">Updated {g.updated}</p>
+    <Fragment set:html={g.html} />
+  </article>
+  <section style="max-width:760px">
+    <h2>Find a company</h2>
+    <SearchForm />
+  </section>
+  <section>
+    <h2>Related guides</h2>
+    <ul>{others.map((o) => <li><a href={`/guides/${o.slug}`}>{o.title}</a></li>)}</ul>
+  </section>
+</Base>

@@ -1,0 +1,38 @@
+---
+import Base from '../../layouts/Base.astro';
+import ListingCard from '../../components/ListingCard.astro';
+import SearchForm from '../../components/SearchForm.astro';
+import QuoteForm from '../../components/QuoteForm.astro';
+import { citiesForState, listingsForState } from '../../lib/db';
+import { STATES, isState } from '../../data/states';
+import { STATE_NOTES } from '../../data/stateNotes';
+
+const st = (Astro.params.st ?? '').toUpperCase();
+if (!isState(st)) return new Response(null, { status: 404 });
+if (Astro.params.st !== st.toLowerCase()) return Astro.redirect(`/state/${st.toLowerCase()}`, 301);
+const name = STATES[st];
+const [cities, listings] = await Promise.all([citiesForState(st), listingsForState(st, 60)]);
+if (listings.length === 0) return new Response(null, { status: 404 });
+const note = STATE_NOTES[st];
+---
+<Base title={`Hoarding and biohazard cleanup companies in ${name}`} description={`${listings.length}+ hoarding cleanup, biohazard cleanup and estate cleanout companies in ${name}. Free listings, direct phone numbers, quote requests.`}>
+  <p class="crumbs"><a href="/">Home</a> › <a href="/state">States</a> › {name}</p>
+  <h1>Hoarding and biohazard cleanup companies in {name}</h1>
+  <SearchForm compact />
+  {note && <p class="lede">{note}</p>}
+  {cities.length > 0 && (
+    <section>
+      <h2>Cities in {name}</h2>
+      <ul class="list-links">
+        {cities.map((c) => <li><a href={`/${st.toLowerCase()}/${c.slug}`}>{c.name}</a> <span class="small">({c.listing_count})</span></li>)}
+      </ul>
+    </section>
+  )}
+  <div class="two">
+    <section>
+      <h2>Companies serving {name}</h2>
+      <div class="grid">{listings.map((l) => <ListingCard l={l} />)}</div>
+    </section>
+    <aside><QuoteForm state={st} heading={`Get quotes in ${name}`} /></aside>
+  </div>
+</Base>

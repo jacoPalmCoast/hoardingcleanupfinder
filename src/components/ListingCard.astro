@@ -1,0 +1,31 @@
+---
+import type { Listing } from '../lib/db';
+import { isLive } from '../lib/db';
+import { formatPhone, parseServices, hostOf } from '../lib/util';
+import { SERVICE_BY_SLUG } from '../data/services';
+
+interface Props { l: Listing; showCity?: boolean }
+const { l, showCity = true } = Astro.props;
+const featured = isLive(l);
+const services = parseServices(l.services);
+---
+
+<article class:list={['card', { featured }]}>
+  <div class="badges">
+    {featured && <span class="badge featured">Featured</span>}
+    {l.is_verified === 1 && <span class="badge verified">Verified</span>}
+    {l.is_claimed === 1 && <span class="badge claimed">Owner-managed</span>}
+  </div>
+  <h3><a href={`/company/${l.slug}`}>{l.name}</a></h3>
+  <div class="meta">
+    {showCity && <span>{l.city}, {l.state}</span>}
+    {l.review_count > 0 && l.rating && <span> · {l.rating.toFixed(1)} ({l.review_count} reviews)</span>}
+  </div>
+  {l.description && <p style="margin-bottom:6px">{l.description}</p>}
+  <div class="small">{services.map((s) => SERVICE_BY_SLUG[s]?.name).filter(Boolean).join(' · ')}</div>
+  <div class="actions">
+    {l.phone && <a class="btn small" href={`tel:${l.phone_digits}`}>Call {formatPhone(l.phone)}</a>}
+    {l.website && <a class="btn small secondary" href={l.website} rel="nofollow noopener" target="_blank">Website<span class="sr-only"> ({hostOf(l.website)}, opens in new tab)</span></a>}
+    <a class="btn small secondary" href={`/company/${l.slug}#quote`}>Request a quote</a>
+  </div>
+</article>

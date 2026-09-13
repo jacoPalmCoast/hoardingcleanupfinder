@@ -1,0 +1,20 @@
+---
+import { SERVICES } from '../data/services';
+interface Props { q?: string; service?: string; compact?: boolean }
+const { q = '', service = '', compact = false } = Astro.props;
+---
+
+<form class="search" action="/search" method="get" role="search">
+  <label class="sr-only" for="q">City, state or ZIP code</label>
+  <input type="search" id="q" name="q" value={q} placeholder="City, state or ZIP code" required minlength="2" maxlength="60" autocomplete="off" />
+  {!compact && (
+    <>
+      <label class="sr-only" for="service">Service</label>
+      <select id="service" name="service" style="flex:0 1 220px">
+        <option value="">All services</option>
+        {SERVICES.map((s) => <option value={s.slug} selected={s.slug === service}>{s.name}</option>)}
+      </select>
+    </>
+  )}
+  <button class="btn" type="submit">Search</button>
+</form>

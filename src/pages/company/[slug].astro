@@ -1,0 +1,79 @@
+---
+import Base from '../../layouts/Base.astro';
+import ListingCard from '../../components/ListingCard.astro';
+import QuoteForm from '../../components/QuoteForm.astro';
+import { getListingBySlug, nearbyListings, isLive } from '../../lib/db';
+import { formatPhone, parseServices, hostOf } from '../../lib/util';
+import { SERVICE_BY_SLUG } from '../../data/services';
+import { STATES } from '../../data/states';
+import { env } from '../../lib/env';
+
+const l = await getListingBySlug(Astro.params.slug ?? '');
+if (!l || l.status !== 'active') return new Response(null, { status: 404 });
+const services = parseServices(l.services);
+const featured = isLive(l);
+const nearby = l.lat && l.lng ? await nearbyListings(l.lat, l.lng, 6, l.id) : [];
+const stateName = STATES[l.state] ?? l.state;
+const msg = Astro.url.searchParams.get('msg');
+const jsonld: Record<string, unknown> = {
+  '@context': 'https://schema.org',
+  '@type': 'LocalBusiness',
+  name: l.name,
+  url: `${env.SITE_URL}/company/${l.slug}`,
+  telephone: l.phone ?? undefined,
+  address: { '@type': 'PostalAddress', streetAddress: l.address ?? undefined, addressLocality: l.city, addressRegion: l.state, postalCode: l.zip ?? undefined, addressCountry: 'US' },
+  description: l.description ?? undefined,
+};
+if (l.website) jsonld.sameAs = l.website;
+if (l.lat && l.lng) jsonld.geo = { '@type': 'GeoCoordinates', latitude: l.lat, longitude: l.lng };
+if (l.review_count > 0 && l.rating) jsonld.aggregateRating = { '@type': 'AggregateRating', ratingValue: l.rating, reviewCount: l.review_count };
+---
+
+<Base title={`${l.name} — ${l.city}, ${l.state}`} description={`${l.name} provides ${services.map((s) => SERVICE_BY_SLUG[s]?.name.toLowerCase()).filter(Boolean).join(', ')} in ${l.city}, ${stateName}. Phone, website and quote request.`} jsonld={jsonld}>
+  <p class="crumbs"><a href="/">Home</a> › <a href={`/state/${l.state.toLowerCase()}`}>{stateName}</a> › <a href={`/${l.state.toLowerCase()}/${l.city_slug}`}>{l.city}</a> › {l.name}</p>
+  {msg === 'lead-sent' && <div class="notice" role="status">Your request was sent. Expect a call or email from the company, usually within one business day.</div>}
+  {msg === 'report-sent' && <div class="notice" role="status">Thanks. We review every report within one business day.</div>}
+  <div class="two">
+    <article>
+      <div class="badges">
+        {featured && <span class="badge featured">Featured</span>}
+        {l.is_verified === 1 && <span class="badge verified">Verified</span>}
+        {l.is_claimed === 1 && <span class="badge claimed">Owner-managed</span>}
+      </div>
+      <h1>{l.name}</h1>
+      <p class="lede">{l.description ?? `${l.name} serves ${l.city}, ${stateName} and the surrounding area.`}</p>
+      <dl class="facts">
+        <dt>Services</dt><dd>{services.map((s) => SERVICE_BY_SLUG[s]?.name).filter(Boolean).join(', ') || '—'}</dd>
+        <dt>Phone</dt><dd>{l.phone ? <a href={`tel:${l.phone_digits}`}>{formatPhone(l.phone)}</a> : '—'}</dd>
+        <dt>Website</dt><dd>{l.website ? <a href={l.website} rel="nofollow noopener" target="_blank">{hostOf(l.website)}<span class="sr-only"> (opens in new tab)</span></a> : '—'}</dd>
+        <dt>Location</dt><dd>{l.address ? `${l.address}` : `${l.city}, ${l.state}${l.zip ? ' ' + l.zip : ''}`}</dd>
+        {l.review_count > 0 && l.rating && <><dt>Reviews</dt><dd>{l.rating.toFixed(1)} average from {l.review_count} public reviews</dd></>}
+      </dl>
+      <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
+        {l.phone && <a class="btn" href={`tel:${l.phone_digits}`}>Call {formatPhone(l.phone)}</a>}
+        <a class="btn secondary" href="#quote">Request a quote</a>
+      </div>
+
+      <section class="prose">
+        <h2>Before you call</h2>
+        <p>Ask three things: does the crew have bloodborne-pathogen training and insurance, how do they dispose of contaminated material, and will they give a written estimate after seeing the property. For hoarding jobs, ask how they work with the resident. Our guide on <a href="/guides/how-to-choose-a-hoarding-cleanup-company">choosing a cleanup company</a> covers the rest.</p>
+      </section>
+
+      <section class="small" style="margin-top:32px">
+        <p>
+          {l.is_claimed !== 1 && <><strong>Is this your company?</strong> <a href={`/claim/${l.slug}`}>Claim this listing</a> to update details and add photos. </>}
+          <a href={`/company/${l.slug}/report`}>Report a correction or ask for removal</a>.
+          {!featured && <> Companies can also <a href={`/featured/${l.slug}`}>get featured</a> in {l.city}.</>}
+        </p>
+      </section>
+
+      {nearby.length > 0 && (
+        <section>
+          <h2>Other companies near {l.city}</h2>
+          <div class="grid">{nearby.map((n) => <ListingCard l={n} />)}</div>
+        </section>
+      )}
+    </article>
+    <aside><QuoteForm listingId={l.id} city={l.city} state={l.state} heading={`Request a quote from ${l.name}`} /></aside>
+  </div>
+</Base>

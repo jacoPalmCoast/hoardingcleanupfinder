@@ -1,0 +1,76 @@
+---
+import '../styles/global.css';
+import { env } from '../lib/env';
+import { SERVICES } from '../data/services';
+
+interface Props {
+  title: string;
+  description: string;
+  canonical?: string;
+  noindex?: boolean;
+  jsonld?: unknown;
+}
+const { title, description, canonical, noindex = false, jsonld } = Astro.props;
+const url = canonical ?? new URL(Astro.url.pathname, env.SITE_URL).toString();
+const fullTitle = title.includes(env.SITE_NAME) ? title : `${title} | ${env.SITE_NAME}`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={url} />
+    {noindex && <meta name="robots" content="noindex,nofollow" />}
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={url} />
+    <meta property="og:site_name" content={env.SITE_NAME} />
+    <meta name="theme-color" content="#1f6f78" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    {jsonld && <script type="application/ld+json" set:html={JSON.stringify(jsonld)} />}
+    <slot name="head" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site">
+      <div class="wrap">
+        <a class="brand" href="/">Hoarding Cleanup <span>Finder</span></a>
+        <nav class="main" aria-label="Main">
+          <a href="/guides">Guides</a>
+          <a href="/state">States</a>
+          <a href="/add-listing">Add a company</a>
+        </nav>
+      </div>
+    </header>
+    <main id="main" class="wrap">
+      <slot />
+    </main>
+    <footer class="site">
+      <div class="wrap cols">
+        <div>
+          <strong>Hoarding Cleanup Finder</strong>
+          <p class="small">A directory of hoarding, biohazard, unattended death and estate cleanup companies across the United States. Listings are free. Companies can <a href="/add-listing">add</a> or <a href="/guides/claim-your-listing">claim</a> a listing.</p>
+        </div>
+        <div>
+          <strong>Services</strong>
+          <ul style="list-style:none;padding:0;margin:6px 0 0">
+            {SERVICES.map((s) => <li><a href={`/services/${s.slug}`}>{s.name}</a></li>)}
+          </ul>
+        </div>
+        <div>
+          <strong>Site</strong>
+          <ul style="list-style:none;padding:0;margin:6px 0 0">
+            <li><a href="/guides">Guides</a></li>
+            <li><a href="/account">Company sign in</a></li>
+            <li><a href="/about">About and listing policy</a></li>
+            <li><a href="/privacy">Privacy</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="wrap small" style="margin-top:20px">If you are in immediate danger or someone needs urgent medical help, call 911. Information on this site is general and not medical or legal advice.</div>
+    </footer>
+  </body>
+</html>

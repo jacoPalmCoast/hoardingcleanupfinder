@@ -1,0 +1,39 @@
+---
+import Base from '../layouts/Base.astro';
+import SearchForm from '../components/SearchForm.astro';
+import ListingCard from '../components/ListingCard.astro';
+import { searchListings, searchByZip } from '../lib/db';
+import { SERVICE_BY_SLUG } from '../data/services';
+import { STATES } from '../data/states';
+
+const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 60);
+const serviceParam = (Astro.url.searchParams.get('service') ?? '').trim();
+const service = serviceParam in SERVICE_BY_SLUG ? serviceParam : '';
+
+let results = [] as Awaited<ReturnType<typeof searchListings>>;
+if (/^\d{5}$/.test(q)) {
+  results = await searchByZip(q);
+  if (service) results = results.filter((l) => l.services.includes(`"${service}"`));
+} else if (q.length >= 2) {
+  // Expand full state names to codes so "Florida" finds FL listings.
+  const code = Object.entries(STATES).find(([, n]) => n.toLowerCase() === q.toLowerCase())?.[0];
+  results = await searchListings(code ?? q, service || undefined);
+}
+const title = q ? `${service ? SERVICE_BY_SLUG[service].name : 'Cleanup companies'} near ${q}` : 'Search';
+---
+
+<Base title={title} description={`Search results for ${q || 'cleanup companies'}.`} noindex={true}>
+  <h1>{title}</h1>
+  <SearchForm q={q} service={service} />
+  {q && results.length === 0 && (
+    <div class="notice">
+      <p style="margin:0"><strong>No listings matched.</strong> Try a nearby larger city or the state name, or <a href="/state">browse by state</a>. If you run a cleanup company in this area, <a href="/add-listing">add a free listing</a>.</p>
+    </div>
+  )}
+  {results.length > 0 && (
+    <>
+      <p class="small">{results.length} result{results.length === 1 ? '' : 's'}. Featured companies pay for placement and are labeled.</p>
+      <div class="grid">{results.map((l) => <ListingCard l={l} />)}</div>
+    </>
+  )}
+</Base>

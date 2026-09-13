@@ -1,0 +1,12 @@
+---
+import Base from '../../layouts/Base.astro';
+import { statesWithCounts } from '../../lib/db';
+import { STATES } from '../../data/states';
+const states = await statesWithCounts();
+---
+<Base title="Cleanup companies by state" description="Browse hoarding, biohazard and estate cleanup companies by US state.">
+  <h1>Browse by state</h1>
+  <ul class="list-links four">
+    {states.map((s) => <li><a href={`/state/${s.state.toLowerCase()}`}>{STATES[s.state]}</a> <span class="small">({s.n})</span></li>)}
+  </ul>
+</Base>

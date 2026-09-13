@@ -1,0 +1,21 @@
+---
+import Base from '../../layouts/Base.astro';
+import SearchForm from '../../components/SearchForm.astro';
+import { SERVICE_BY_SLUG } from '../../data/services';
+import { topCities } from '../../lib/db';
+const svc = SERVICE_BY_SLUG[Astro.params.service ?? ''];
+if (!svc) return new Response(null, { status: 404 });
+const cities = await topCities(40);
+---
+<Base title={`${svc.name} companies near you`} description={`${svc.description} Find ${svc.name.toLowerCase()} companies by city.`}>
+  <p class="crumbs"><a href="/">Home</a> › {svc.name}</p>
+  <h1>{svc.name} companies</h1>
+  <p class="lede">{svc.description}</p>
+  <SearchForm service={svc.slug} />
+  {cities.length > 0 && (
+    <section>
+      <h2>By city</h2>
+      <ul class="list-links four">{cities.map((c) => <li><a href={`/${c.state.toLowerCase()}/${c.slug}`}>{c.name}, {c.state}</a></li>)}</ul>
+    </section>
+  )}
+</Base>

@@ -1,0 +1,29 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { getListingBySlug } from '../../../lib/db';
+import { env } from '../../../lib/env';
+const l = await getListingBySlug(Astro.params.slug ?? '');
+if (!l) return new Response(null, { status: 404 });
+const siteKey = env.TURNSTILE_SITE_KEY ?? '';
+---
+<Base title={`Report a correction for ${l.name}`} description="Report a correction or request removal of a listing." noindex>
+  <h1>Report a correction</h1>
+  <p class="lede">Listing: <a href={`/company/${l.slug}`}>{l.name}</a>, {l.city}, {l.state}. We act on every report within one business day.</p>
+  <form action="/api/report" method="post" style="max-width:560px">
+    <input type="hidden" name="listing_id" value={l.id} />
+    <label for="kind">What is this about?</label>
+    <select id="kind" name="kind" required>
+      <option value="correction">Something is wrong (phone, address, services, name)</option>
+      <option value="closed">This company has closed</option>
+      <option value="removal">I own this company and want the listing removed</option>
+      <option value="other">Something else</option>
+    </select>
+    <label for="message">Details</label>
+    <textarea id="message" name="message" required maxlength="1500"></textarea>
+    <label for="email">Your email <span class="small">(so we can confirm)</span></label>
+    <input id="email" name="email" type="email" required maxlength="254" />
+    {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-size="flexible" style="margin-top:12px"></div>}
+    <button class="btn" type="submit" style="margin-top:12px">Send report</button>
+  </form>
+  {siteKey && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
+</Base>
