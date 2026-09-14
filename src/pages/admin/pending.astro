@@ -13,7 +13,7 @@ const rows = (await env.DB.prepare(`SELECT * FROM listings WHERE status = 'pendi
           <td>{r.phone}<br/>{r.email}<br/>{r.website && <a href={r.website} rel="nofollow noopener" target="_blank">site</a>}</td>
           <td>{r.services}</td>
           <td>{r.description}</td>
-          <td>
+          <td class="actions">
             <form action="/api/admin/listing" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="approve" /><button class="btn small">Approve</button></form>
             <form action="/api/admin/listing" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="remove" /><button class="btn small danger">Reject</button></form>
           </td>

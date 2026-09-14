@@ -17,7 +17,7 @@ if (ids.length) for (const row of (await env.DB.prepare(`SELECT id, name FROM li
           <td>{r.service}</td>
           <td>{JSON.parse(r.routed_to || '[]').map((id: number) => names[id] ?? id).join(', ') || '—'}</td>
           <td>{r.message}</td>
-          <td>
+          <td class="actions">
             <form action="/api/admin/lead" method="post"><input type="hidden" name="id" value={r.id} />
               <select name="status" aria-label="Lead status">
                 {['new', 'contacted', 'sold', 'closed', 'spam'].map((s) => <option value={s} selected={s === r.status}>{s}</option>)}

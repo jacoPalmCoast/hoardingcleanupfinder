@@ -43,6 +43,11 @@ header.site .wrap { display: flex; align-items: center; justify-content: space-b
 .brand span { color: var(--teal); }
 nav.main a { margin-left: 18px; text-decoration: none; color: var(--muted); font-size: .95rem; }
 nav.main a:hover { color: var(--teal-dark); text-decoration: underline; }
+@media (max-width: 560px) {
+  header.site .wrap { flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
+  nav.main { display: flex; flex-wrap: wrap; gap: 6px 16px; width: 100%; }
+  nav.main a { margin: 0; }
+}
 footer.site { border-top: 1px solid var(--grey-2); margin-top: 56px; padding: 28px 0; color: var(--muted); font-size: .9rem; }
 footer.site a { color: var(--muted); }
 footer.site .cols { display: flex; flex-wrap: wrap; gap: 24px 48px; }
@@ -103,7 +108,8 @@ dl.facts dt { color: var(--muted); }
 dl.facts dd { margin: 0; }
 
 table { border-collapse: collapse; width: 100%; font-size: .93rem; }
-th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grey-2); vertical-align: top; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grey-2); vertical-align: top; overflow-wrap: anywhere; }
+td.actions { white-space: nowrap; }
 th { background: var(--grey-1); font-weight: 600; }
 .table-wrap { overflow-x: auto; }
 
@@ -116,5 +122,5 @@ th { background: var(--grey-1); font-weight: 600; }
 .prose h2 { margin-top: 1.8em; }
 .prose ul, .prose ol { padding-left: 22px; }
 .prose li { margin-bottom: .35em; }
-.small { font-size: .88rem; color: var(--muted); }
+.small:not(.btn) { font-size: .88rem; color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

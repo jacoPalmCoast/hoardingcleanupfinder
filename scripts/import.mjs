@@ -13,6 +13,15 @@ const slugify = (s) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
 const digits = (s) => (s ?? '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
 const q = (v) => (v === null || v === undefined ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`);
 
+// Outscraper returns some URLs percent-encoded (…%3Futm_source%3D…). Decode, then drop the query string.
+function cleanUrl(u) {
+  if (!u) return null;
+  let s = String(u).trim();
+  try { if (/%[0-9A-F]{2}/i.test(s)) s = decodeURIComponent(s); } catch {}
+  s = s.split('?')[0].split('#')[0];
+  return /^https?:\/\//i.test(s) ? s : null;
+}
+
 function inferServices(r) {
   const t = `${r.name} ${r.category ?? ''} ${r.subtypes ?? ''} ${r.query ?? ''}`.toLowerCase();
   const out = SERVICES.filter((s) => s.kw.some((k) => t.includes(k))).map((s) => s.slug);
@@ -52,7 +61,7 @@ for (const r of rows) {
   let slug = slugify(`${r.name} ${city} ${state}`);
   if (seenSlug.has(slug)) slug = `${slug}-${pd.slice(-4)}`;
   seenSlug.add(slug);
-  const website = r.website ? r.website.split('?')[0] : null;
+  const website = cleanUrl(r.website);
   const services = inferServices(r);
   const citySlug = slugify(city);
   const key = `${state}/${citySlug}`;

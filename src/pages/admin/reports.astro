@@ -10,7 +10,7 @@ const rows = (await env.DB.prepare(`SELECT r.*, l.name, l.slug FROM reports r JO
         <tr>
           <td><a href={`/company/${r.slug}`}>{r.name}</a><br/><a href={`/admin/listings?id=${r.listing_id}`}>edit</a></td>
           <td>{r.kind}</td><td>{r.email}</td><td>{r.message}</td>
-          <td>
+          <td class="actions">
             <form action="/api/admin/report" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="close" /><button class="btn small">Close</button></form>
             {r.kind === 'removal' || r.kind === 'closed' ? <form action="/api/admin/report" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="remove-listing" /><button class="btn small danger">Remove listing</button></form> : null}
           </td>
