@@ -29,9 +29,11 @@ Domain: hoardingcleanupfinder.com. National directory of hoarding, biohazard, un
 - `listings`(id, slug UNIQUE, name, phone, website, email, address, city, state, zip, lat, lng, description, services TEXT(json), rating, review_count, is_verified, is_claimed, is_featured, featured_until, stripe_customer_id, stripe_subscription_id, status['pending','active','removed'], source, place_id, created_at, updated_at)
 - `cities`(id, slug, name, state, lat, lng, population, listing_count)
 - `leads`(id, listing_id NULL, name, phone, email, zip, city, state, service, message, routed_to TEXT(json), status, created_at)
-- `claims`(id, listing_id, email, code, status['pending','verified'], created_at, verified_at)
+- `claims`(id, listing_id, email, code(sha256), status['pending','review','verified','rejected','expired'], attempts, created_at, verified_at)
 - `owners`(id, email UNIQUE, created_at); `owner_listings`(owner_id, listing_id)
-- `sessions`(token, owner_id, expires_at)
+- `sessions`(token(sha256), owner_id, expires_at); `admin_sessions`(token(sha256), expires_at); `login_codes`(email, code(sha256), attempts, expires_at, used)
+- `stripe_events`(id, type) idempotency, written after successful processing; `rate_limits`(key, count, window_start)
+- listings also carry `phone_digits`, `city_slug` (metro grouping), `subscription_status`
 - `reports`(id, listing_id, message, email, status, created_at)
 - `listings_fts` FTS5 (name, city, state, zip, services)
 
@@ -42,10 +44,13 @@ Domain: hoardingcleanupfinder.com. National directory of hoarding, biohazard, un
 4. Every listing page has claim, correct, and remove links; removal requests honoured within 24h.
 5. No scraped review text or photos; descriptions are ours; only owner-uploaded photos.
 6. All forms behind Turnstile; server-side siteverify.
-7. Admin fails closed: no cookie = 302 to login; wrong password = 401.
+7. Admin fails closed: no or invalid cookie = 302 to login (403 on /api/admin); wrong password = redirect to login with error; sessions are random tokens with server-side expiry, revoked on logout.
 8. Owner can edit only listings in `owner_listings`.
 9. No "AI" in UI labels; plain, respectful tone; WCAG 2.1 AA.
 10. Never delete listings; `status='removed'`.
+
+## Review log
+- 2026-09-14 independent review: FAIL (B1 JSON-LD XSS, H1 webhook idempotency, H2 out-of-order events, M1–M6, L1–L13). All fixed except L4 (doc updated instead) and L13 (this update). Re-verified live: prototype-key pages 404, uppercase metro 301, open redirect neutralised, admin logout revokes, malformed cookie 302.
 
 ## Phases and acceptance
 1. Core: pages render from D1 with seed sample; search works; sitemap lists real routes; schema validates.
