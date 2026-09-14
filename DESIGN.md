@@ -65,6 +65,7 @@ Domain: hoardingcleanupfinder.com. National directory of hoarding, biohazard, un
 - Admin: listing console shows owners (add/transfer/remove), claims, lead count, change log; owner removal clears is_claimed when none remain.
 
 ## Review log
+- 2026-09-14 live Stripe test: checkout → webhook → featured worked, but every webhook (and every owner/admin save) returned 500 after writing because `queueIndexNow` read `locals.runtime.ctx`, which the Cloudflare adapter now throws on (use `locals.cfContext`). Not caught locally: wrangler dev does not throw. Fixed; lesson: live-check every write path after a deploy, not just page renders.
 - 2026-09-14 (SEO layer) independent review: FAIL on H1 (featured-only attrs rendered without isLive gate) + M1 llms-full N+1, M2 guide legal claims, L1–L8. All fixed (publicAttrs render gate, two-query llms-full, caveats, NaN guards, json_each lead count, contactPoint, waitUntil IndexNow). Re-review: PASS. Local verification: tier enforcement (free save capped at 3 cities, flags ignored, featured content preserved), XSS escaped in About, IDOR 403, admin fail-closed, owner add/remove + audit rows.
 - 2026-09-14 independent review: FAIL (B1 JSON-LD XSS, H1 webhook idempotency, H2 out-of-order events, M1–M6, L1–L13). All fixed except L4 (doc updated instead) and L13 (this update). Re-verified live: prototype-key pages 404, uppercase metro 301, open redirect neutralised, admin logout revokes, malformed cookie 302.
 

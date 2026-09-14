@@ -20,10 +20,12 @@ export async function pingIndexNow(paths: string[]): Promise<void> {
 
 /** Run the ping after the response is sent (Workers waitUntil) so writes never wait on Bing. */
 export function queueIndexNow(locals: unknown, paths: string[]): void {
-  const ctx = (locals as any)?.runtime?.ctx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+  // @astrojs/cloudflare v14 exposes the execution context as locals.cfContext; the older
+  // locals.runtime.ctx getter now throws, so never touch it. Fall back to fire-and-forget.
+  let ctx: { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+  try { ctx = (locals as any)?.cfContext; } catch { ctx = undefined; }
   const p = pingIndexNow(paths);
-  if (ctx?.waitUntil) ctx.waitUntil(p);
-  else void p;
+  try { if (ctx?.waitUntil) ctx.waitUntil(p); else void p; } catch { void p; }
 }
 
 /** Pages affected when one listing changes: its own page, its metro and service-in-metro pages. */
