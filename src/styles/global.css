@@ -83,7 +83,7 @@ label { display: block; font-weight: 600; font-size: .92rem; margin: 14px 0 6px;
 .badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .badge { display: inline-block; font-size: .75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--grey-2); color: var(--muted); background: var(--grey-1); }
 .badge.featured { background: var(--teal); border-color: var(--teal); color: #fff; }
-.badge.verified { background: #e7f3ec; border-color: #bfe0cc; color: var(--ok); }
+.badge.verified { background: #e7f3ec; border-color: #bfe0cc; color: #256640; }
 .badge.claimed { background: #eef3fa; border-color: #c9d8ec; color: var(--blue); }
 
 .list-links { columns: 2; column-gap: 32px; padding-left: 18px; }

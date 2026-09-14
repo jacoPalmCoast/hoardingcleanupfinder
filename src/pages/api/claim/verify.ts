@@ -27,7 +27,9 @@ export const POST: APIRoute = async ({ request }) => {
   // Domain match → instant approval; otherwise the claim is verified but ownership waits for admin approval.
   const siteHost = hostOf(l.website);
   const emailHost = email.split('@')[1];
-  const instant = !!siteHost && (emailHost === siteHost || emailHost.endsWith(`.${siteHost}`));
+  const SHARED_HOSTS = ['facebook.com', 'sites.google.com', 'google.com', 'linktr.ee', 'wixsite.com', 'wix.com', 'squarespace.com', 'weebly.com', 'godaddysites.com', 'yelp.com', 'angi.com', 'thumbtack.com', 'homeadvisor.com', 'business.site', 'instagram.com', 'nextdoor.com', 'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com'];
+  const shared = SHARED_HOSTS.some((h) => siteHost === h || siteHost.endsWith(`.${h}`));
+  const instant = !!siteHost && !shared && (emailHost === siteHost || emailHost.endsWith(`.${siteHost}`));
   const ownerId = await getOrCreateOwner(email);
   await env.DB.prepare(`UPDATE claims SET status = ?2, verified_at = ?3 WHERE id = ?1`).bind(claim.id, instant ? 'verified' : 'review', now()).run();
   if (instant) {

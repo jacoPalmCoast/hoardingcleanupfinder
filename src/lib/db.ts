@@ -197,15 +197,18 @@ export async function adminCounts() {
   return row!;
 }
 
-// Sliding-window rate limit in D1. Returns true when allowed.
+// Fixed-window rate limit in D1, atomic via upsert. Returns true when allowed.
 export async function rateLimit(key: string, max: number, windowSec: number): Promise<boolean> {
   const t = now();
-  const row = await env.DB.prepare(`SELECT count, window_start FROM rate_limits WHERE key = ?1`).bind(key).first<{ count: number; window_start: number }>();
-  if (!row || t - row.window_start >= windowSec) {
-    await env.DB.prepare(`INSERT OR REPLACE INTO rate_limits(key, count, window_start) VALUES (?1, 1, ?2)`).bind(key, t).run();
-    return true;
-  }
-  if (row.count >= max) return false;
-  await env.DB.prepare(`UPDATE rate_limits SET count = count + 1 WHERE key = ?1`).bind(key).run();
-  return true;
+  const row = await env.DB.prepare(
+    `INSERT INTO rate_limits(key, count, window_start) VALUES (?1, 1, ?2)
+     ON CONFLICT(key) DO UPDATE SET
+       count = CASE WHEN rate_limits.window_start <= ?2 - ?3 THEN 1 ELSE rate_limits.count + 1 END,
+       window_start = CASE WHEN rate_limits.window_start <= ?2 - ?3 THEN ?2 ELSE rate_limits.window_start END
+     RETURNING count`,
+  )
+    .bind(key, t, windowSec)
+    .first<{ count: number }>();
+  if (Math.random() < 0.02) await env.DB.prepare(`DELETE FROM rate_limits WHERE window_start < ?1`).bind(t - 86400).run();
+  return (row?.count ?? max + 1) <= max;
 }

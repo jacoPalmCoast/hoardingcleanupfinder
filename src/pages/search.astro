@@ -8,7 +8,7 @@ import { STATES } from '../data/states';
 
 const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 60);
 const serviceParam = (Astro.url.searchParams.get('service') ?? '').trim();
-const service = serviceParam in SERVICE_BY_SLUG ? serviceParam : '';
+const service = isService(serviceParam) ? serviceParam : '';
 
 let results = [] as Awaited<ReturnType<typeof searchListings>>;
 if (/^\d{5}$/.test(q)) {

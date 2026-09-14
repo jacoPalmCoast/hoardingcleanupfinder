@@ -41,7 +41,8 @@ export const SERVICES: Service[] = [
   },
 ];
 
-export const SERVICE_BY_SLUG = Object.fromEntries(SERVICES.map((s) => [s.slug, s]));
+export const SERVICE_BY_SLUG: Record<string, Service> = Object.assign(Object.create(null), Object.fromEntries(SERVICES.map((s) => [s.slug, s])));
+export const isService = (s: string): boolean => Object.hasOwn(SERVICE_BY_SLUG, s);
 
 export function inferServices(text: string): string[] {
   const t = text.toLowerCase();

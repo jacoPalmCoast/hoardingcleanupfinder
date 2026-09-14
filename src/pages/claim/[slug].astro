@@ -2,6 +2,7 @@
 import Base from '../../layouts/Base.astro';
 import { getListingBySlug } from '../../lib/db';
 import { env } from '../../lib/env';
+import { hostOf } from '../../lib/util';
 const l = await getListingBySlug(Astro.params.slug ?? '');
 if (!l) return new Response(null, { status: 404 });
 const siteKey = env.TURNSTILE_SITE_KEY ?? '';
@@ -20,7 +21,7 @@ const msg = Astro.url.searchParams.get('msg');
     <form action="/api/claim/start" method="post" style="max-width:480px">
       <input type="hidden" name="listing_id" value={l.id} />
       <label for="email">Business email</label>
-      <input id="email" name="email" type="email" required maxlength="254" placeholder={l.website ? `you@${new URL(l.website).hostname.replace('www.', '')}` : 'you@yourcompany.com'} />
+      <input id="email" name="email" type="email" required maxlength="254" placeholder={hostOf(l.website) ? `you@${hostOf(l.website)}` : 'you@yourcompany.com'} />
       <p class="hint">We email a 6-digit code to confirm you can receive mail at this address. An address on the company's own domain is approved immediately; others are reviewed by a person first.</p>
       {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-size="flexible" style="margin-top:12px"></div>}
       <button class="btn" type="submit" style="margin-top:12px">Send code</button>

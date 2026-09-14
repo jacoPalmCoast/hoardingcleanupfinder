@@ -8,7 +8,8 @@ import { SERVICES } from '../../../data/services';
 import { env } from '../../../lib/env';
 
 const st = (Astro.params.st ?? '').toUpperCase();
-const citySlug = Astro.params.city ?? '';
+const citySlug = (Astro.params.city ?? '').toLowerCase();
+if (Astro.params.st !== st.toLowerCase() || Astro.params.city !== citySlug) return Astro.redirect(`/${st.toLowerCase()}/${citySlug}${Astro.params.service ? '/' + Astro.params.service : ''}`, 301);
 if (!isState(st)) return new Response(null, { status: 404 });
 const city = await getCity(st, citySlug);
 if (!city) return new Response(null, { status: 404 });

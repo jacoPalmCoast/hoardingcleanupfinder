@@ -1,4 +1,4 @@
 import type { APIRoute } from 'astro';
 import { redirect } from '../../../lib/util';
-import { adminLogoutHeader } from '../../../lib/services';
-export const GET: APIRoute = async () => redirect('/admin/login', 303, { 'set-cookie': adminLogoutHeader() });
+import { adminLogout } from '../../../lib/services';
+export const GET: APIRoute = async ({ request }) => redirect('/admin/login', 303, { 'set-cookie': await adminLogout(request) });

@@ -3,7 +3,7 @@ import { env } from '../../../lib/env';
 import { clean, isEmail, redirect, digits, slugify, safeUrl, escapeHtml } from '../../../lib/util';
 import { verifyTurnstile, clientIp, sendEmail, emailShell } from '../../../lib/services';
 import { rateLimit } from '../../../lib/db';
-import { SERVICE_BY_SLUG } from '../../../data/services';
+import { SERVICE_BY_SLUG, isService } from '../../../data/services';
 import { isState } from '../../../data/states';
 
 export const POST: APIRoute = async ({ request }) => {
@@ -21,7 +21,7 @@ export const POST: APIRoute = async ({ request }) => {
   const city = clean(form.get('city'), 80);
   const state = clean(form.get('state'), 2).toUpperCase();
   const zip = clean(form.get('zip'), 5);
-  const services = form.getAll('services').map(String).filter((s) => s in SERVICE_BY_SLUG);
+  const services = form.getAll('services').map(String).filter((s) => isService(s));
   const description = clean(form.get('description'), 400);
   if (!name || pd.length !== 10 || !isEmail(email) || !city || !isState(state) || !/^\d{5}$/.test(zip) || services.length === 0 || !description) {
     return redirect('/add-listing?msg=invalid');

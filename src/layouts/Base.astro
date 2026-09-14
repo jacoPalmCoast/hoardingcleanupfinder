@@ -2,6 +2,7 @@
 import '../styles/global.css';
 import { env } from '../lib/env';
 import { SERVICES } from '../data/services';
+import { safeJson } from '../lib/util';
 
 interface Props {
   title: string;
@@ -30,7 +31,7 @@ const fullTitle = title.includes(env.SITE_NAME) ? title : `${title} | ${env.SITE
     <meta property="og:site_name" content={env.SITE_NAME} />
     <meta name="theme-color" content="#1f6f78" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    {jsonld && <script type="application/ld+json" set:html={JSON.stringify(jsonld)} />}
+    {jsonld && <script type="application/ld+json" set:html={safeJson(jsonld)} />}
     <slot name="head" />
   </head>
   <body>

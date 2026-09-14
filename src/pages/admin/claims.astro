@@ -1,7 +1,7 @@
 ---
 import Admin from '../../layouts/Admin.astro';
 import { env } from '../../lib/env';
-const rows = (await env.DB.prepare(`SELECT c.id, c.email, c.verified_at, l.id AS listing_id, l.name, l.city, l.state, l.website FROM claims c JOIN listings l ON l.id = c.listing_id WHERE c.status = 'review' ORDER BY c.verified_at DESC`).all<any>()).results;
+const rows = (await env.DB.prepare(`SELECT c.id, c.email, c.verified_at, l.id AS listing_id, l.name, l.slug, l.city, l.state, l.website FROM claims c JOIN listings l ON l.id = c.listing_id WHERE c.status = 'review' ORDER BY c.verified_at DESC`).all<any>()).results;
 ---
 <Admin title="Claims awaiting review">
   {rows.length === 0 ? <p>None.</p> : (

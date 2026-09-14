@@ -7,7 +7,8 @@ import { STATES, isState } from '../../../data/states';
 import { SERVICE_BY_SLUG } from '../../../data/services';
 
 const st = (Astro.params.st ?? '').toUpperCase();
-const citySlug = Astro.params.city ?? '';
+const citySlug = (Astro.params.city ?? '').toLowerCase();
+if (Astro.params.st !== st.toLowerCase() || Astro.params.city !== citySlug) return Astro.redirect(`/${st.toLowerCase()}/${citySlug}${Astro.params.service ? '/' + Astro.params.service : ''}`, 301);
 const svc = SERVICE_BY_SLUG[Astro.params.service ?? ''];
 if (!isState(st) || !svc) return new Response(null, { status: 404 });
 const city = await getCity(st, citySlug);

@@ -9,8 +9,9 @@ export const POST: APIRoute = async ({ request }) => {
   const ip = clientIp(request);
   const email = clean(form.get('email'), 254).toLowerCase();
   if (!isEmail(email)) return redirect('/account?msg=invalid');
-  if (!(await rateLimit(`login:${ip}`, 5, 3600)) || !(await rateLimit(`login:${email}`, 5, 3600))) return redirect('/account?msg=invalid');
+  if (!(await rateLimit(`login:${ip}`, 10, 3600))) return redirect('/account?msg=invalid');
   if (!(await verifyTurnstile(clean(form.get('cf-turnstile-response'), 5000), ip))) return redirect('/account?msg=invalid');
+  if (!(await rateLimit(`login:${email}`, 5, 3600))) return redirect('/account?msg=invalid');
   // Only send codes to known owners; respond the same way either way so emails can't be enumerated.
   const owner = await env.DB.prepare(`SELECT id FROM owners WHERE email = ?1`).bind(email).first();
   if (owner) {

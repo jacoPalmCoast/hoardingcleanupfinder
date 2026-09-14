@@ -4,8 +4,13 @@ import { getCookie, now, randomToken, sha256, timingSafeEqual } from './util';
 // ---------- Email (Resend) ----------
 export async function sendEmail(to: string, subject: string, html: string, text?: string): Promise<boolean> {
   if (!env.RESEND_API_KEY) {
-    console.log(`[email:dev] to=${to} subject=${subject}`);
-    return true;
+    // Dev only: codes are printed so flows can be tested without Resend. Production fails closed.
+    if (env.DEV_BYPASS_TURNSTILE === '1') {
+      console.log(`[email:dev] to=${to} subject=${subject}`);
+      return true;
+    }
+    console.error('RESEND_API_KEY missing; email not sent');
+    return false;
   }
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -46,28 +51,33 @@ export function clientIp(req: Request): string {
 // ---------- Admin auth ----------
 const ADMIN_COOKIE = 'hcf_admin';
 
-async function adminToken(): Promise<string> {
-  return sha256(`admin:${env.SESSION_SECRET ?? ''}:${env.ADMIN_PASSWORD ?? ''}`);
-}
+const ADMIN_TTL = 60 * 60 * 12;
 
 export async function isAdmin(req: Request): Promise<boolean> {
-  if (!env.ADMIN_PASSWORD || !env.SESSION_SECRET) return false;
+  if (!env.ADMIN_PASSWORD) return false;
   const c = getCookie(req, ADMIN_COOKIE);
-  if (!c) return false;
-  return timingSafeEqual(c, await adminToken());
+  if (!c || !/^[a-f0-9]{64}$/.test(c)) return false;
+  const row = await env.DB.prepare(`SELECT 1 AS ok FROM admin_sessions WHERE token = ?1 AND expires_at > ?2`).bind(await sha256(c), now()).first();
+  return !!row;
 }
 
+// Random token per login, hashed at rest, expiring server-side. Logout revokes it.
 export async function adminLogin(password: string): Promise<string | null> {
-  if (!env.ADMIN_PASSWORD || !env.SESSION_SECRET) return null;
+  if (!env.ADMIN_PASSWORD) return null;
   if (!timingSafeEqual(password, env.ADMIN_PASSWORD)) return null;
-  return adminToken();
+  const token = randomToken();
+  await env.DB.prepare(`DELETE FROM admin_sessions WHERE expires_at < ?1`).bind(now()).run();
+  await env.DB.prepare(`INSERT INTO admin_sessions(token, expires_at) VALUES (?1, ?2)`).bind(await sha256(token), now() + ADMIN_TTL).run();
+  return token;
 }
 
 export function adminCookieHeader(token: string, secure: boolean): string {
-  return `${ADMIN_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${60 * 60 * 12}${secure ? '; Secure' : ''}`;
+  return `${ADMIN_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${ADMIN_TTL}${secure ? '; Secure' : ''}`;
 }
 
-export function adminLogoutHeader(): string {
+export async function adminLogout(req: Request): Promise<string> {
+  const c = getCookie(req, ADMIN_COOKIE);
+  if (c) await env.DB.prepare(`DELETE FROM admin_sessions WHERE token = ?1`).bind(await sha256(c)).run();
   return `${ADMIN_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
 }
 

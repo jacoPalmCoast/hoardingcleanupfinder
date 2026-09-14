@@ -26,7 +26,6 @@ const jsonld: Record<string, unknown> = {
 };
 if (l.website) jsonld.sameAs = l.website;
 if (l.lat && l.lng) jsonld.geo = { '@type': 'GeoCoordinates', latitude: l.lat, longitude: l.lng };
-if (l.review_count > 0 && l.rating) jsonld.aggregateRating = { '@type': 'AggregateRating', ratingValue: l.rating, reviewCount: l.review_count };
 ---
 
 <Base title={`${l.name} — ${l.city}, ${l.state}`} description={`${l.name} provides ${services.map((s) => SERVICE_BY_SLUG[s]?.name.toLowerCase()).filter(Boolean).join(', ')} in ${l.city}, ${stateName}. Phone, website and quote request.`} jsonld={jsonld}>

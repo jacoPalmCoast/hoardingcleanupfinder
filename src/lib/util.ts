@@ -27,6 +27,11 @@ export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 }
 
+// JSON safe to embed inside <script>: no sequence can close the tag or break the parser.
+export function safeJson(v: unknown): string {
+  return JSON.stringify(v).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+}
+
 export function randomCode(len = 6): string {
   const arr = new Uint8Array(len);
   crypto.getRandomValues(arr);
@@ -103,5 +108,10 @@ export function cookie(name: string, value: string, maxAge: number, secure: bool
 export function getCookie(req: Request, name: string): string | null {
   const c = req.headers.get('cookie') ?? '';
   const m = c.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
-  return m ? decodeURIComponent(m[1]) : null;
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
 }

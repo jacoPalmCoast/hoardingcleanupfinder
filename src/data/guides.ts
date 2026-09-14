@@ -188,4 +188,4 @@ export const GUIDES: Guide[] = [
   },
 ];
 
-export const GUIDE_BY_SLUG = Object.fromEntries(GUIDES.map((g) => [g.slug, g]));
+export const GUIDE_BY_SLUG: Record<string, Guide> = Object.assign(Object.create(null), Object.fromEntries(GUIDES.map((g) => [g.slug, g])));

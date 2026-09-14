@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { env } from '../../../lib/env';
 import { clean, isEmail, redirect, digits, safeUrl } from '../../../lib/util';
 import { currentOwner, ownerOwns } from '../../../lib/services';
-import { SERVICE_BY_SLUG } from '../../../data/services';
+import { SERVICE_BY_SLUG, isService } from '../../../data/services';
 
 export const POST: APIRoute = async ({ request }) => {
   const owner = await currentOwner(request);
@@ -16,7 +16,7 @@ export const POST: APIRoute = async ({ request }) => {
   const website = safeUrl(clean(form.get('website'), 200));
   const email = clean(form.get('email'), 254).toLowerCase();
   const address = clean(form.get('address'), 200);
-  const services = form.getAll('services').map(String).filter((s) => s in SERVICE_BY_SLUG);
+  const services = form.getAll('services').map(String).filter((s) => isService(s));
   const description = clean(form.get('description'), 600);
   if (!name || pd.length !== 10 || (email && !isEmail(email)) || services.length === 0 || !description) return redirect(`/account/edit/${id}?msg=invalid`);
   await env.DB.prepare(

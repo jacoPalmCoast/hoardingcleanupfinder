@@ -4,15 +4,16 @@ import { clean, isEmail, redirect, formatPhone, escapeHtml, now } from '../../li
 import { verifyTurnstile, clientIp, sendEmail, emailShell } from '../../lib/services';
 import { getListingById, rateLimit } from '../../lib/db';
 import type { Listing } from '../../lib/db';
-import { SERVICE_BY_SLUG } from '../../data/services';
+import { SERVICE_BY_SLUG, isService } from '../../data/services';
 
 export const POST: APIRoute = async ({ request }) => {
   const form = await request.formData();
   const ip = clientIp(request);
   const ret = clean(form.get('return'), 200);
-  const back = ret.startsWith('/') && !ret.startsWith('//') ? ret : '/';
-  if (!(await rateLimit(`lead:${ip}`, 5, 3600))) return redirect(`${back}?msg=rate-limited`);
-  if (!(await verifyTurnstile(clean(form.get('cf-turnstile-response'), 5000), ip))) return redirect(`${back}?msg=captcha`);
+  const back = /^\/(?![\/\\])[^\s]*$/.test(ret) && new URL(ret, env.SITE_URL).origin === new URL(env.SITE_URL).origin ? new URL(ret, env.SITE_URL).pathname : '/';
+  const backWith = (msg: string, hash = '') => `${back}?msg=${msg}${hash}`;
+  if (!(await rateLimit(`lead:${ip}`, 5, 3600))) return redirect(backWith('rate-limited'));
+  if (!(await verifyTurnstile(clean(form.get('cf-turnstile-response'), 5000), ip))) return redirect(backWith('captcha'));
 
   const name = clean(form.get('name'), 100);
   const email = clean(form.get('email'), 254).toLowerCase();
@@ -21,10 +22,10 @@ export const POST: APIRoute = async ({ request }) => {
   const city = clean(form.get('city'), 80);
   const state = clean(form.get('state'), 2).toUpperCase();
   const serviceRaw = clean(form.get('service'), 40);
-  const service = serviceRaw in SERVICE_BY_SLUG ? serviceRaw : 'hoarding-cleanup';
+  const service = isService(serviceRaw) ? serviceRaw : 'hoarding-cleanup';
   const message = clean(form.get('message'), 1500);
   const listingIdRaw = clean(form.get('listing_id'), 12);
-  if (!name || !isEmail(email) || !/^\d{5}$/.test(zip)) return redirect(`${back}?msg=invalid`);
+  if (!name || !isEmail(email) || !/^\d{5}$/.test(zip)) return redirect(backWith('invalid'));
 
   // Route: to the chosen listing, else featured-first companies in the same ZIP prefix / state.
   let targets: Listing[] = [];
@@ -59,7 +60,7 @@ ${message ? `<p><strong>Notes:</strong><br>${escapeHtml(message).replace(/\n/g, 
   await Promise.all(targets.filter((l) => l.email).map((l) => sendEmail(l.email!, `Quote request: ${svcName} in ${zip}`, emailShell('New quote request', body))));
   // Owner copy, so leads without a company email can still be worked by hand.
   await sendEmail(env.FROM_EMAIL.replace(/.*<|>.*/g, ''), `[lead #${leadId}] ${svcName} ${zip} → ${targets.map((l) => l.name).join(', ') || 'no match'}`, emailShell('Lead copy', body));
-  await sendEmail(email, `We sent your request to ${targets.length || 'a'} cleanup ${targets.length === 1 ? 'company' : 'companies'}`, emailShell('Your quote request', `<p>Thanks, ${escapeHtml(name)}. Your ${svcName.toLowerCase()} request for ZIP ${zip} went to: ${targets.map((l) => escapeHtml(l.name)).join(', ') || 'our team, who will find a company for you'}.</p><p>If you hear nothing within one business day, reply to this email and we will chase it.</p>`));
+  await sendEmail(email, targets.length === 1 ? 'We sent your request to a cleanup company' : targets.length > 1 ? `We sent your request to ${targets.length} cleanup companies` : 'We received your request', emailShell('Your quote request', `<p>Thanks, ${escapeHtml(name)}. Your ${svcName.toLowerCase()} request for ZIP ${zip} went to: ${targets.map((l) => escapeHtml(l.name)).join(', ') || 'our team, who will find a company for you'}.</p><p>If you hear nothing within one business day, reply to this email and we will chase it.</p>`));
 
-  return redirect(`${back}?msg=lead-sent#quote`);
+  return redirect(backWith('lead-sent', '#quote'));
 };

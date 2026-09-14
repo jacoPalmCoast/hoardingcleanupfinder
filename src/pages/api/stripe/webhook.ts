@@ -18,9 +18,10 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response('bad signature', { status: 400 });
   }
 
-  // Idempotency
-  const seen = await env.DB.prepare(`INSERT OR IGNORE INTO stripe_events(id, type) VALUES (?1, ?2)`).bind(event.id, event.type).run();
-  if (seen.meta.changes === 0) return new Response('duplicate', { status: 200 });
+  // Idempotency: skip events already fully processed. The row is written only after the
+  // handler succeeds, so a transient failure leaves the event retryable by Stripe.
+  const seen = await env.DB.prepare(`SELECT 1 AS ok FROM stripe_events WHERE id = ?1`).bind(event.id).first();
+  if (seen) return new Response('duplicate', { status: 200 });
 
   const s = stripe();
   const listingIdFrom = async (customer: string | null, sub?: Stripe.Subscription | null): Promise<number | null> => {
@@ -32,6 +33,11 @@ export const POST: APIRoute = async ({ request }) => {
   };
 
   const setFeatured = async (listingId: number, sub: Stripe.Subscription) => {
+    const exists = await env.DB.prepare(`SELECT 1 AS ok FROM listings WHERE id = ?1`).bind(listingId).first();
+    if (!exists) {
+      console.warn(`stripe webhook: no listing ${listingId} for subscription ${sub.id}`);
+      return;
+    }
     const active = sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due';
     const item = sub.items.data[0];
     const periodEnd = (item as any)?.current_period_end ?? (sub as any).current_period_end ?? 0;
@@ -57,7 +63,15 @@ export const POST: APIRoute = async ({ request }) => {
     case 'customer.subscription.created':
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted': {
-      const sub = event.data.object as Stripe.Subscription;
+      // Events can arrive out of order; the payload is only a hint. Re-fetch the current state.
+      const hint = event.data.object as Stripe.Subscription;
+      let sub = hint;
+      try {
+        sub = await s.subscriptions.retrieve(hint.id);
+      } catch (e) {
+        // A deleted subscription may not be retrievable; the deleted payload is then authoritative.
+        if (event.type !== 'customer.subscription.deleted') throw e;
+      }
       const listingId = await listingIdFrom(String(sub.customer), sub);
       if (listingId) await setFeatured(listingId, sub);
       break;
@@ -85,5 +99,6 @@ export const POST: APIRoute = async ({ request }) => {
     default:
       break;
   }
+  await env.DB.prepare(`INSERT OR IGNORE INTO stripe_events(id, type) VALUES (?1, ?2)`).bind(event.id, event.type).run();
   return new Response('ok', { status: 200 });
 };
