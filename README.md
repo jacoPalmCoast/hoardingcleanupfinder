@@ -21,9 +21,9 @@ Every push to `main` redeploys.
 | `STRIPE_PRICE_MONTHLY` | Stripe → Product catalog → create product "Featured listing" → price $49/month → copy `price_…` |
 | `STRIPE_PRICE_ANNUAL` | same product → second price $399/year → `price_…` |
 | `STRIPE_WEBHOOK_SECRET` | Stripe → Developers → Webhooks → Add endpoint `https://hoardingcleanupfinder.com/api/stripe/webhook`, events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed` → Signing secret `whsec_…` |
-| `RESEND_API_KEY` | resend.com → API keys. Also add and verify the domain `hoardingcleanupfinder.com` under Domains (DNS records go into Cloudflare DNS). Until verified, set `FROM_EMAIL` var to `onboarding@resend.dev` for testing. |
-| `INDEXNOW_KEY` | Any 32-char hex string you generate (e.g. `openssl rand -hex 16`), type Text. Enables Bing IndexNow pings on listing changes; `/indexnow.txt` serves it. Then add the site in Bing Webmaster Tools. |
-| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Cloudflare → Turnstile → Add widget → hostname `hoardingcleanupfinder.com` (add `workers.dev` too for testing) → Managed mode |
+| `RESEND_API_KEY` | resend.com → API keys. Also add and verify the domain `hoardingcleanupfinder.com` under Domains (DNS records go into Cloudflare DNS). `FROM_EMAIL` in `wrangler.jsonc` is `onboarding@resend.dev` until the domain is verified; then change it to `Hoarding Cleanup Finder <hello@hoardingcleanupfinder.com>`. `keep_vars: true` means dashboard-set variables survive deploys. |
+| `INDEXNOW_KEY` | Set in `wrangler.jsonc` vars (public by design; `/indexnow.txt` serves it). Enables Bing IndexNow pings on listing changes. Add the site in Bing Webmaster Tools. |
+| `TURNSTILE_SECRET_KEY` (secret; the public `TURNSTILE_SITE_KEY` is in `wrangler.jsonc`) | Cloudflare → Turnstile → Add widget → hostname `hoardingcleanupfinder.com` (add `workers.dev` too for testing) → Managed mode |
 
 Stripe Customer Portal: Stripe → Settings → Billing → Customer portal → enable "Cancel subscriptions" and "Update payment method". Stripe → Settings → Billing → Subscriptions and emails → set "cancel subscription" after failed retries so cancellation reaches the webhook.
 
