@@ -18,6 +18,8 @@ function inferServices(r) {
   const out = SERVICES.filter((s) => s.kw.some((k) => t.includes(k))).map((s) => s.slug);
   // Companies found via a hoarding query but categorised as junk removal still do hoarding work.
   if (!out.includes('hoarding-cleanup') && /hoard/.test((r.query ?? '').toLowerCase())) out.unshift('hoarding-cleanup');
+  // Biohazard remediation firms handle unattended death scenes; that is the same crew and certification.
+  if (out.includes('biohazard-cleanup') && !out.includes('unattended-death-cleanup')) out.push('unattended-death-cleanup');
   return out.length ? [...new Set(out)] : ['hoarding-cleanup'];
 }
 
@@ -50,14 +52,14 @@ for (const r of rows) {
   let slug = slugify(`${r.name} ${city} ${state}`);
   if (seenSlug.has(slug)) slug = `${slug}-${pd.slice(-4)}`;
   seenSlug.add(slug);
+  const website = r.website ? r.website.split('?')[0] : null;
   const services = inferServices(r);
   const citySlug = slugify(city);
   const key = `${state}/${citySlug}`;
   if (!cities.has(key)) cities.set(key, { slug: citySlug, name: city, state, lat: r.latitude, lng: r.longitude, population: r.metro_population ?? null });
-  const website = r.website ? r.website.split('?')[0] : null;
   out.push(
-    `INSERT INTO listings(slug,name,phone,phone_digits,website,address,city,city_slug,state,zip,lat,lng,description,services,rating,review_count,is_verified,status,source,place_id) VALUES (` +
-      [q(slug), q(r.name), q(r.phone), q(pd), q(website), q(r.address), q(city), q(citySlug), q(state), q(r.postal_code || null), r.latitude ?? 'NULL', r.longitude ?? 'NULL', q(describe(r, services)), q(JSON.stringify(services)), r.rating ?? 'NULL', r.reviews ?? 0, r.verified ? 1 : 0, "'active'", "'outscraper'", q(r.place_id)].join(',') +
+    `INSERT OR IGNORE INTO listings(slug,name,phone,phone_digits,website,address,city,city_slug,state,zip,lat,lng,description,services,rating,review_count,is_verified,status,source,place_id) VALUES (` +
+      [q(slug), q(r.name), q(r.phone), q(pd), q(website), q(r.address), q(city), q(citySlug), q(state), q(r.postal_code || null), r.latitude ?? 'NULL', r.longitude ?? 'NULL', q(describe(r, services)), q(JSON.stringify(services)), r.rating ?? 'NULL', r.reviews ?? 0, (r.verified && website && (r.reviews ?? 0) >= 3) ? 1 : 0, "'active'", "'outscraper'", q(r.place_id)].join(',') +
       ');',
   );
   kept++;

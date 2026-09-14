@@ -49,7 +49,7 @@ export interface City {
 export const MIN_LISTINGS_FOR_PAGE = 3;
 
 // Ordering: featured (and paid-up) first, then verified, then by review count. Invariant 2.
-const ORDER = `ORDER BY (is_featured = 1 AND featured_until > ?1) DESC, is_verified DESC, review_count DESC, name ASC`;
+const ORDER = `ORDER BY (is_featured = 1 AND featured_until > ?1) DESC, is_verified DESC, (services LIKE '%hoarding-cleanup%') DESC, review_count DESC, name ASC`;
 
 export function isLive(l: Pick<Listing, 'is_featured' | 'featured_until'>): boolean {
   return l.is_featured === 1 && (l.featured_until ?? 0) > now();
