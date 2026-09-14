@@ -14,6 +14,6 @@
     "FEATURED_ANNUAL_USD": "399"
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "hcf-db", "database_id": "79a4c570-3472-4ae4-8296-e50ce322a228", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "hcf-db", "database_id": "086a07e7-896f-44d2-9335-85d0ed5725d9", "migrations_dir": "migrations" }
   ]
 }
