@@ -3,7 +3,7 @@ import Base from '../layouts/Base.astro';
 import SearchForm from '../components/SearchForm.astro';
 import ListingCard from '../components/ListingCard.astro';
 import { searchListings, searchByZip } from '../lib/db';
-import { SERVICE_BY_SLUG } from '../data/services';
+import { SERVICE_BY_SLUG, isService } from '../data/services';
 import { STATES } from '../data/states';
 
 const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 60);
