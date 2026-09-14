@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { env } from '../../../lib/env';
-import { redirect } from '../../../lib/util';
+import { redirect, returnOrigin } from '../../../lib/util';
 import { currentOwner } from '../../../lib/services';
 import { stripe, stripeConfigured } from '../../../lib/stripe';
 
@@ -14,6 +14,6 @@ export const GET: APIRoute = async ({ request }) => {
     .bind(owner.id)
     .first<{ c: string }>();
   if (!row) return redirect('/account');
-  const session = await stripe().billingPortal.sessions.create({ customer: row.c, return_url: `${env.SITE_URL}/account` });
+  const session = await stripe().billingPortal.sessions.create({ customer: row.c, return_url: `${returnOrigin(request, env.SITE_URL)}/account` });
   return redirect(session.url, 303);
 };

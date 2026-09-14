@@ -115,3 +115,10 @@ export function getCookie(req: Request, name: string): string | null {
     return null;
   }
 }
+
+/** Origin to send a browser back to after Stripe. The canonical SITE_URL is used once the
+ *  custom domain is live; until then (or on a preview host) the request's own origin. */
+export function returnOrigin(request: Request, siteUrl: string): string {
+  const o = new URL(request.url).origin;
+  return /\.workers\.dev$/.test(new URL(o).host) ? o : siteUrl;
+}

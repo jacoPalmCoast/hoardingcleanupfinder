@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { env } from '../../../lib/env';
-import { clean, redirect } from '../../../lib/util';
+import { clean, redirect, returnOrigin } from '../../../lib/util';
 import { currentOwner, ownerOwns } from '../../../lib/services';
 import { getListingById, isLive } from '../../../lib/db';
 import { stripe, stripeConfigured } from '../../../lib/stripe';
@@ -32,8 +32,8 @@ export const POST: APIRoute = async ({ request }) => {
     metadata: { listing_id: String(l.id), plan },
     subscription_data: { metadata: { listing_id: String(l.id) } },
     allow_promotion_codes: true,
-    success_url: `${env.SITE_URL}/account?msg=featured`,
-    cancel_url: `${env.SITE_URL}/featured/${l.slug}?msg=cancelled`,
+    success_url: `${returnOrigin(request, env.SITE_URL)}/account?msg=featured`,
+    cancel_url: `${returnOrigin(request, env.SITE_URL)}/featured/${l.slug}?msg=cancelled`,
   });
   return redirect(session.url!, 303);
 };
