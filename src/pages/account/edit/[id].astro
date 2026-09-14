@@ -1,0 +1,41 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { currentOwner, ownerOwns } from '../../../lib/services';
+import { getListingById } from '../../../lib/db';
+import { parseServices } from '../../../lib/util';
+import { SERVICES } from '../../../data/services';
+const owner = await currentOwner(Astro.request);
+if (!owner) return Astro.redirect('/account', 302);
+const id = Number(Astro.params.id);
+if (!Number.isInteger(id) || !(await ownerOwns(owner.id, id))) return new Response('Forbidden', { status: 403 });
+const l = await getListingById(id);
+if (!l) return new Response(null, { status: 404 });
+const services = parseServices(l.services);
+const msg = Astro.url.searchParams.get('msg');
+---
+<Base title={`Edit ${l.name}`} description="Edit your listing." noindex>
+  <p class="crumbs"><a href="/account">Your listings</a> › Edit</p>
+  <h1>Edit {l.name}</h1>
+  {msg === 'invalid' && <div class="notice error" role="alert">Something was missing or invalid.</div>}
+  <form action="/api/account/save" method="post" style="max-width:600px">
+    <input type="hidden" name="id" value={l.id} />
+    <label for="name">Company name</label>
+    <input id="name" name="name" required maxlength="120" value={l.name} />
+    <label for="phone">Phone</label>
+    <input id="phone" name="phone" type="tel" required maxlength="30" value={l.phone ?? ''} />
+    <label for="website">Website</label>
+    <input id="website" name="website" type="url" maxlength="200" value={l.website ?? ''} />
+    <label for="email">Email for quote requests</label>
+    <input id="email" name="email" type="email" maxlength="254" value={l.email ?? ''} />
+    <p class="hint">Quote requests from your listing page are sent here.</p>
+    <label for="address">Street address <span class="small">(optional)</span></label>
+    <input id="address" name="address" maxlength="200" value={l.address ?? ''} />
+    <fieldset style="border:0;padding:0;margin:14px 0 0">
+      <legend style="font-weight:600;font-size:.92rem">Services</legend>
+      {SERVICES.map((s) => <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="services" value={s.slug} checked={services.includes(s.slug)} style="width:auto;margin-right:8px" />{s.name}</label>)}
+    </fieldset>
+    <label for="description">Description <span class="small">(up to 600 characters)</span></label>
+    <textarea id="description" name="description" required maxlength="600">{l.description ?? ''}</textarea>
+    <button class="btn" type="submit" style="margin-top:12px">Save</button>
+  </form>
+</Base>

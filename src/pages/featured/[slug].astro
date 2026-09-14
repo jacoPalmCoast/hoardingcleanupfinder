@@ -1,0 +1,47 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getListingBySlug, isLive } from '../../lib/db';
+import { currentOwner, ownerOwns } from '../../lib/services';
+import { stripeConfigured } from '../../lib/stripe';
+import { env } from '../../lib/env';
+const l = await getListingBySlug(Astro.params.slug ?? '');
+if (!l || l.status !== 'active') return new Response(null, { status: 404 });
+const owner = await currentOwner(Astro.request);
+const owns = owner ? await ownerOwns(owner.id, l.id) : false;
+const featured = isLive(l);
+const msg = Astro.url.searchParams.get('msg');
+---
+<Base title={`Get ${l.name} featured in ${l.city}`} description={`Featured placement for ${l.name} at the top of the ${l.city}, ${l.state} page.`} noindex>
+  <h1>Get featured in {l.city}</h1>
+  <p class="lede"><strong>{l.name}</strong> is listed free and stays free. Featured placement puts it at the top of the {l.city}, {l.state} page and every service page for {l.city}, adds a Featured label, and routes quote requests from {l.city} to you first.</p>
+  {msg === 'cancelled' && <div class="notice warn">Checkout was cancelled. Nothing was charged.</div>}
+  {msg === 'unavailable' && <div class="notice error" role="alert">Payments are not switched on yet. Email hello@hoardingcleanupfinder.com and we will set it up by hand.</div>}
+  <div class="grid" style="max-width:720px">
+    <div class="card">
+      <h3 style="margin-top:0">Monthly</h3>
+      <p><b style="font-size:1.6rem">${env.FEATURED_MONTHLY_USD}</b> / month</p>
+      <p class="small">Cancel any time from your account page. No contract.</p>
+      {owns && !featured && stripeConfigured() && <form action="/api/stripe/checkout" method="post"><input type="hidden" name="listing_id" value={l.id} /><input type="hidden" name="plan" value="monthly" /><button class="btn">Start monthly</button></form>}
+    </div>
+    <div class="card featured">
+      <h3 style="margin-top:0">Annual</h3>
+      <p><b style="font-size:1.6rem">${env.FEATURED_ANNUAL_USD}</b> / year <span class="small">(two months free)</span></p>
+      <p class="small">One invoice, one line on your books.</p>
+      {owns && !featured && stripeConfigured() && <form action="/api/stripe/checkout" method="post"><input type="hidden" name="listing_id" value={l.id} /><input type="hidden" name="plan" value="annual" /><button class="btn">Start annual</button></form>}
+    </div>
+  </div>
+  {featured && <div class="notice" style="margin-top:20px">This listing is already featured. <a href="/account">Manage billing</a>.</div>}
+  {!owner && <div class="notice" style="margin-top:20px">To buy featured placement, first <a href={`/claim/${l.slug}`}>claim this listing</a> (free, takes a minute) or <a href="/account">sign in</a>.</div>}
+  {owner && !owns && <div class="notice warn" style="margin-top:20px">Your account does not manage this listing. <a href={`/claim/${l.slug}`}>Claim it</a> first.</div>}
+  {owns && !featured && !stripeConfigured() && <div class="notice warn" style="margin-top:20px">Payments are not switched on yet. Email hello@hoardingcleanupfinder.com and we will set it up by hand.</div>}
+  <section class="prose" style="margin-top:32px">
+    <h2>What featured includes</h2>
+    <ul>
+      <li>Top position on the {l.city} page and its service pages, above verified and free listings.</li>
+      <li>A "Featured" label. Buyers know it is paid placement; we do not call it a ranking.</li>
+      <li>Quote requests sent from {l.city} pages go to featured companies first.</li>
+      <li>A monthly email with page views, calls and quote requests for your listing.</li>
+    </ul>
+    <p>Only one thing is not included: a guarantee of jobs. If it does not pay for itself, cancel.</p>
+  </section>
+</Base>

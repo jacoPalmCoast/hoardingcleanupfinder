@@ -1,0 +1,44 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { env } from '../../lib/env';
+import { SERVICES } from '../../data/services';
+import { parseServices } from '../../lib/util';
+import type { Listing } from '../../lib/db';
+const id = Number(Astro.url.searchParams.get('id') ?? 0);
+const q = (Astro.url.searchParams.get('q') ?? '').trim();
+let one: Listing | null = null;
+let rows: Listing[] = [];
+if (id) one = (await env.DB.prepare(`SELECT * FROM listings WHERE id = ?1`).bind(id).first<Listing>()) ?? null;
+else if (q) rows = (await env.DB.prepare(`SELECT * FROM listings WHERE name LIKE ?1 OR phone_digits LIKE ?1 OR city LIKE ?1 ORDER BY name LIMIT 100`).bind(`%${q}%`).all<Listing>()).results;
+const msg = Astro.url.searchParams.get('msg');
+---
+<Admin title="Listings">
+  {msg === 'saved' && <div class="notice" role="status">Saved.</div>}
+  <form method="get" class="search"><input type="search" name="q" value={q} placeholder="Name, phone or city" /><button class="btn">Find</button></form>
+  {one && (
+    <form action="/api/admin/listing" method="post" style="max-width:640px">
+      <input type="hidden" name="id" value={one.id} /><input type="hidden" name="action" value="save" />
+      <label>Name<input name="name" value={one.name} required /></label>
+      <label>Phone<input name="phone" value={one.phone ?? ''} /></label>
+      <label>Website<input name="website" value={one.website ?? ''} /></label>
+      <label>Email<input name="email" value={one.email ?? ''} /></label>
+      <label>Address<input name="address" value={one.address ?? ''} /></label>
+      <label>City<input name="city" value={one.city} required /></label>
+      <label>State<input name="state" value={one.state} maxlength="2" required /></label>
+      <label>ZIP<input name="zip" value={one.zip ?? ''} /></label>
+      <fieldset style="border:0;padding:0;margin:14px 0 0"><legend style="font-weight:600;font-size:.92rem">Services</legend>
+        {SERVICES.map((s) => <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="services" value={s.slug} checked={parseServices(one!.services).includes(s.slug)} style="width:auto;margin-right:8px" />{s.name}</label>)}
+      </fieldset>
+      <label>Description<textarea name="description">{one.description ?? ''}</textarea></label>
+      <label style="font-weight:400"><input type="checkbox" name="is_verified" checked={one.is_verified === 1} style="width:auto;margin-right:8px" />Verified</label>
+      <label>Status<select name="status">{['active', 'pending', 'removed'].map((s) => <option value={s} selected={s === one!.status}>{s}</option>)}</select></label>
+      <p class="small">Featured: {one.is_featured} until {one.featured_until ? new Date(one.featured_until * 1000).toLocaleString('en-US') : '—'} · Stripe customer {one.stripe_customer_id ?? '—'} · sub {one.stripe_subscription_id ?? '—'} ({one.subscription_status ?? '—'}). Featured state is controlled by Stripe webhooks only.</p>
+      <button class="btn" type="submit" style="margin-top:12px">Save</button>
+    </form>
+  )}
+  {rows.length > 0 && (
+    <div class="table-wrap"><table><thead><tr><th>Name</th><th>City</th><th>Phone</th><th>Status</th><th>Flags</th></tr></thead><tbody>
+      {rows.map((r) => <tr><td><a href={`/admin/listings?id=${r.id}`}>{r.name}</a></td><td>{r.city}, {r.state}</td><td>{r.phone}</td><td>{r.status}</td><td>{r.is_verified ? 'V ' : ''}{r.is_claimed ? 'C ' : ''}{r.is_featured ? 'F' : ''}</td></tr>)}
+    </tbody></table></div>
+  )}
+</Admin>

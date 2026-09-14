@@ -1,0 +1,15 @@
+---
+import Base from './Base.astro';
+import { isAdmin } from '../lib/services';
+interface Props { title: string }
+const { title } = Astro.props;
+const ok = await isAdmin(Astro.request);
+if (!ok) return Astro.redirect('/admin/login', 302);
+---
+<Base title={`Admin · ${title}`} description="Admin" noindex>
+  <nav class="small" style="margin-bottom:12px" aria-label="Admin">
+    <a href="/admin">Overview</a> · <a href="/admin/pending">Pending</a> · <a href="/admin/claims">Claims</a> · <a href="/admin/leads">Leads</a> · <a href="/admin/reports">Reports</a> · <a href="/admin/listings">Listings</a> · <a href="/api/admin/logout">Sign out</a>
+  </nav>
+  <h1>{title}</h1>
+  <slot />
+</Base>

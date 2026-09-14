@@ -1,0 +1,21 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { env } from '../../lib/env';
+const rows = (await env.DB.prepare(`SELECT r.*, l.name, l.slug FROM reports r JOIN listings l ON l.id = r.listing_id WHERE r.status = 'open' ORDER BY r.created_at DESC`).all<any>()).results;
+---
+<Admin title="Open reports">
+  {rows.length === 0 ? <p>None.</p> : (
+    <div class="table-wrap"><table><thead><tr><th>Listing</th><th>Kind</th><th>From</th><th>Message</th><th></th></tr></thead><tbody>
+      {rows.map((r: any) => (
+        <tr>
+          <td><a href={`/company/${r.slug}`}>{r.name}</a><br/><a href={`/admin/listings?id=${r.listing_id}`}>edit</a></td>
+          <td>{r.kind}</td><td>{r.email}</td><td>{r.message}</td>
+          <td>
+            <form action="/api/admin/report" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="close" /><button class="btn small">Close</button></form>
+            {r.kind === 'removal' || r.kind === 'closed' ? <form action="/api/admin/report" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="remove-listing" /><button class="btn small danger">Remove listing</button></form> : null}
+          </td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  )}
+</Admin>

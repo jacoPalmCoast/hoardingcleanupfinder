@@ -24,7 +24,7 @@ function inferServices(r) {
 function describe(r, services) {
   const svc = services.map((s) => ({ 'hoarding-cleanup': 'hoarding cleanup', 'biohazard-cleanup': 'biohazard cleanup', 'unattended-death-cleanup': 'unattended death cleanup', 'estate-cleanout': 'estate cleanouts' })[s]);
   const list = svc.length > 1 ? `${svc.slice(0, -1).join(', ')} and ${svc.at(-1)}` : svc[0];
-  const where = r.city ? `${r.city}, ${r.state_code}` : `the ${r.metro} area`;
+  const where = r.city && r.city !== r.metro_city ? `${r.city} and the ${r.metro_city} area` : `${r.metro_city}, ${r.metro_state}`;
   const hours = r.hours24 ? ' Available 24 hours.' : '';
   return `${r.name} provides ${list} in ${where}.${hours}`;
 }
@@ -41,8 +41,10 @@ for (const r of rows) {
   const pd = digits(r.phone);
   if (pd.length !== 10) continue;
   if (seenPhone.has(pd)) continue;
-  const state = (r.state_code ?? r.metro_state ?? '').toUpperCase();
-  const city = r.city ?? r.metro_city;
+  // Group by the metro the listing was found under so metro pages are complete;
+  // the street address still shows the real suburb.
+  const state = (r.metro_state ?? r.state_code ?? '').toUpperCase();
+  const city = r.metro_city ?? r.city;
   if (!state || !city) continue;
   seenPhone.add(pd);
   let slug = slugify(`${r.name} ${city} ${state}`);

@@ -1,0 +1,25 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { adminCounts } from '../../lib/db';
+import { env } from '../../lib/env';
+const c = await adminCounts();
+const recent = (await env.DB.prepare(`SELECT id, name, city, state, is_featured, featured_until, created_at FROM listings WHERE is_featured = 1 ORDER BY featured_until DESC LIMIT 20`).all<any>()).results;
+---
+<Admin title="Overview">
+  <div class="stats">
+    <div class="stat"><b>{c.active}</b><span>Active listings</span></div>
+    <div class="stat"><b>{c.pending}</b><span>Pending review</span></div>
+    <div class="stat"><b>{c.claimed}</b><span>Claimed</span></div>
+    <div class="stat"><b>{c.verified}</b><span>Verified</span></div>
+    <div class="stat"><b>{c.featured}</b><span>Featured (paid)</span></div>
+    <div class="stat"><b>{c.leads_30d}</b><span>Leads, 30 days</span></div>
+    <div class="stat"><b>{c.open_reports}</b><span>Open reports</span></div>
+    <div class="stat"><b>{c.cities}</b><span>Cities</span></div>
+  </div>
+  <h2>Featured listings</h2>
+  {recent.length === 0 ? <p>None yet.</p> : (
+    <div class="table-wrap"><table><thead><tr><th>Company</th><th>City</th><th>Featured until</th></tr></thead><tbody>
+      {recent.map((r: any) => <tr><td><a href={`/admin/listings?id=${r.id}`}>{r.name}</a></td><td>{r.city}, {r.state}</td><td>{new Date(r.featured_until * 1000).toLocaleDateString('en-US')}</td></tr>)}
+    </tbody></table></div>
+  )}
+</Admin>

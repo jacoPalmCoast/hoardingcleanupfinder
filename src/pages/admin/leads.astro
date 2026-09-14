@@ -1,0 +1,31 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { env } from '../../lib/env';
+const rows = (await env.DB.prepare(`SELECT * FROM leads ORDER BY created_at DESC LIMIT 200`).all<any>()).results;
+const ids = [...new Set(rows.flatMap((r: any) => JSON.parse(r.routed_to || '[]')))] as number[];
+const names: Record<number, string> = {};
+if (ids.length) for (const row of (await env.DB.prepare(`SELECT id, name FROM listings WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all<any>()).results) names[row.id] = row.name;
+---
+<Admin title="Leads">
+  {rows.length === 0 ? <p>No leads yet.</p> : (
+    <div class="table-wrap"><table><thead><tr><th>When</th><th>Contact</th><th>Where</th><th>Service</th><th>Routed to</th><th>Message</th><th>Status</th></tr></thead><tbody>
+      {rows.map((r: any) => (
+        <tr>
+          <td>{new Date(r.created_at * 1000).toLocaleString('en-US')}</td>
+          <td>{r.name}<br/>{r.email}<br/>{r.phone}</td>
+          <td>{r.zip} {r.city} {r.state}</td>
+          <td>{r.service}</td>
+          <td>{JSON.parse(r.routed_to || '[]').map((id: number) => names[id] ?? id).join(', ') || '—'}</td>
+          <td>{r.message}</td>
+          <td>
+            <form action="/api/admin/lead" method="post"><input type="hidden" name="id" value={r.id} />
+              <select name="status" onchange="this.form.submit()" aria-label="Lead status">
+                {['new', 'contacted', 'sold', 'closed', 'spam'].map((s) => <option value={s} selected={s === r.status}>{s}</option>)}
+              </select>
+            </form>
+          </td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  )}
+</Admin>

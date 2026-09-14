@@ -1,0 +1,13 @@
+---
+import Base from '../../layouts/Base.astro';
+const msg = Astro.url.searchParams.get('msg');
+---
+<Base title="Admin sign in" description="Admin" noindex>
+  <h1>Admin</h1>
+  {msg === 'bad' && <div class="notice error" role="alert">Wrong password.</div>}
+  <form action="/api/admin/login" method="post" style="max-width:360px">
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" required autocomplete="current-password" />
+    <button class="btn" type="submit" style="margin-top:12px">Sign in</button>
+  </form>
+</Base>

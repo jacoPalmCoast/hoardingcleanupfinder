@@ -1,0 +1,22 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { env } from '../../lib/env';
+const rows = (await env.DB.prepare(`SELECT c.id, c.email, c.verified_at, l.id AS listing_id, l.name, l.city, l.state, l.website FROM claims c JOIN listings l ON l.id = c.listing_id WHERE c.status = 'review' ORDER BY c.verified_at DESC`).all<any>()).results;
+---
+<Admin title="Claims awaiting review">
+  {rows.length === 0 ? <p>None.</p> : (
+    <div class="table-wrap"><table><thead><tr><th>Listing</th><th>Website</th><th>Claimant email</th><th></th></tr></thead><tbody>
+      {rows.map((r: any) => (
+        <tr>
+          <td><a href={`/company/${r.slug}`}>{r.name}</a><br/>{r.city}, {r.state}</td>
+          <td>{r.website}</td>
+          <td>{r.email}</td>
+          <td>
+            <form action="/api/admin/claim" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="approve" /><button class="btn small">Approve</button></form>
+            <form action="/api/admin/claim" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="reject" /><button class="btn small danger">Reject</button></form>
+          </td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  )}
+</Admin>
