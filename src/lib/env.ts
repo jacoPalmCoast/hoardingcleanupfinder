@@ -19,6 +19,7 @@ export interface Env {
   TURNSTILE_SECRET_KEY?: string;
   SESSION_SECRET?: string;
   DEV_BYPASS_TURNSTILE?: string;
+  INDEXNOW_KEY?: string;
 }
 
 export const env = cfEnv as unknown as Env;

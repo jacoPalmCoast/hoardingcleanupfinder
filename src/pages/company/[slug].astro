@@ -2,33 +2,49 @@
 import Base from '../../layouts/Base.astro';
 import ListingCard from '../../components/ListingCard.astro';
 import QuoteForm from '../../components/QuoteForm.astro';
+import Faq from '../../components/Faq.astro';
 import { getListingBySlug, nearbyListings, isLive } from '../../lib/db';
 import { formatPhone, parseServices, hostOf } from '../../lib/util';
 import { SERVICE_BY_SLUG } from '../../data/services';
 import { STATES } from '../../data/states';
+import { parseAttrs, parseFaq, attrFacts, publicAttrs } from '../../data/attrs';
+import { listingIntents } from '../../data/intents';
+import { listingSchema, webPageSchema, breadcrumbSchema } from '../../lib/seo';
 import { env } from '../../lib/env';
 
 const l = await getListingBySlug(Astro.params.slug ?? '');
 if (!l || l.status !== 'active') return new Response(null, { status: 404 });
 const services = parseServices(l.services);
+const serviceNames = services.map((s) => SERVICE_BY_SLUG[s]?.name).filter(Boolean) as string[];
 const featured = isLive(l);
+// Render-time tier gate: stored featured-only attributes are hidden while not featured.
+const attrs = publicAttrs(parseAttrs(l.attrs), featured);
+const facts = attrFacts(attrs);
+// Custom FAQ and long "About" are featured-only content; if a subscription lapses they stop rendering.
+const customFaq = featured ? parseFaq(l.custom_faq) : [];
+const longAbout = featured && l.long_about ? l.long_about.trim() : '';
+const faq = [...customFaq, ...listingIntents(l, services, attrs, serviceNames)];
 const nearby = l.lat && l.lng ? await nearbyListings(l.lat, l.lng, 6, l.id) : [];
 const stateName = STATES[l.state] ?? l.state;
 const msg = Astro.url.searchParams.get('msg');
-const jsonld: Record<string, unknown> = {
-  '@context': 'https://schema.org',
-  '@type': 'LocalBusiness',
-  name: l.name,
-  url: `${env.SITE_URL}/company/${l.slug}`,
-  telephone: l.phone ?? undefined,
-  address: { '@type': 'PostalAddress', streetAddress: l.address ?? undefined, addressLocality: l.city, addressRegion: l.state, postalCode: l.zip ?? undefined, addressCountry: 'US' },
-  description: l.description ?? undefined,
-};
-if (l.website) jsonld.sameAs = l.website;
-if (l.lat && l.lng) jsonld.geo = { '@type': 'GeoCoordinates', latitude: l.lat, longitude: l.lng };
+const url = `${env.SITE_URL}/company/${l.slug}`;
+const description = `${l.name} provides ${serviceNames.map((n) => n.toLowerCase()).join(', ')} in ${l.city}, ${stateName}${attrs.hours24 ? ', available 24 hours' : ''}. Phone, website, certifications and quote request.`;
+const jsonld = [
+  webPageSchema(url, `${l.name} — ${l.city}, ${l.state}`, description, { speakable: true, dateModified: new Date(l.updated_at * 1000).toISOString().slice(0, 10) }),
+  breadcrumbSchema([{ name: 'Home', url: env.SITE_URL }, { name: stateName, url: `${env.SITE_URL}/state/${l.state.toLowerCase()}` }, { name: l.city, url: `${env.SITE_URL}/${l.state.toLowerCase()}/${l.city_slug}` }, { name: l.name }]),
+  ...listingSchema(l, services, attrs, faq),
+];
+// Paragraphs only; owners type plain text, we never render their HTML.
+const aboutParas = longAbout ? longAbout.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).slice(0, 8) : [];
+const gaps: string[] = [];
+if (l.is_claimed !== 1) {
+  if (!attrs.certifications.length) gaps.push('certifications');
+  if (!attrs.languages.length) gaps.push('languages');
+  if (!attrs.service_area.length) gaps.push('service area');
+}
 ---
 
-<Base title={`${l.name} — ${l.city}, ${l.state}`} description={`${l.name} provides ${services.map((s) => SERVICE_BY_SLUG[s]?.name.toLowerCase()).filter(Boolean).join(', ')} in ${l.city}, ${stateName}. Phone, website and quote request.`} jsonld={jsonld}>
+<Base title={`${l.name} — ${l.city}, ${l.state}`} description={description} jsonld={jsonld}>
   <p class="crumbs"><a href="/">Home</a> › <a href={`/state/${l.state.toLowerCase()}`}>{stateName}</a> › <a href={`/${l.state.toLowerCase()}/${l.city_slug}`}>{l.city}</a> › {l.name}</p>
   {msg === 'lead-sent' && <div class="notice" role="status">Your request was sent. Expect a call or email from the company, usually within one business day.</div>}
   {msg === 'report-sent' && <div class="notice" role="status">Thanks. We review every report within one business day.</div>}
@@ -38,29 +54,44 @@ if (l.lat && l.lng) jsonld.geo = { '@type': 'GeoCoordinates', latitude: l.lat, l
         {featured && <span class="badge featured">Featured</span>}
         {l.is_verified === 1 && <span class="badge verified">Verified</span>}
         {l.is_claimed === 1 && <span class="badge claimed">Owner-managed</span>}
+        {attrs.hours24 && <span class="badge">24 hours</span>}
       </div>
       <h1>{l.name}</h1>
       <p class="lede">{l.description ?? `${l.name} serves ${l.city}, ${stateName} and the surrounding area.`}</p>
       <dl class="facts">
-        <dt>Services</dt><dd>{services.map((s) => SERVICE_BY_SLUG[s]?.name).filter(Boolean).join(', ') || '—'}</dd>
+        <dt>Services</dt><dd>{serviceNames.join(', ') || '—'}</dd>
         <dt>Phone</dt><dd>{l.phone ? <a href={`tel:${l.phone_digits}`}>{formatPhone(l.phone)}</a> : '—'}</dd>
         <dt>Website</dt><dd>{l.website ? <a href={l.website} rel="nofollow noopener" target="_blank">{hostOf(l.website)}<span class="sr-only"> (opens in new tab)</span></a> : '—'}</dd>
         <dt>Location</dt><dd>{l.address ? `${l.address}` : `${l.city}, ${l.state}${l.zip ? ' ' + l.zip : ''}`}</dd>
+        {facts.map((f) => <><dt>{f.label}</dt><dd>{f.value}</dd></>)}
         {l.review_count > 0 && l.rating && <><dt>Reviews</dt><dd>{l.rating.toFixed(1)} average from {l.review_count} public reviews</dd></>}
       </dl>
+      {gaps.length > 0 && (
+        <p class="small">Not provided yet: {gaps.join(', ')}. <a href={`/claim/${l.slug}`}>Claim this listing</a> to add them.</p>
+      )}
       <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
         {l.phone && <a class="btn" href={`tel:${l.phone_digits}`}>Call {formatPhone(l.phone)}</a>}
         <a class="btn secondary" href="#quote">Request a quote</a>
       </div>
+
+      {aboutParas.length > 0 && (
+        <section class="prose">
+          <h2>About {l.name}</h2>
+          {aboutParas.map((p) => <p>{p}</p>)}
+          <p class="small">Written by the company.</p>
+        </section>
+      )}
 
       <section class="prose">
         <h2>Before you call</h2>
         <p>Ask three things: does the crew have bloodborne-pathogen training and insurance, how do they dispose of contaminated material, and will they give a written estimate after seeing the property. For hoarding jobs, ask how they work with the resident. Our guide on <a href="/guides/how-to-choose-a-hoarding-cleanup-company">choosing a cleanup company</a> covers the rest.</p>
       </section>
 
+      <Faq items={faq} heading={`Questions about ${l.name}`} />
+
       <section class="small" style="margin-top:32px">
         <p>
-          {l.is_claimed !== 1 && <><strong>Is this your company?</strong> <a href={`/claim/${l.slug}`}>Claim this listing</a> to update details and add photos. </>}
+          {l.is_claimed !== 1 && <><strong>Is this your company?</strong> <a href={`/claim/${l.slug}`}>Claim this listing</a> to correct details, add certifications and your service area. </>}
           <a href={`/company/${l.slug}/report`}>Report a correction or ask for removal</a>.
           {!featured && <> Companies can also <a href={`/featured/${l.slug}`}>get featured</a> in {l.city}.</>}
         </p>

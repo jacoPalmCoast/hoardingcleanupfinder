@@ -67,8 +67,8 @@ for (const r of rows) {
   const key = `${state}/${citySlug}`;
   if (!cities.has(key)) cities.set(key, { slug: citySlug, name: city, state, lat: r.latitude, lng: r.longitude, population: r.metro_population ?? null });
   out.push(
-    `INSERT OR IGNORE INTO listings(slug,name,phone,phone_digits,website,address,city,city_slug,state,zip,lat,lng,description,services,rating,review_count,is_verified,status,source,place_id) VALUES (` +
-      [q(slug), q(r.name), q(r.phone), q(pd), q(website), q(r.address), q(city), q(citySlug), q(state), q(r.postal_code || null), r.latitude ?? 'NULL', r.longitude ?? 'NULL', q(describe(r, services)), q(JSON.stringify(services)), r.rating ?? 'NULL', r.reviews ?? 0, (r.verified && website && (r.reviews ?? 0) >= 3) ? 1 : 0, "'active'", "'outscraper'", q(r.place_id)].join(',') +
+    `INSERT OR IGNORE INTO listings(slug,name,phone,phone_digits,website,address,city,city_slug,state,zip,lat,lng,description,services,rating,review_count,is_verified,status,source,place_id,attrs) VALUES (` +
+      [q(slug), q(r.name), q(r.phone), q(pd), q(website), q(r.address), q(city), q(citySlug), q(state), q(r.postal_code || null), r.latitude ?? 'NULL', r.longitude ?? 'NULL', q(describe(r, services)), q(JSON.stringify(services)), r.rating ?? 'NULL', r.reviews ?? 0, (r.verified && website && (r.reviews ?? 0) >= 3) ? 1 : 0, "'active'", "'outscraper'", q(r.place_id), q(JSON.stringify({ hours24: !!r.hours24 }))].join(',') +
       ');',
   );
   kept++;

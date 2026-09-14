@@ -32,6 +32,9 @@ export interface Listing {
   place_id: string | null;
   created_at: number;
   updated_at: number;
+  attrs: string;
+  long_about: string | null;
+  custom_faq: string | null;
 }
 
 export interface City {
@@ -48,8 +51,8 @@ export interface City {
 
 export const MIN_LISTINGS_FOR_PAGE = 3;
 
-// Ordering: featured (and paid-up) first, then verified, then by review count. Invariant 2.
-const ORDER = `ORDER BY (is_featured = 1 AND featured_until > ?1) DESC, is_verified DESC, (services LIKE '%hoarding-cleanup%') DESC, review_count DESC, name ASC`;
+// Ordering: featured (and paid-up) first, then verified, then owner-managed (claimed), then by review count. Invariant 2.
+const ORDER = `ORDER BY (is_featured = 1 AND featured_until > ?1) DESC, is_verified DESC, is_claimed DESC, (services LIKE '%hoarding-cleanup%') DESC, review_count DESC, name ASC`;
 
 export function isLive(l: Pick<Listing, 'is_featured' | 'featured_until'>): boolean {
   return l.is_featured === 1 && (l.featured_until ?? 0) > now();

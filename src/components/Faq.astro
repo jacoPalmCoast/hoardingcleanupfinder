@@ -1,0 +1,17 @@
+---
+// Visible FAQ block. The matching FAQPage schema is emitted by the page via faqSchema()
+// so the JSON-LD and the visible text always come from the same array.
+interface Props { items: { q: string; a: string }[]; heading?: string; id?: string }
+const { items, heading = 'Questions people ask', id = 'faq' } = Astro.props;
+---
+{items.length > 0 && (
+  <section class="faq" id={id} aria-labelledby={`${id}-h`}>
+    <h2 id={`${id}-h`}>{heading}</h2>
+    {items.map((it, i) => (
+      <details class="faq-item" open={i < 2}>
+        <summary><h3>{it.q}</h3></summary>
+        <p class="speakable">{it.a}</p>
+      </details>
+    ))}
+  </section>
+)}

@@ -2,12 +2,25 @@
 import Base from '../../layouts/Base.astro';
 import SearchForm from '../../components/SearchForm.astro';
 import { SERVICE_BY_SLUG } from '../../data/services';
-import { topCities } from '../../lib/db';
+import Faq from '../../components/Faq.astro';
+import { topCities, statesWithCounts } from '../../lib/db';
+import { intentsFor } from '../../data/intents';
+import { faqSchema, webPageSchema, breadcrumbSchema } from '../../lib/seo';
+import { env } from '../../lib/env';
 const svc = SERVICE_BY_SLUG[Astro.params.service ?? ''];
 if (!svc) return new Response(null, { status: 404 });
-const cities = await topCities(40);
+const [cities, states] = await Promise.all([topCities(40), statesWithCounts()]);
+const total = states.reduce((a, s) => a + s.n, 0);
+const faq = intentsFor('service', svc.slug, { state: 'US', stateName: 'the United States', n: total, verified: 0, hours24: 0, stateNote: 'Licensing rules vary by state; see the state page for the property.', service: svc.slug }, 10);
+const url = `${env.SITE_URL}/services/${svc.slug}`;
+const description = `${svc.description} Find ${svc.name.toLowerCase()} companies by city across ${states.length} states.`;
+const jsonld = [
+  webPageSchema(url, `${svc.name} companies near you`, description, { speakable: true }),
+  breadcrumbSchema([{ name: 'Home', url: env.SITE_URL }, { name: svc.name }]),
+  faqSchema(faq),
+];
 ---
-<Base title={`${svc.name} companies near you`} description={`${svc.description} Find ${svc.name.toLowerCase()} companies by city.`}>
+<Base title={`${svc.name} companies near you`} description={description} jsonld={jsonld}>
   <p class="crumbs"><a href="/">Home</a> › {svc.name}</p>
   <h1>{svc.name} companies</h1>
   <p class="lede">{svc.description}</p>
@@ -15,7 +28,8 @@ const cities = await topCities(40);
   {cities.length > 0 && (
     <section>
       <h2>By city</h2>
-      <ul class="list-links four">{cities.map((c) => <li><a href={`/${c.state.toLowerCase()}/${c.slug}`}>{c.name}, {c.state}</a></li>)}</ul>
+      <ul class="list-links four">{cities.map((c) => <li><a href={`/${c.state.toLowerCase()}/${c.slug}/${svc.slug}`}>{c.name}, {c.state}</a></li>)}</ul>
     </section>
   )}
+  <Faq items={faq} heading={`${svc.name}: questions people ask`} />
 </Base>

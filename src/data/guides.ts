@@ -1,12 +1,15 @@
+import { GUIDES_2026_09 } from './guides-2026-09';
+
 export interface Guide {
   slug: string;
   title: string;
   description: string;
   updated: string;
   html: string;
+  faq?: { q: string; a: string }[];
 }
 
-export const GUIDES: Guide[] = [
+const GUIDES_2026_09_13: Guide[] = [
   {
     slug: 'hoarding-cleanup-cost',
     title: 'What hoarding cleanup costs in 2026',
@@ -178,14 +181,16 @@ export const GUIDES: Guide[] = [
     html: `
 <p>Every company on this site is listed free. If your company is here, you can claim the listing to control what it says. If it is not here, you can <a href="/add-listing">add it</a>.</p>
 <h2>Claiming</h2>
-<p>Open your listing page and click "Claim this listing." Enter a business email; we send a code to confirm it. Once confirmed you can edit the description, services, phone, website and service area, and add photos. Claimed listings show an "Owner-managed" badge and rank above unclaimed ones in the same city.</p>
+<p>Open your listing page and click "Claim this listing." Enter a business email; we send a code to confirm it. Once confirmed you can edit the description, services, phone, website, hours, certifications, languages and service area. Claimed listings show an "Owner-managed" badge and rank above unclaimed ones in the same city.</p>
 <h2>Verification</h2>
 <p>We mark a listing verified after we have confirmed the phone number and website and, where a state registration applies to biohazard work, seen it. If your listing is not yet verified, claiming it and sending us a certificate of insurance or registration is the fastest route.</p>
 <h2>Featured placement</h2>
-<p>Featured listings appear at the top of their city page and service pages, are labeled as featured, and receive quote requests from that city first. It costs $49 a month or $399 a year, cancel any time from your account page. Buyers see the label; we do not pretend featured means best. It means you asked to be seen first.</p>
+<p>Featured listings appear at the top of their city page and service pages, are labeled as featured, and receive quote requests from that city first. They also unlock an unlimited service area (your listing appears on every city page you serve), a written About section, three custom questions and answers shown to buyers and search engines, and the buyer-facing flags (free estimates, unmarked vehicles, direct insurance billing, financing). It costs $49 a month or $399 a year, cancel any time from your account page. Buyers see the label; we do not pretend featured means best. It means you asked to be seen first.</p>
 <h2>Corrections and removal</h2>
 <p>If anything on your listing is wrong, use the report link on the page or claim it and fix it yourself. If you do not want to be listed, tell us through the same link and the listing comes down within one business day.</p>`,
   },
 ];
 
+// Company-facing guide goes last so the buyer guides lead the index.
+export const GUIDES: Guide[] = [...GUIDES_2026_09_13.filter((g) => g.slug !== 'claim-your-listing'), ...GUIDES_2026_09, ...GUIDES_2026_09_13.filter((g) => g.slug === 'claim-your-listing')];
 export const GUIDE_BY_SLUG: Record<string, Guide> = Object.assign(Object.create(null), Object.fromEntries(GUIDES.map((g) => [g.slug, g])));

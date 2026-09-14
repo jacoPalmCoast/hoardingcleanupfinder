@@ -23,7 +23,9 @@ Domain: hoardingcleanupfinder.com. National directory of hoarding, biohazard, un
 | `/account` | Owner portal | magic link; edit; billing portal |
 | `/admin` | Owner admin | password (ADMIN_PASSWORD secret), cookie session |
 | `/api/stripe/webhook` | Stripe events | constructEventAsync |
-| `/sitemap.xml`, `/robots.txt` | | generated from D1 |
+| `/sitemap.xml`, `/robots.txt` | | generated from D1; robots allow-lists AI crawlers, disallows private routes |
+| `/llms.txt`, `/llms-full.txt` | LLM-facing site index | generated from D1 |
+| `/indexnow.txt` | IndexNow key file | 404 until INDEXNOW_KEY set |
 
 ## Data model (D1)
 - `listings`(id, slug UNIQUE, name, phone, website, email, address, city, state, zip, lat, lng, description, services TEXT(json), rating, review_count, is_verified, is_claimed, is_featured, featured_until, stripe_customer_id, stripe_subscription_id, status['pending','active','removed'], source, place_id, created_at, updated_at)
@@ -35,6 +37,8 @@ Domain: hoardingcleanupfinder.com. National directory of hoarding, biohazard, un
 - `stripe_events`(id, type) idempotency, written after successful processing; `rate_limits`(key, count, window_start)
 - listings also carry `phone_digits`, `city_slug` (metro grouping), `subscription_status`
 - `reports`(id, listing_id, message, email, status, created_at)
+- listings also carry `attrs` TEXT(json: hours24, discreet, financing, insurance_billing, free_estimate, certifications[], languages[], service_area[], license_no), `long_about`, `custom_faq` TEXT(json [{q,a}] ≤3) (migration 0003)
+- `audit_log`(id, actor_type['admin','owner','system'], actor, listing_id, action, before, after, created_at) — every owner/admin/webhook change
 - `listings_fts` FTS5 (name, city, state, zip, services)
 
 ## Invariants
@@ -48,8 +52,20 @@ Domain: hoardingcleanupfinder.com. National directory of hoarding, biohazard, un
 8. Owner can edit only listings in `owner_listings`.
 9. No "AI" in UI labels; plain, respectful tone; WCAG 2.1 AA.
 10. Never delete listings; `status='removed'`.
+11. Owner tier is decided server-side from `isLive(listing)` at write time (`attrsFromForm`) AND at render time (`publicAttrs`): featured-only content (long_about, custom_faq, discreet/financing/insurance_billing/free_estimate, service_area beyond 3) is never shown while not featured, whatever is stored.
+12. Owner-entered text is rendered only through escaped expressions; never `set:html`. JSON-LD only via `safeJson`.
+13. FAQ text and FAQPage schema come from the same array (`intentsFor` / `listingIntents` / guide `faq`) so visible and structured content never diverge. Answers are templated from real per-page counts and state notes; no LLM-generated per-listing prose.
+
+## SEO / AI-discoverability layer (2026-09-14)
+- Intent FAQ on metro, service-in-metro, service, state, home and guide pages; FAQPage + WebPage(speakable) + BreadcrumbList in one @graph with site-wide Organization + WebSite(SearchAction).
+- Listing pages: attributes as visible facts and LocalBusiness properties (areaServed, knowsAbout, hasOfferCatalog, openingHours, hasCredential, contactPoint.availableLanguage); listing-specific 3-question FAQ; featured owners add up to 3 custom Q&As and a long About.
+- Free claim edits: services, description, 24h, certifications, license no., languages, ≤3 service-area cities. Featured adds: ≤40 cities, About, custom FAQ, buyer flags. Claimed listings rank above unclaimed (after featured, verified).
+- Keyword source: Google autocomplete (data/keyword-research-2026-09-14.md). Outscraper SERP endpoint returned empty; PAA not captured.
+- 25 guides (10 + 15 on 2026-09-14) covering levels, who pays, free help, parent in denial, vs junk removal, timelines, checklists, landlord/tenant, crime scene, biohazard cost, unattended death steps, estate cost/checklist, hoarding after death, DIY.
+- Admin: listing console shows owners (add/transfer/remove), claims, lead count, change log; owner removal clears is_claimed when none remain.
 
 ## Review log
+- 2026-09-14 (SEO layer) independent review: FAIL on H1 (featured-only attrs rendered without isLive gate) + M1 llms-full N+1, M2 guide legal claims, L1–L8. All fixed (publicAttrs render gate, two-query llms-full, caveats, NaN guards, json_each lead count, contactPoint, waitUntil IndexNow). Re-review: PASS. Local verification: tier enforcement (free save capped at 3 cities, flags ignored, featured content preserved), XSS escaped in About, IDOR 403, admin fail-closed, owner add/remove + audit rows.
 - 2026-09-14 independent review: FAIL (B1 JSON-LD XSS, H1 webhook idempotency, H2 out-of-order events, M1–M6, L1–L13). All fixed except L4 (doc updated instead) and L13 (this update). Re-verified live: prototype-key pages 404, uppercase metro 301, open redirect neutralised, admin logout revokes, malformed cookie 302.
 
 ## Phases and acceptance

@@ -7,7 +7,7 @@ National directory of hoarding, biohazard, unattended-death and estate cleanup c
 Connected to GitHub `jacoPalmCoast/hoardingcleanupfinder`, branch `main`.
 
 - Build command: `npm run build`
-- Deploy command: `npm run deploy:ci` (migrations → seed → deploy; seed is idempotent)
+- Deploy command: `npm run deploy:ci` (`wrangler deploy`). Migrations are applied by hand through the dashboard D1 console (`migrations/*.sql`) — Workers Builds cannot reach D1 at deploy time.
 
 Every push to `main` redeploys.
 
@@ -22,6 +22,7 @@ Every push to `main` redeploys.
 | `STRIPE_PRICE_ANNUAL` | same product → second price $399/year → `price_…` |
 | `STRIPE_WEBHOOK_SECRET` | Stripe → Developers → Webhooks → Add endpoint `https://hoardingcleanupfinder.com/api/stripe/webhook`, events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed` → Signing secret `whsec_…` |
 | `RESEND_API_KEY` | resend.com → API keys. Also add and verify the domain `hoardingcleanupfinder.com` under Domains (DNS records go into Cloudflare DNS). Until verified, set `FROM_EMAIL` var to `onboarding@resend.dev` for testing. |
+| `INDEXNOW_KEY` | Any 32-char hex string you generate (e.g. `openssl rand -hex 16`), type Text. Enables Bing IndexNow pings on listing changes; `/indexnow.txt` serves it. Then add the site in Bing Webmaster Tools. |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Cloudflare → Turnstile → Add widget → hostname `hoardingcleanupfinder.com` (add `workers.dev` too for testing) → Managed mode |
 
 Stripe Customer Portal: Stripe → Settings → Billing → Customer portal → enable "Cancel subscriptions" and "Update payment method". Stripe → Settings → Billing → Subscriptions and emails → set "cancel subscription" after failed retries so cancellation reaches the webhook.
@@ -48,7 +49,16 @@ npm run build && npx wrangler dev
 
 ## Admin
 
-`/admin` — counts, pending listings, claims awaiting review, leads, reports, listing editor. Featured state is set only by Stripe webhooks.
+`/admin` — counts, pending listings, claims awaiting review, leads, reports, listing console. Featured state is set only by Stripe webhooks.
+
+Listing console (`/admin/listings?id=N`): owners (add / transfer / remove access), claim history, lead count, every attribute, and the change log. To change a customer's email: add the new address as an owner, then remove the old one. Removing the last owner un-claims the listing.
+
+## SEO and AI discoverability
+
+- `robots.txt` allows GPTBot, ClaudeBot, PerplexityBot, Google-Extended, Bingbot, Applebot, CCBot and others; private routes stay disallowed.
+- `/llms.txt` and `/llms-full.txt` describe the site for language models; `/sitemap.xml` for search engines.
+- Every metro, service, state and guide page carries a FAQ with local counts (`src/data/intents.ts`) and FAQPage/WebPage/Breadcrumb schema; listing pages carry LocalBusiness with areaServed, credentials, hours and a listing-specific FAQ.
+- Submit the sitemap in Google Search Console and Bing Webmaster Tools; set `INDEXNOW_KEY` for instant Bing updates.
 
 ## Structure
 

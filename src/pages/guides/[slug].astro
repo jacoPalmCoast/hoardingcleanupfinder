@@ -3,10 +3,19 @@ import Base from '../../layouts/Base.astro';
 import SearchForm from '../../components/SearchForm.astro';
 import { GUIDE_BY_SLUG, GUIDES } from '../../data/guides';
 import { env } from '../../lib/env';
+import Faq from '../../components/Faq.astro';
+import { faqSchema, webPageSchema, breadcrumbSchema, ORG_ID } from '../../lib/seo';
 const g = GUIDE_BY_SLUG[Astro.params.slug ?? ''];
 if (!g) return new Response(null, { status: 404 });
 const others = GUIDES.filter((x) => x.slug !== g.slug).slice(0, 4);
-const jsonld = { '@context': 'https://schema.org', '@type': 'Article', headline: g.title, description: g.description, dateModified: g.updated, author: { '@type': 'Organization', name: env.SITE_NAME }, publisher: { '@type': 'Organization', name: env.SITE_NAME } };
+const url = `${env.SITE_URL}/guides/${g.slug}`;
+const faq = g.faq ?? [];
+const jsonld = [
+  webPageSchema(url, g.title, g.description, { speakable: true, dateModified: g.updated }),
+  breadcrumbSchema([{ name: 'Home', url: env.SITE_URL }, { name: 'Guides', url: `${env.SITE_URL}/guides` }, { name: g.title }]),
+  { '@type': 'Article', '@id': `${url}#article`, headline: g.title, description: g.description, dateModified: g.updated, datePublished: g.updated, mainEntityOfPage: url, author: { '@id': ORG_ID() }, publisher: { '@id': ORG_ID() } },
+  faqSchema(faq),
+];
 ---
 <Base title={g.title} description={g.description} jsonld={jsonld}>
   <p class="crumbs"><a href="/">Home</a> › <a href="/guides">Guides</a> › {g.title}</p>
@@ -15,6 +24,7 @@ const jsonld = { '@context': 'https://schema.org', '@type': 'Article', headline:
     <p class="small">Updated {g.updated}</p>
     <Fragment set:html={g.html} />
   </article>
+  <Faq items={faq} heading="Quick answers" />
   <section style="max-width:760px">
     <h2>Find a company</h2>
     <SearchForm />

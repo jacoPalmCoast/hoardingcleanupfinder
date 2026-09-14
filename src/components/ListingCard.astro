@@ -3,11 +3,13 @@ import type { Listing } from '../lib/db';
 import { isLive } from '../lib/db';
 import { formatPhone, parseServices, hostOf } from '../lib/util';
 import { SERVICE_BY_SLUG } from '../data/services';
+import { parseAttrs } from '../data/attrs';
 
 interface Props { l: Listing; showCity?: boolean }
 const { l, showCity = true } = Astro.props;
 const featured = isLive(l);
 const services = parseServices(l.services);
+const a = parseAttrs(l.attrs);
 ---
 
 <article class:list={['card', { featured }]}>
@@ -15,6 +17,7 @@ const services = parseServices(l.services);
     {featured && <span class="badge featured">Featured</span>}
     {l.is_verified === 1 && <span class="badge verified">Verified</span>}
     {l.is_claimed === 1 && <span class="badge claimed">Owner-managed</span>}
+    {a.hours24 && <span class="badge">24 hours</span>}
   </div>
   <h3><a href={`/company/${l.slug}`}>{l.name}</a></h3>
   <div class="meta">

@@ -1,9 +1,10 @@
 ---
 import Base from '../../../layouts/Base.astro';
 import { currentOwner, ownerOwns } from '../../../lib/services';
-import { getListingById } from '../../../lib/db';
+import { getListingById, isLive } from '../../../lib/db';
 import { parseServices } from '../../../lib/util';
 import { SERVICES } from '../../../data/services';
+import { CERTIFICATIONS, LANGUAGES, FREE_AREA_LIMIT, FEATURED_AREA_LIMIT, CUSTOM_FAQ_LIMIT, parseAttrs, parseFaq } from '../../../data/attrs';
 const owner = await currentOwner(Astro.request);
 if (!owner) return Astro.redirect('/account', 302);
 const id = Number(Astro.params.id);
@@ -11,14 +12,21 @@ if (!Number.isInteger(id) || !(await ownerOwns(owner.id, id))) return new Respon
 const l = await getListingById(id);
 if (!l) return new Response(null, { status: 404 });
 const services = parseServices(l.services);
+const featured = isLive(l);
+const a = parseAttrs(l.attrs);
+const faq = parseFaq(l.custom_faq);
 const msg = Astro.url.searchParams.get('msg');
+const areaLimit = featured ? FEATURED_AREA_LIMIT : FREE_AREA_LIMIT;
 ---
 <Base title={`Edit ${l.name}`} description="Edit your listing." noindex>
   <p class="crumbs"><a href="/account">Your listings</a> › Edit</p>
   <h1>Edit {l.name}</h1>
-  {msg === 'invalid' && <div class="notice error" role="alert">Something was missing or invalid.</div>}
-  <form action="/api/account/save" method="post" style="max-width:600px">
+  <p class="small">Changes go live immediately and are logged. {featured ? 'Your listing is featured, so every section below is open.' : <>Free listings can edit the basics, certifications, languages and up to {FREE_AREA_LIMIT} extra cities. <a href={`/featured/${l.slug}`}>Featured listings</a> unlock unlimited service area, a written About section, custom questions and the buyer-facing flags.</>}</p>
+  {msg === 'invalid' && <div class="notice error" role="alert">Something was missing or invalid. Name, phone, at least one service and a description are required.</div>}
+  <form action="/api/account/save" method="post" style="max-width:640px">
     <input type="hidden" name="id" value={l.id} />
+
+    <h2>Basics</h2>
     <label for="name">Company name</label>
     <input id="name" name="name" required maxlength="120" value={l.name} />
     <label for="phone">Phone</label>
@@ -34,8 +42,50 @@ const msg = Astro.url.searchParams.get('msg');
       <legend style="font-weight:600;font-size:.92rem">Services</legend>
       {SERVICES.map((s) => <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="services" value={s.slug} checked={services.includes(s.slug)} style="width:auto;margin-right:8px" />{s.name}</label>)}
     </fieldset>
-    <label for="description">Description <span class="small">(up to 600 characters)</span></label>
+    <label for="description">Short description <span class="small">(up to 600 characters, shown at the top of your page and in search results)</span></label>
     <textarea id="description" name="description" required maxlength="600">{l.description ?? ''}</textarea>
+
+    <h2>Details buyers look for</h2>
+    <label style="font-weight:400"><input type="checkbox" name="hours24" checked={a.hours24} style="width:auto;margin-right:8px" />Available 24 hours, 7 days</label>
+    <fieldset style="border:0;padding:0;margin:14px 0 0">
+      <legend style="font-weight:600;font-size:.92rem">Certifications and credentials</legend>
+      {CERTIFICATIONS.map((c) => <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="certifications" value={c.slug} checked={a.certifications.includes(c.slug)} style="width:auto;margin-right:8px" />{c.name}</label>)}
+    </fieldset>
+    <label for="license_no">License or registration number <span class="small">(optional)</span></label>
+    <input id="license_no" name="license_no" maxlength="40" value={a.license_no} />
+    <fieldset style="border:0;padding:0;margin:14px 0 0">
+      <legend style="font-weight:600;font-size:.92rem">Languages spoken</legend>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))">
+        {LANGUAGES.map((lang) => <label style="font-weight:400;margin:4px 0"><input type="checkbox" name="languages" value={lang} checked={a.languages.includes(lang)} style="width:auto;margin-right:8px" />{lang}</label>)}
+      </div>
+    </fieldset>
+    <label for="service_area">Other cities you serve <span class="small">(one per line, up to {areaLimit})</span></label>
+    <textarea id="service_area" name="service_area" maxlength="2000" style="min-height:90px">{a.service_area.slice(0, areaLimit).join('\n')}</textarea>
+    <p class="hint">These appear on your page and in the structured data search engines read. {!featured && a.service_area.length > areaLimit && `You have ${a.service_area.length} cities saved from when you were featured; only the first ${areaLimit} are shown and saved while not featured. `}{!featured && `Featured listings can add up to ${FEATURED_AREA_LIMIT}.`}</p>
+
+    <h2>Featured listing content</h2>
+    {!featured && <p class="notice">These sections are locked while your listing is not featured. Anything you wrote while featured is kept and becomes editable and visible again when you <a href={`/featured/${l.slug}`}>get featured</a>.</p>}
+    <fieldset style="border:0;padding:0;margin:14px 0 0" disabled={!featured}>
+      <legend style="font-weight:600;font-size:.92rem">Good to know</legend>
+      <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="free_estimate" checked={a.free_estimate} style="width:auto;margin-right:8px" />Free on-site estimates</label>
+      <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="discreet" checked={a.discreet} style="width:auto;margin-right:8px" />Unmarked vehicles on request</label>
+      <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="insurance_billing" checked={a.insurance_billing} style="width:auto;margin-right:8px" />We bill homeowner insurance directly</label>
+      <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="financing" checked={a.financing} style="width:auto;margin-right:8px" />Financing or payment plans available</label>
+    </fieldset>
+    <label for="long_about">About your company <span class="small">(up to 2,500 characters, plain text, blank line between paragraphs)</span></label>
+    <textarea id="long_about" name="long_about" maxlength="2500" style="min-height:160px" disabled={!featured}>{l.long_about ?? ''}</textarea>
+    <p class="hint">Write it for a family member in a hard week: how you work, how long you have done this, what happens on day one. No phone numbers or links here; they are already on the page.</p>
+    <fieldset style="border:0;padding:0;margin:14px 0 0" disabled={!featured}>
+      <legend style="font-weight:600;font-size:.92rem">Questions you get asked <span class="small">(up to {CUSTOM_FAQ_LIMIT}; shown on your page and to search engines)</span></legend>
+      {Array.from({ length: CUSTOM_FAQ_LIMIT }).map((_, i) => (
+        <div style="margin:10px 0 16px">
+          <label for={`faq_q${i}`}>Question {i + 1}</label>
+          <input id={`faq_q${i}`} name={`faq_q${i}`} maxlength="160" value={faq[i]?.q ?? ''} placeholder="Do you work with the resident present?" />
+          <label for={`faq_a${i}`}>Answer</label>
+          <textarea id={`faq_a${i}`} name={`faq_a${i}`} maxlength="600" style="min-height:70px">{faq[i]?.a ?? ''}</textarea>
+        </div>
+      ))}
+    </fieldset>
     <button class="btn" type="submit" style="margin-top:12px">Save</button>
   </form>
 </Base>

@@ -1,12 +1,14 @@
 import type { APIRoute } from 'astro';
 import Stripe from 'stripe';
 import { env } from '../../../lib/env';
+import { audit } from '../../../lib/audit';
+import { queueIndexNow } from '../../../lib/indexnow';
 import { stripe, GRACE_SECONDS } from '../../../lib/stripe';
 import { sendEmail, emailShell } from '../../../lib/services';
 import { escapeHtml } from '../../../lib/util';
 
 // Invariant 2: this handler is the only writer of is_featured / featured_until.
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, locals }) => {
   if (!env.STRIPE_WEBHOOK_SECRET || !env.STRIPE_SECRET_KEY) return new Response('not configured', { status: 503 });
   const sig = request.headers.get('stripe-signature');
   if (!sig) return new Response('missing signature', { status: 400 });
@@ -47,6 +49,9 @@ export const POST: APIRoute = async ({ request }) => {
     )
       .bind(listingId, active ? 1 : 0, until || null, sub.id, sub.status)
       .run();
+    await audit('system', 'stripe', listingId, 'featured.sync', null, { is_featured: active ? 1 : 0, featured_until: until || null, subscription_status: sub.status });
+    const row = await env.DB.prepare(`SELECT slug, state, city_slug, services FROM listings WHERE id = ?1`).bind(listingId).first<{ slug: string; state: string; city_slug: string; services: string }>();
+    if (row) queueIndexNow(locals, [`/company/${row.slug}`, `/${row.state.toLowerCase()}/${row.city_slug}`]);
   };
 
   switch (event.type) {

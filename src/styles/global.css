@@ -124,3 +124,13 @@ th { background: var(--grey-1); font-weight: 600; }
 .prose li { margin-bottom: .35em; }
 .small:not(.btn) { font-size: .88rem; color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.faq { margin-top: 36px; max-width: 760px; }
+.faq-item { border-top: 1px solid var(--grey-2); padding: 4px 0; }
+.faq-item:last-child { border-bottom: 1px solid var(--grey-2); }
+.faq-item summary { cursor: pointer; padding: 10px 0; list-style: none; display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after { content: '+'; color: var(--teal); font-weight: 600; flex: none; }
+.faq-item[open] summary::after { content: '–'; }
+.faq-item summary h3 { margin: 0; font-size: 1.02rem; font-weight: 600; }
+.faq-item p { margin: 0 0 12px; }

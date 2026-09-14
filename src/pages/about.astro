@@ -1,10 +1,16 @@
 ---
 import Base from '../layouts/Base.astro';
+import { statesWithCounts, allCityPages } from '../lib/db';
+const [states, cities] = await Promise.all([statesWithCounts(), allCityPages()]);
+const total = states.reduce((a, s) => a + s.n, 0);
+const updated = new Date().toISOString().slice(0, 10);
 ---
 <Base title="About this directory and our listing policy" description="How Hoarding Cleanup Finder compiles listings, what featured means, and how to correct or remove a listing.">
   <article class="prose">
     <h1>About this directory</h1>
     <p>Hoarding Cleanup Finder is an independent directory of companies that do hoarding cleanup, biohazard and trauma cleanup, unattended death remediation and estate cleanouts in the United States. It exists because the people who need these services are usually dealing with a crisis and have no good way to find a vetted, local company.</p>
+    <h2>Coverage</h2>
+    <p class="speakable">As of {updated}, Hoarding Cleanup Finder lists {total.toLocaleString()} cleanup companies across {states.length} states and {cities.length} metro areas. Listings are re-checked against public business records on a rolling basis and companies can update their own details after claiming.</p>
     <h2>Where listings come from</h2>
     <p>We compile listings from public business records and the companies' own websites. Before a listing goes live we check that the phone number and website are real. We write our own short descriptions and never copy text or photos from anywhere else. Listings are free and stay free.</p>
     <h2>What "verified", "owner-managed" and "featured" mean</h2>

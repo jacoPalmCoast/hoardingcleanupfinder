@@ -5,7 +5,12 @@ import SearchForm from '../../components/SearchForm.astro';
 import QuoteForm from '../../components/QuoteForm.astro';
 import { citiesForState, listingsForState } from '../../lib/db';
 import { STATES, isState } from '../../data/states';
+import Faq from '../../components/Faq.astro';
 import { STATE_NOTES } from '../../data/stateNotes';
+import { intentsFor } from '../../data/intents';
+import { parseAttrs } from '../../data/attrs';
+import { faqSchema, webPageSchema, breadcrumbSchema } from '../../lib/seo';
+import { env } from '../../lib/env';
 
 const st = (Astro.params.st ?? '').toUpperCase();
 if (!isState(st)) return new Response(null, { status: 404 });
@@ -14,8 +19,18 @@ const name = STATES[st];
 const [cities, listings] = await Promise.all([citiesForState(st), listingsForState(st, 60)]);
 if (listings.length === 0) return new Response(null, { status: 404 });
 const note = STATE_NOTES[st];
+const verified = listings.filter((l) => l.is_verified === 1).length;
+const hours24 = listings.filter((l) => parseAttrs(l.attrs).hours24).length;
+const faq = intentsFor('state', undefined, { state: st, stateName: name, n: listings.length, verified, hours24, stateNote: note });
+const url = `${env.SITE_URL}/state/${st.toLowerCase()}`;
+const description = `${listings.length}+ hoarding cleanup, biohazard cleanup and estate cleanout companies in ${name} across ${cities.length} metro areas. Free listings, direct phone numbers, quote requests.`;
+const jsonld = [
+  webPageSchema(url, `Hoarding and biohazard cleanup companies in ${name}`, description, { speakable: true }),
+  breadcrumbSchema([{ name: 'Home', url: env.SITE_URL }, { name: 'States', url: `${env.SITE_URL}/state` }, { name }]),
+  faqSchema(faq),
+];
 ---
-<Base title={`Hoarding and biohazard cleanup companies in ${name}`} description={`${listings.length}+ hoarding cleanup, biohazard cleanup and estate cleanout companies in ${name}. Free listings, direct phone numbers, quote requests.`}>
+<Base title={`Hoarding and biohazard cleanup companies in ${name}`} description={description} jsonld={jsonld}>
   <p class="crumbs"><a href="/">Home</a> › <a href="/state">States</a> › {name}</p>
   <h1>Hoarding and biohazard cleanup companies in {name}</h1>
   <SearchForm compact />
@@ -32,6 +47,7 @@ const note = STATE_NOTES[st];
     <section>
       <h2>Companies serving {name}</h2>
       <div class="grid">{listings.map((l) => <ListingCard l={l} />)}</div>
+      <Faq items={faq} heading={`Cleanup in ${name}: what to know`} />
     </section>
     <aside><QuoteForm state={st} heading={`Get quotes in ${name}`} /></aside>
   </div>

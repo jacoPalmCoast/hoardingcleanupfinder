@@ -3,6 +3,7 @@ import '../styles/global.css';
 import { env } from '../lib/env';
 import { SERVICES } from '../data/services';
 import { safeJson } from '../lib/util';
+import { orgSchema, websiteSchema } from '../lib/seo';
 
 interface Props {
   title: string;
@@ -14,6 +15,13 @@ interface Props {
 const { title, description, canonical, noindex = false, jsonld } = Astro.props;
 const url = canonical ?? new URL(Astro.url.pathname, env.SITE_URL).toString();
 const fullTitle = title.includes(env.SITE_NAME) ? title : `${title} | ${env.SITE_NAME}`;
+// One @graph per page: site-wide Organization + WebSite, then whatever the page adds
+// (a single node or an array of nodes).
+const graph = [orgSchema(), websiteSchema(), ...(Array.isArray(jsonld) ? jsonld : jsonld ? [jsonld] : [])].filter(Boolean).map((n: any) => {
+  if (n && typeof n === 'object' && '@context' in n) { const { ['@context']: _c, ...rest } = n; return rest; }
+  return n;
+});
+const ld = { '@context': 'https://schema.org', '@graph': graph };
 ---
 
 <!doctype html>
@@ -31,7 +39,7 @@ const fullTitle = title.includes(env.SITE_NAME) ? title : `${title} | ${env.SITE
     <meta property="og:site_name" content={env.SITE_NAME} />
     <meta name="theme-color" content="#1f6f78" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    {jsonld && <script type="application/ld+json" set:html={safeJson(jsonld)} />}
+    <script type="application/ld+json" set:html={safeJson(ld)} />
     <slot name="head" />
   </head>
   <body>
