@@ -11,9 +11,11 @@ interface Props {
   canonical?: string;
   noindex?: boolean;
   jsonld?: unknown;
+  ogImage?: string;
 }
-const { title, description, canonical, noindex = false, jsonld } = Astro.props;
+const { title, description, canonical, noindex = false, jsonld, ogImage } = Astro.props;
 const url = canonical ?? new URL(Astro.url.pathname, env.SITE_URL).toString();
+const ogImageUrl = new URL(ogImage ?? '/og-default.png', env.SITE_URL).toString();
 const fullTitle = title.includes(env.SITE_NAME) ? title : `${title} | ${env.SITE_NAME}`;
 // One @graph per page: site-wide Organization + WebSite, then whatever the page adds
 // (a single node or an array of nodes).
@@ -39,12 +41,23 @@ const ld = { '@context': 'https://schema.org', '@graph': graph };
       href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap"
     />
     {noindex && <meta name="robots" content="noindex,nofollow" />}
+    <meta property="og:type" content="website" />
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={url} />
     <meta property="og:site_name" content={env.SITE_NAME} />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={fullTitle} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageUrl} />
     <meta name="theme-color" content="#0f6d6a" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <script type="application/ld+json" set:html={safeJson(ld)} />
     <slot name="head" />
   </head>
