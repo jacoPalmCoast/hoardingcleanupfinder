@@ -46,7 +46,7 @@ const email = Astro.url.searchParams.get('email') ?? '';
   ) : (
     <>
       <h1>Your listings</h1>
-      <p class="small">Signed in as {owner.email}. <form class="inline" action="/api/account/logout" method="post"><button type="submit" class="linkbtn">Sign out</button></form></p>
+      <div class="small">Signed in as {owner.email}. <form class="inline" action="/api/account/logout" method="post"><button type="submit" class="linkbtn">Sign out</button></form></div>
       {msg === 'claimed' && <div class="notice" role="status">Listing claimed. You can edit it below.</div>}
       {msg === 'claim-review' && <div class="notice" role="status">Code confirmed. Because the email is not on the company's website domain, a person will review the claim within one business day and email you.</div>}
       {msg === 'saved' && <div class="notice" role="status">Saved.</div>}
