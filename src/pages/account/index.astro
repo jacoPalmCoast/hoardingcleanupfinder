@@ -46,7 +46,7 @@ const email = Astro.url.searchParams.get('email') ?? '';
   ) : (
     <>
       <h1>Your listings</h1>
-      <p class="small">Signed in as {owner.email}. <a href="/api/account/logout">Sign out</a></p>
+      <p class="small">Signed in as {owner.email}. <form class="inline" action="/api/account/logout" method="post"><button type="submit" class="linkbtn">Sign out</button></form></p>
       {msg === 'claimed' && <div class="notice" role="status">Listing claimed. You can edit it below.</div>}
       {msg === 'claim-review' && <div class="notice" role="status">Code confirmed. Because the email is not on the company's website domain, a person will review the claim within one business day and email you.</div>}
       {msg === 'saved' && <div class="notice" role="status">Saved.</div>}
@@ -68,7 +68,7 @@ const email = Astro.url.searchParams.get('email') ?? '';
             )}
             <div class="actions">
               <a class="btn small" href={`/account/edit/${l.id}`}>Edit listing</a>
-              {isLive(l) || l.stripe_customer_id ? <a class="btn small secondary" href="/api/stripe/portal">Manage billing</a> : <a class="btn small secondary" href={`/featured/${l.slug}`}>Get featured</a>}
+              {isLive(l) || l.stripe_customer_id ? <form action="/api/stripe/portal" method="post" style="display:inline"><button type="submit" class="btn small secondary">Manage billing</button></form> : <a class="btn small secondary" href={`/featured/${l.slug}`}>Get featured</a>}
             </div>
           </div>
         ))}

@@ -155,12 +155,23 @@ export async function searchListings(q: string, service?: string, limit = 50): P
     .map((w) => `"${w}"*`)
     .join(' ');
   const svc = service ? ` AND l.services LIKE '%"${service.replace(/[^a-z-]/g, '')}"%'` : '';
+  // Location relevance first: a company in the searched city/state must always rank above one that only
+  // matched on name or services text (e.g. a Denver firm named "Phoenix Restoration" must not outrank
+  // actual Phoenix companies in a "Phoenix" search). Featured placement then applies *within* the
+  // correct location, not across it. For free-text queries no row matches location and ranking falls
+  // through to featured + bm25 exactly as before. ?4 = query lowercased ("phoenix", "phoenix az"),
+  // ?5 = query uppercased for a bare state code ("FL"). City+state stored as "City" / "AZ".
+  const qLower = cleaned.toLowerCase();
+  const qUpper = cleaned.toUpperCase();
   const r = await env.DB.prepare(
     `SELECT l.* FROM listings_fts f JOIN listings l ON l.id = f.rowid
      WHERE listings_fts MATCH ?2 AND l.status = 'active'${svc}
-     ORDER BY (l.is_featured = 1 AND l.featured_until > ?1) DESC, l.is_verified DESC, bm25(listings_fts), l.review_count DESC LIMIT ?3`,
+     ORDER BY
+       (lower(l.city) = ?4 OR lower(l.city) || ' ' || lower(l.state) = ?4 OR l.state = ?5) DESC,
+       (l.is_featured = 1 AND l.featured_until > ?1) DESC,
+       l.is_verified DESC, bm25(listings_fts), l.review_count DESC LIMIT ?3`,
   )
-    .bind(t, match, limit)
+    .bind(t, match, limit, qLower, qUpper)
     .all<Listing>();
   return r.results;
 }

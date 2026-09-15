@@ -125,6 +125,10 @@ label { display: block; font-weight: 600; font-size: .92rem; color: var(--ink); 
 .btn.small { padding: 8px 14px; font-size: .9rem; }
 .btn.danger { background: #fff; border-color: #b23b3b; color: #b23b3b; }
 .btn.danger:hover { background: #fdeaea; color: #8f2f2f; }
+/* a submit button that reads as a text link — used for POST-based sign-out so it can't be triggered by a cross-site GET */
+.linkbtn { display: inline; border: 0; background: none; padding: 0; margin: 0; font: inherit; color: var(--teal); text-decoration: underline; cursor: pointer; }
+.linkbtn:hover { color: var(--teal-dark); }
+form.inline { display: inline; }
 
 /* ---------- cards & grid ---------- */
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 268px), 1fr)); }

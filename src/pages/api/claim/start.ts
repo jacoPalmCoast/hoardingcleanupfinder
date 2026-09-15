@@ -11,7 +11,7 @@ export const POST: APIRoute = async ({ request }) => {
   if (!l || l.status !== 'active') return redirect('/');
   const email = clean(form.get('email'), 254).toLowerCase();
   if (!isEmail(email)) return redirect(`/claim/${l.slug}?msg=invalid`);
-  if (!(await rateLimit(`claim:${ip}`, 5, 3600)) || !(await rateLimit(`claim:${l.id}`, 5, 3600))) return redirect(`/claim/${l.slug}?msg=invalid`);
+  if (!(await rateLimit(`claim:${ip}`, 5, 3600)) || !(await rateLimit(`claim:${l.id}`, 5, 3600)) || !(await rateLimit(`claim:${email}`, 5, 3600))) return redirect(`/claim/${l.slug}?msg=invalid`);
   if (!(await verifyTurnstile(clean(form.get('cf-turnstile-response'), 5000), ip))) return redirect(`/claim/${l.slug}?msg=captcha`);
   if (l.is_claimed === 1) return redirect(`/claim/${l.slug}`);
 

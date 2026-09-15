@@ -107,7 +107,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       const listingId = await listingIdFrom(String(inv.customer));
       const l = listingId ? await env.DB.prepare(`SELECT name, slug FROM listings WHERE id = ?1`).bind(listingId).first<{ name: string; slug: string }>() : null;
       if (email) {
-        await sendEmail(email, `Payment failed for ${l?.name ?? 'your featured listing'}`, emailShell('Payment failed', `<p>We could not charge the card on file for the featured listing${l ? ` <a href="${env.SITE_URL}/company/${l.slug}">${escapeHtml(l.name)}</a>` : ''}. Stripe will retry over the next few days. To update the card, <a href="${env.SITE_URL}/api/stripe/portal">open billing</a>. If the retries fail the listing goes back to free; nothing is deleted.</p>`));
+        await sendEmail(email, `Payment failed for ${l?.name ?? 'your featured listing'}`, emailShell('Payment failed', `<p>We could not charge the card on file for the featured listing${l ? ` <a href="${env.SITE_URL}/company/${l.slug}">${escapeHtml(l.name)}</a>` : ''}. Stripe will retry over the next few days. To update the card, <a href="${env.SITE_URL}/account">open your account</a> and click Manage billing. If the retries fail the listing goes back to free; nothing is deleted.</p>`));
       }
       break;
     }

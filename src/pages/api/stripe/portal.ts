@@ -4,7 +4,9 @@ import { redirect, returnOrigin } from '../../../lib/util';
 import { currentOwner } from '../../../lib/services';
 import { stripe, stripeConfigured } from '../../../lib/stripe';
 
-export const GET: APIRoute = async ({ request }) => {
+// POST-only: creating a billing-portal session is a state-changing action tied to the owner's cookie;
+// a GET could be triggered cross-site. The same-origin form + middleware Origin guard gate it.
+export const POST: APIRoute = async ({ request }) => {
   const owner = await currentOwner(request);
   if (!owner) return redirect('/account', 302);
   if (!stripeConfigured()) return redirect('/account');
