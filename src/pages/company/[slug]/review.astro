@@ -5,9 +5,12 @@ import { env } from '../../../lib/env';
 const l = await getListingBySlug(Astro.params.slug ?? '');
 if (!l || l.status !== 'active') return new Response(null, { status: 404 });
 const siteKey = env.TURNSTILE_SITE_KEY ?? '';
+const msg = Astro.url.searchParams.get('msg');
 ---
 <Base title={`Review ${l.name}`} description={`Leave a review for ${l.name} in ${l.city}, ${l.state}.`} noindex>
   <h1>Review {l.name}</h1>
+  {msg === 'invalid' && <div class="notice error" role="alert">Please add a rating, a review of at least 20 characters, your name and a valid email, then submit again.</div>}
+  {msg === 'captcha' && <div class="notice error" role="alert">The spam check didn't pass. Reload the page and try again.</div>}
   <p class="lede">{l.city}, {l.state}. Reviews are read by a person before they go live, usually within one business day. Please describe your own experience — reviews that name no specifics, or that read as spam, are not published.</p>
   <form action="/api/review" method="post" style="max-width:560px">
     <input type="hidden" name="listing_id" value={l.id} />
