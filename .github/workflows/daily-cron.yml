@@ -1,0 +1,16 @@
+name: Daily cron
+
+on:
+  schedule:
+    - cron: '0 13 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger daily jobs
+        run: |
+          curl -fsS -X POST "https://hoardingcleanupfinder.com/api/cron/run" \
+            -H "authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -w $'\nHTTP %{http_code}\n'
