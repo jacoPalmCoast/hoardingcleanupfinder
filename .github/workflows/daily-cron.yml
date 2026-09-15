@@ -10,7 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger daily jobs
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
+          TOKEN="$(printf '%s' "$CRON_SECRET" | tr -d '[:space:]')"
           curl -fsS -X POST "https://hoardingcleanupfinder.com/api/cron/run" \
-            -H "authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "authorization: Bearer $TOKEN" \
             -w $'\nHTTP %{http_code}\n'
