@@ -14,8 +14,6 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           TOKEN="$(printf '%s' "$CRON_SECRET" | tr -d '[:space:]')"
-          echo "token_len=${#TOKEN}"
-          printf '%s' "$TOKEN" | sha256sum | cut -c1-16
-          curl -fsS -X POST "https://hoardingcleanupfinder.com/api/cron/run" \
+          curl -fsS -X POST "https://hoardingcleanupfinder.jaco12210marbrook.workers.dev/api/cron/run" \
             -H "authorization: Bearer $TOKEN" \
             -w $'\nHTTP %{http_code}\n'
