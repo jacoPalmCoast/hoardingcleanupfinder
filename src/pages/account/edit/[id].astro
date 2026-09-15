@@ -4,7 +4,7 @@ import { currentOwner, ownerOwns } from '../../../lib/services';
 import { getListingById, isLive } from '../../../lib/db';
 import { parseServices } from '../../../lib/util';
 import { SERVICES } from '../../../data/services';
-import { CERTIFICATIONS, LANGUAGES, FREE_AREA_LIMIT, FEATURED_AREA_LIMIT, CUSTOM_FAQ_LIMIT, parseAttrs, parseFaq } from '../../../data/attrs';
+import { CERTIFICATIONS, LANGUAGES, FREE_AREA_LIMIT, FEATURED_AREA_LIMIT, CUSTOM_FAQ_LIMIT, SOCIAL_PLATFORMS, parseAttrs, parseFaq } from '../../../data/attrs';
 const owner = await currentOwner(Astro.request);
 if (!owner) return Astro.redirect('/account', 302);
 const id = Number(Astro.params.id);
@@ -85,6 +85,16 @@ const areaLimit = featured ? FEATURED_AREA_LIMIT : FREE_AREA_LIMIT;
           <textarea id={`faq_a${i}`} name={`faq_a${i}`} maxlength="600" style="min-height:70px">{faq[i]?.a ?? ''}</textarea>
         </div>
       ))}
+    </fieldset>
+    <fieldset style="border:0;padding:0;margin:18px 0 0" disabled={!featured}>
+      <legend style="font-weight:600;font-size:.92rem">Social links <span class="small">(shown as icons on your featured listing)</span></legend>
+      {SOCIAL_PLATFORMS.map((p) => (
+        <div style="margin:8px 0">
+          <label for={`social_${p.key}`}>{p.name}</label>
+          <input id={`social_${p.key}`} name={`social_${p.key}`} type="url" maxlength="200" value={a.socials[p.key] ?? ''} placeholder={p.placeholder} />
+        </div>
+      ))}
+      <p class="hint">Paste the full link. Each must be on that platform's own site (e.g. a Facebook link on facebook.com), or it won't be saved.</p>
     </fieldset>
     <button class="btn" type="submit" style="margin-top:12px">Save</button>
   </form>

@@ -3,44 +3,196 @@ import Base from '../../layouts/Base.astro';
 import { getListingBySlug, isLive } from '../../lib/db';
 import { currentOwner, ownerOwns } from '../../lib/services';
 import { stripeConfigured } from '../../lib/stripe';
+import { parseServices } from '../../lib/util';
+import { SERVICE_BY_SLUG } from '../../data/services';
 import { env } from '../../lib/env';
+
 const l = await getListingBySlug(Astro.params.slug ?? '');
 if (!l || l.status !== 'active') return new Response(null, { status: 404 });
 const owner = await currentOwner(Astro.request);
 const owns = owner ? await ownerOwns(owner.id, l.id) : false;
 const featured = isLive(l);
 const msg = Astro.url.searchParams.get('msg');
+
+const services = parseServices(l.services);
+const serviceNames = services.map((s) => SERVICE_BY_SLUG[s]?.name).filter(Boolean) as string[];
+const monthly = env.FEATURED_MONTHLY_USD;
+const annual = env.FEATURED_ANNUAL_USD;
+const annualSave = Number(monthly) * 12 - Number(annual);
+const hasRating = !!(l.review_count > 0 && l.rating);
+const canBuy = owns && !featured && stripeConfigured();
 ---
 <Base title={`Get ${l.name} featured in ${l.city}`} description={`Featured placement for ${l.name} at the top of the ${l.city}, ${l.state} page.`} noindex>
-  <h1>Get featured in {l.city}</h1>
-  <p class="lede"><strong>{l.name}</strong> is listed free and stays free. Featured placement puts it at the top of the {l.city}, {l.state} page and every service page for {l.city}, adds a Featured label, and routes quote requests from {l.city} to you first.</p>
-  {msg === 'cancelled' && <div class="notice warn">Checkout was cancelled. Nothing was charged.</div>}
-  {msg === 'unavailable' && <div class="notice error" role="alert">Payments are not switched on yet. Email hello@hoardingcleanupfinder.com and we will set it up by hand.</div>}
-  <div class="grid" style="max-width:720px">
-    <div class="card">
-      <h3 style="margin-top:0">Monthly</h3>
-      <p><b style="font-size:1.6rem">${env.FEATURED_MONTHLY_USD}</b> / month</p>
-      <p class="small">Cancel any time from your account page. No contract.</p>
-      {owns && !featured && stripeConfigured() && <form action="/api/stripe/checkout" method="post"><input type="hidden" name="listing_id" value={l.id} /><input type="hidden" name="plan" value="monthly" /><button class="btn">Start monthly</button></form>}
+  <p class="crumbs"><a href="/account">Your listings</a> › {l.name} › <span class="muted">Get featured</span></p>
+  <span class="eyebrow">Featured listing</span>
+  <h1>Put {l.name} at the top in <span class="accent">{l.city}</span>.</h1>
+  <p class="lede">Families searching for {serviceNames.slice(0, 2).join(' and ').toLowerCase() || 'cleanup'} in {l.city} see featured companies first — with your full story, service area and links, before they ever pick up the phone.</p>
+
+  {msg === 'cancelled' && <div class="notice warn" style="margin-top:16px">Checkout was cancelled. Nothing was charged.</div>}
+  {msg === 'unavailable' && <div class="notice error" role="alert" style="margin-top:16px">Payments are not switched on yet. Email hello@hoardingcleanupfinder.com and we will set it up by hand.</div>}
+  {featured && <div class="notice" style="margin-top:16px">This listing is already featured. <a href="/account">Manage billing</a>.</div>}
+
+  <!-- before / after -->
+  <section class="fu-sec">
+    <span class="eyebrow">How you appear in a {l.city} search</span>
+    <h2>Free gets you listed. <span class="accent">Featured gets you found.</span></h2>
+    <div class="compare">
+      <div class="lane">
+        <div class="rank"><span class="pos">1</span> <b>Top of the results</b></div>
+        <div class="lcard feat">
+          <div class="ltop">
+            <div>
+              <h3>{l.name}</h3>
+              <div class="lmeta">Serving {l.city}, {l.state} and nearby</div>
+              {hasRating && <div class="lmeta"><span class="star">★ {l.rating!.toFixed(1)}</span> · {l.review_count} Google reviews</div>}
+            </div>
+            <span class="fbadge">★ Featured</span>
+          </div>
+          {serviceNames.length > 0 && <div class="chips">{serviceNames.map((n) => <span class="chip">{n}</span>)}</div>}
+          <p class="lnote">Your About section, custom FAQ and social links show here, above every other company in {l.city}.</p>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="rank"><span class="pos dim">↓</span> Below every featured company</div>
+        <div class="lcard">
+          <div class="ltop">
+            <div>
+              <h3>{l.name}</h3>
+              <div class="lmeta">{l.city}, {l.state}</div>
+            </div>
+            <span class="fbadge free">Free</span>
+          </div>
+          {serviceNames.length > 0 && <div class="chips">{serviceNames.slice(0, 2).map((n) => <span class="chip">{n}</span>)}</div>}
+          <p class="lnote muted">Listed and searchable — but shown after paid placements, with no story, links or top billing.</p>
+        </div>
+      </div>
     </div>
-    <div class="card featured">
-      <h3 style="margin-top:0">Annual</h3>
-      <p><b style="font-size:1.6rem">${env.FEATURED_ANNUAL_USD}</b> / year <span class="small">(two months free)</span></p>
-      <p class="small">One invoice, one line on your books.</p>
-      {owns && !featured && stripeConfigured() && <form action="/api/stripe/checkout" method="post"><input type="hidden" name="listing_id" value={l.id} /><input type="hidden" name="plan" value="annual" /><button class="btn">Start annual</button></form>}
+  </section>
+
+  <!-- benefits -->
+  <section class="fu-sec">
+    <span class="eyebrow">What featured includes</span>
+    <h2>Everything a family needs to choose you.</h2>
+    <div class="benefits">
+      <div class="benefit"><h3>Top of every {l.city} search</h3><p>Appear above other companies on the {l.city} page and its service pages.</p></div>
+      <div class="benefit"><h3>The Featured badge</h3><p>A teal mark that tells families you're an established, verified company.</p></div>
+      <div class="benefit"><h3>Your whole service area</h3><p>List up to 40 cities you serve, not just three — show up wherever you work.</p></div>
+      <div class="benefit"><h3>Your full story</h3><p>A complete About section and your own answers to the questions families ask.</p></div>
+      <div class="benefit"><h3>Your Google rating, shown</h3><p>Your star rating and review count, linked to your Google profile, right on your listing.</p></div>
+      <div class="benefit"><h3>Website &amp; social links</h3><p>Add your Facebook, Instagram, Google, Yelp and more as one-tap icons.</p></div>
+      <div class="benefit"><h3>First in line for leads</h3><p>Quote requests from {l.city} go to featured companies first.</p></div>
+      <div class="benefit soon"><h3>Photos &amp; customer reviews <span class="soontag">coming soon</span></h3><p>Company photos and on-site reviews are on the way for featured listings.</p></div>
     </div>
-  </div>
-  {featured && <div class="notice" style="margin-top:20px">This listing is already featured. <a href="/account">Manage billing</a>.</div>}
-  {!owner && <div class="notice" style="margin-top:20px">To buy featured placement, first <a href={`/claim/${l.slug}`}>claim this listing</a> (free, takes a minute) or <a href="/account">sign in</a>.</div>}
-  {owner && !owns && <div class="notice warn" style="margin-top:20px">Your account does not manage this listing. <a href={`/claim/${l.slug}`}>Claim it</a> first.</div>}
-  {owns && !featured && !stripeConfigured() && <div class="notice warn" style="margin-top:20px">Payments are not switched on yet. Email hello@hoardingcleanupfinder.com and we will set it up by hand.</div>}
-  <section class="prose" style="margin-top:32px">
-    <h2>What featured includes</h2>
-    <ul>
-      <li>Top position on the {l.city} page and its service pages, above verified and free listings.</li>
-      <li>A "Featured" label. Buyers know it is paid placement; we do not call it a ranking.</li>
-      <li>Quote requests sent from {l.city} pages go to featured companies first.</li>
-    </ul>
-    <p>Only one thing is not included: a guarantee of jobs. If it does not pay for itself, cancel.</p>
+  </section>
+
+  <!-- pricing -->
+  <section class="fu-sec">
+    <span class="eyebrow">Simple pricing</span>
+    <h2>Featured in {l.city}.</h2>
+    <div class="toggle" role="group" aria-label="Billing period">
+      <button type="button" id="mBtn" aria-pressed="true" onclick="setPlan('monthly')">Monthly</button>
+      <button type="button" id="yBtn" aria-pressed="false" onclick="setPlan('annual')">Yearly<span class="save">save ${annualSave}</span></button>
+    </div>
+    <div class="pricecard">
+      <div class="price"><span class="amt" id="amt">${monthly}</span><span class="per" id="per">/ month</span></div>
+      <p class="pnote" id="pnote">Billed monthly. Cancel anytime.</p>
+      <ul class="checklist">
+        <li>Top placement in every {l.city} search</li>
+        <li>Full profile, service area, Google rating and social links</li>
+        <li>First pick of quote requests in {l.city}</li>
+      </ul>
+      {canBuy && (
+        <form action="/api/stripe/checkout" method="post">
+          <input type="hidden" name="listing_id" value={l.id} />
+          <input type="hidden" name="plan" id="plan" value="monthly" />
+          <button class="btn block" type="submit">Get featured</button>
+        </form>
+      )}
+      {!owner && <a class="btn block" href={`/claim/${l.slug}`}>Claim this listing first</a>}
+      {owner && !owns && <a class="btn block" href={`/claim/${l.slug}`}>Claim this listing first</a>}
+      {featured && <a class="btn block secondary" href="/account">Manage billing</a>}
+      {owns && !featured && !stripeConfigured() && <p class="notice warn" style="margin:0">Payments are not switched on yet. Email hello@hoardingcleanupfinder.com and we'll set it up by hand.</p>}
+      <div class="trust">
+        <span>✓ Cancel anytime</span><span>✓ Stays featured through your paid period</span><span>✓ Secure checkout by Stripe</span>
+      </div>
+    </div>
+    {!owner && <p class="small" style="margin-top:14px">To buy featured placement, first <a href={`/claim/${l.slug}`}>claim this listing</a> (free, takes a minute) or <a href="/account">sign in</a>.</p>}
+  </section>
+
+  <!-- faq -->
+  <section class="fu-sec">
+    <span class="eyebrow">Questions</span>
+    <h2>Before you upgrade.</h2>
+    <div style="max-width:70ch">
+      <details class="faq" open><summary>How soon does it show as featured?</summary><p>Within a few minutes of checkout. Your badge and top placement go live automatically.</p></details>
+      <details class="faq"><summary>Can I cancel?</summary><p>Anytime, from your account. Your listing stays featured through the period you paid for, then goes back to a normal free listing. Nothing is deleted. See our <a href="/refunds">cancellation &amp; refund policy</a>.</p></details>
+      <details class="faq"><summary>What if I don't get leads?</summary><p>Your free listing stays free forever, so there's no risk in trying featured for a month.</p></details>
+      <details class="faq"><summary>Do you take a cut of my jobs?</summary><p>No. One flat price, no commissions and no per-lead fees.</p></details>
+    </div>
   </section>
 </Base>
+
+<style>
+  .muted { color: var(--muted); }
+  .fu-sec { padding-block: clamp(28px, 5vw, 46px); border-top: 1px solid var(--line); margin-top: 8px; }
+  .fu-sec .eyebrow { margin-bottom: 6px; }
+  .compare { display: grid; gap: 16px; grid-template-columns: 1fr; margin-top: 20px; }
+  @media (min-width: 760px) { .compare { grid-template-columns: 1fr 1fr; align-items: start; } }
+  .rank { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: .82rem; color: var(--muted); }
+  .rank b { color: var(--ink); }
+  .pos { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: var(--teal); color: #fff; font-size: .72rem; font-weight: 700; }
+  .pos.dim { background: var(--grey-2); color: var(--muted); }
+  .lcard { border: 1px solid var(--line); border-radius: var(--radius-lg); background: #fff; padding: 16px; }
+  .lcard.feat { border-color: var(--teal); box-shadow: 0 1px 0 var(--teal), 0 6px 22px rgba(15,109,106,.10); }
+  .ltop { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .lcard h3 { margin: 0; font-size: 1.08rem; color: var(--ink); letter-spacing: -.01em; }
+  .lmeta { color: var(--muted); font-size: .9rem; margin: 3px 0 0; }
+  .star { color: var(--teal); font-weight: 600; }
+  .fbadge { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 600; letter-spacing: .02em; padding: 4px 10px; border-radius: 999px; background: var(--teal-soft); color: var(--teal); text-transform: uppercase; white-space: nowrap; }
+  .fbadge.free { background: var(--grey-1); color: var(--muted); border: 1px solid var(--line); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; }
+  .chip { font-size: .76rem; color: var(--text); background: var(--grey-1); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+  .lnote { font-size: .9rem; margin: 12px 0 0; }
+  .benefits { display: grid; gap: 2px; grid-template-columns: 1fr; margin-top: 20px; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; background: var(--line); }
+  @media (min-width: 620px) { .benefits { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 920px) { .benefits { grid-template-columns: 1fr 1fr 1fr; } }
+  .benefit { background: #fff; padding: 18px; }
+  .benefit h3 { margin: 0 0 6px; font-size: 1rem; color: var(--ink); }
+  .benefit p { margin: 0; font-size: .9rem; color: var(--muted); }
+  .benefit.soon { background: var(--grey-1); }
+  .soontag { font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--warn); margin-left: 6px; }
+  .toggle { display: inline-flex; border: 1px solid var(--grey-3); border-radius: 999px; padding: 3px; background: #fff; margin: 8px 0 20px; }
+  .toggle button { border: 0; background: transparent; font: inherit; font-weight: 600; font-size: .9rem; color: var(--muted); padding: 8px 16px; border-radius: 999px; cursor: pointer; }
+  .toggle button[aria-pressed=true] { background: var(--teal); color: #fff; }
+  .save { color: var(--ok); font-weight: 600; font-size: .8rem; margin-left: 8px; }
+  .toggle button[aria-pressed=true] .save { color: #cde5da; }
+  .pricecard { border: 1px solid var(--teal); border-radius: var(--radius-lg); padding: clamp(20px, 3vw, 26px); max-width: 460px; background: #fff; box-shadow: 0 6px 22px rgba(15,109,106,.08); }
+  .price { display: flex; align-items: baseline; gap: 10px; }
+  .price .amt { font-size: 2.5rem; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
+  .price .per { color: var(--muted); }
+  .pnote { color: var(--muted); font-size: .9rem; margin: .2rem 0 0; }
+  .checklist { list-style: none; margin: 16px 0 18px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .checklist li { font-size: .94rem; padding-left: 24px; position: relative; }
+  .checklist li::before { content: "✓"; position: absolute; left: 0; color: var(--teal); font-weight: 700; }
+  .btn.block { width: 100%; }
+  .trust { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; color: var(--muted); font-size: .84rem; }
+  details.faq { border-top: 1px solid var(--line); padding: 13px 0; }
+  details.faq summary { cursor: pointer; font-weight: 600; color: var(--ink); list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+  details.faq summary::-webkit-details-marker { display: none; }
+  details.faq summary::after { content: "+"; color: var(--muted); font-size: 1.2rem; line-height: 1; }
+  details.faq[open] summary::after { content: "–"; }
+  details.faq p { margin: 12px 0 0; color: var(--muted); font-size: .93rem; }
+</style>
+
+<script is:inline>
+  function setPlan(p){
+    var m = p === 'monthly';
+    document.getElementById('mBtn').setAttribute('aria-pressed', m);
+    document.getElementById('yBtn').setAttribute('aria-pressed', !m);
+    var plan = document.getElementById('plan'); if (plan) plan.value = p;
+    document.getElementById('amt').textContent = m ? '$' + window.__M : '$' + window.__Y;
+    document.getElementById('per').textContent = m ? '/ month' : '/ year';
+    document.getElementById('pnote').textContent = m ? 'Billed monthly. Cancel anytime.' : 'Billed yearly — save $' + window.__S + ' vs monthly.';
+  }
+</script>
+<script is:inline set:html={`window.__M=${JSON.stringify(monthly)};window.__Y=${JSON.stringify(annual)};window.__S=${JSON.stringify(String(annualSave))};`}></script>

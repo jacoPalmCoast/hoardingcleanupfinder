@@ -2,6 +2,7 @@
 // facts and as schema.org properties. Free-tier owners can edit the FREE set; featured
 // owners can edit everything. Every value is validated through parseAttrs() before it
 // touches the database or a template — never trust the stored JSON blindly.
+import { safeUrl } from '../lib/util';
 
 export const CERTIFICATIONS = [
   { slug: 'iicrc', name: 'IICRC certified' },
@@ -20,6 +21,29 @@ for (const c of CERTIFICATIONS) CERT_BY_SLUG[c.slug] = c;
 export const LANGUAGES = ['English', 'Spanish', 'Portuguese', 'Chinese', 'Vietnamese', 'Tagalog', 'Korean', 'Russian', 'Arabic', 'French', 'Haitian Creole', 'Polish'] as const;
 const LANG_SET = new Set<string>(LANGUAGES);
 
+// Social links a featured owner can add. Each stored URL is validated (https + host must match the
+// platform) before it is saved or shown. `website` is a separate top-level column, not here.
+export const SOCIAL_PLATFORMS = [
+  { key: 'google', name: 'Google Business Profile', hosts: ['google.com', 'g.page', 'maps.app.goo.gl', 'goo.gl', 'business.google.com'], placeholder: 'https://g.page/your-business' },
+  { key: 'facebook', name: 'Facebook', hosts: ['facebook.com', 'fb.com', 'fb.me'], placeholder: 'https://facebook.com/yourpage' },
+  { key: 'instagram', name: 'Instagram', hosts: ['instagram.com'], placeholder: 'https://instagram.com/yourhandle' },
+  { key: 'yelp', name: 'Yelp', hosts: ['yelp.com'], placeholder: 'https://yelp.com/biz/your-business' },
+  { key: 'linkedin', name: 'LinkedIn', hosts: ['linkedin.com'], placeholder: 'https://linkedin.com/company/you' },
+  { key: 'tiktok', name: 'TikTok', hosts: ['tiktok.com'], placeholder: 'https://tiktok.com/@yourhandle' },
+  { key: 'x', name: 'X (Twitter)', hosts: ['x.com', 'twitter.com'], placeholder: 'https://x.com/yourhandle' },
+] as const;
+export type SocialKey = (typeof SOCIAL_PLATFORMS)[number]['key'];
+
+export function cleanSocialUrl(key: string, v: unknown): string | null {
+  const p = SOCIAL_PLATFORMS.find((x) => x.key === key);
+  if (!p) return null;
+  const u = safeUrl(String(v ?? '').trim().slice(0, 200));
+  if (!u) return null;
+  let host = '';
+  try { host = new URL(u).host.toLowerCase().replace(/^www\./, ''); } catch { return null; }
+  return (p.hosts as readonly string[]).some((h) => host === h || host.endsWith('.' + h)) ? u : null;
+}
+
 export interface Attrs {
   hours24: boolean;
   discreet: boolean;          // unmarked vehicles / plain-clothes crew
@@ -30,12 +54,13 @@ export interface Attrs {
   languages: string[];
   service_area: string[];     // extra city names served (free: ≤3, featured: ≤40)
   license_no: string;
+  socials: Record<string, string>;   // featured-only; platform key → validated URL
 }
 
 export const FREE_AREA_LIMIT = 3;
 export const FEATURED_AREA_LIMIT = 40;
 
-const EMPTY: Attrs = { hours24: false, discreet: false, financing: false, insurance_billing: false, free_estimate: false, certifications: [], languages: [], service_area: [], license_no: '' };
+const EMPTY: Attrs = { hours24: false, discreet: false, financing: false, insurance_billing: false, free_estimate: false, certifications: [], languages: [], service_area: [], license_no: '', socials: {} };
 
 const cleanCity = (s: unknown) => String(s ?? '').replace(/[^A-Za-z .'\-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
 
@@ -54,7 +79,18 @@ export function parseAttrs(json: string | null | undefined): Attrs {
     languages: [...new Set(list(raw.languages).map(String).filter((s) => LANG_SET.has(s)))],
     service_area: [...new Set(list(raw.service_area).map(cleanCity).filter(Boolean))].slice(0, FEATURED_AREA_LIMIT),
     license_no: String(raw.license_no ?? '').replace(/[^A-Za-z0-9 \-#]/g, '').trim().slice(0, 40),
+    socials: parseSocials(raw.socials),
   };
+}
+
+function parseSocials(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  for (const p of SOCIAL_PLATFORMS) {
+    const u = cleanSocialUrl(p.key, obj[p.key]);
+    if (u) out[p.key] = u;
+  }
+  return out;
 }
 
 /** Build Attrs from a submitted form, enforcing the tier the caller passes in. */
@@ -77,6 +113,12 @@ export function attrsFromForm(form: FormData, tier: 'free' | 'featured', base: A
     out.financing = on('financing');
     out.insurance_billing = on('insurance_billing');
     out.free_estimate = on('free_estimate');
+    const socials: Record<string, string> = {};
+    for (const p of SOCIAL_PLATFORMS) {
+      const u = cleanSocialUrl(p.key, form.get('social_' + p.key));
+      if (u) socials[p.key] = u;
+    }
+    out.socials = socials;
   }
   return out;
 }
@@ -106,7 +148,12 @@ export function faqFromForm(form: FormData): FaqItem[] {
  *  hidden unless the subscription is live, whatever is stored (Invariant 2 applies at render). */
 export function publicAttrs(a: Attrs, featured: boolean): Attrs {
   if (featured) return a;
-  return { ...a, discreet: false, financing: false, insurance_billing: false, free_estimate: false, service_area: a.service_area.slice(0, FREE_AREA_LIMIT) };
+  return { ...a, discreet: false, financing: false, insurance_billing: false, free_estimate: false, service_area: a.service_area.slice(0, FREE_AREA_LIMIT), socials: {} };
+}
+
+/** Ordered [platform, url] pairs for rendering the icon row. */
+export function socialLinks(a: Attrs): { key: string; name: string; url: string }[] {
+  return SOCIAL_PLATFORMS.filter((p) => a.socials[p.key]).map((p) => ({ key: p.key, name: p.name, url: a.socials[p.key] }));
 }
 
 /** Human-readable "facts" rows for a listing page; missing items are shown as gaps on unclaimed listings. */

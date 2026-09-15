@@ -3,6 +3,7 @@ import Base from '../../layouts/Base.astro';
 import ListingCard from '../../components/ListingCard.astro';
 import QuoteForm from '../../components/QuoteForm.astro';
 import Faq from '../../components/Faq.astro';
+import Socials from '../../components/Socials.astro';
 import { getListingBySlug, nearbyListings, isLive } from '../../lib/db';
 import { formatPhone, parseServices, hostOf, isoDay } from '../../lib/util';
 import { SERVICE_BY_SLUG } from '../../data/services';
@@ -64,7 +65,9 @@ if (l.is_claimed !== 1) {
         <dt>Website</dt><dd>{l.website ? <a href={l.website} rel="nofollow noopener" target="_blank">{hostOf(l.website)}<span class="sr-only"> (opens in new tab)</span></a> : '—'}</dd>
         <dt>Location</dt><dd>{l.address ? `${l.address}` : `${l.city}, ${l.state}${l.zip ? ' ' + l.zip : ''}`}</dd>
         {facts.map((f) => <><dt>{f.label}</dt><dd>{f.value}</dd></>)}
-        {l.review_count > 0 && l.rating && <><dt>Reviews</dt><dd>{l.rating.toFixed(1)} average from {l.review_count} public reviews</dd></>}
+        {l.review_count > 0 && l.rating && <><dt>Reviews</dt><dd>{l.place_id
+          ? <a href={`https://www.google.com/maps/place/?q=place_id:${l.place_id}`} rel="nofollow noopener" target="_blank">★ {l.rating.toFixed(1)} · {l.review_count} Google reviews<span class="sr-only"> (opens in new tab)</span></a>
+          : <>★ {l.rating.toFixed(1)} · {l.review_count} reviews</>}</dd></>}
       </dl>
       {gaps.length > 0 && (
         <p class="small">Not provided yet: {gaps.join(', ')}. <a href={`/claim/${l.slug}`}>Claim this listing</a> to add them.</p>
@@ -73,6 +76,7 @@ if (l.is_claimed !== 1) {
         {l.phone && <a class="btn" href={`tel:${l.phone_digits}`}>Call {formatPhone(l.phone)}</a>}
         <a class="btn secondary" href="#quote">Request a quote</a>
       </div>
+      <Socials attrs={attrs} />
 
       {aboutParas.length > 0 && (
         <section class="prose">
