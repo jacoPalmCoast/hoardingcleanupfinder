@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hcf-cron",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-01",
+  // 13:00 UTC daily = 9am ET (EDT). Calls POST /api/cron/run on the site with the CRON_SECRET.
+  "triggers": { "crons": ["0 13 * * *"] },
+  "vars": { "SITE_URL": "https://hoardingcleanupfinder.com" }
+  // Secret (set once, not stored here):  wrangler secret put CRON_SECRET
+}

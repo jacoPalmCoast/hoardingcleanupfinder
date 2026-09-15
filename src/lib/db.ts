@@ -228,3 +228,27 @@ export async function rateLimit(key: string, max: number, windowSec: number): Pr
   if (Math.random() < 0.02) await env.DB.prepare(`DELETE FROM rate_limits WHERE window_start < ?1`).bind(t - 86400).run();
   return (row?.count ?? max + 1) <= max;
 }
+
+// ---------- P0 email log + suppression ----------
+export async function isSuppressed(email: string): Promise<boolean> {
+  const r = await env.DB.prepare(`SELECT 1 AS ok FROM suppressions WHERE email = ?1`).bind(email.toLowerCase()).first();
+  return !!r;
+}
+export async function addSuppression(email: string, reason: 'unsubscribe' | 'bounce' | 'complaint', source?: string): Promise<void> {
+  await env.DB.prepare(`INSERT OR IGNORE INTO suppressions(email, reason, source) VALUES (?1, ?2, ?3)`)
+    .bind(email.toLowerCase(), reason, source ?? null).run();
+}
+export interface EmailLog {
+  to_email: string; stream: string; type?: string; subject?: string;
+  listing_id?: number; owner_id?: number; resend_id?: string; status: 'sent' | 'failed' | 'suppressed'; error?: string;
+}
+export async function logEmail(e: EmailLog): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO emails(to_email, stream, type, subject, listing_id, owner_id, resend_id, status, error)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+  ).bind(e.to_email.toLowerCase(), e.stream, e.type ?? null, e.subject ?? null, e.listing_id ?? null, e.owner_id ?? null, e.resend_id ?? null, e.status, e.error ?? null).run();
+}
+// field is from a fixed allowlist (never user input) — safe to interpolate.
+export async function markEmailByResendId(resendId: string, field: 'delivered_at' | 'opened_at' | 'clicked_at' | 'bounced_at' | 'complained_at'): Promise<void> {
+  await env.DB.prepare(`UPDATE emails SET ${field} = unixepoch() WHERE resend_id = ?1`).bind(resendId).run();
+}

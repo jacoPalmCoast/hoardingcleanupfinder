@@ -1,8 +1,43 @@
 import { env } from './env';
 import { getCookie, now, randomToken, sha256, timingSafeEqual } from './util';
+import { isSuppressed, logEmail } from './db';
+import { unsubToken } from './mailauth';
 
 // ---------- Email (Resend) ----------
-export async function sendEmail(to: string, subject: string, html: string, text?: string): Promise<boolean> {
+export type EmailStream = 'txn' | 'marketing';
+export interface SendOpts {
+  text?: string;
+  stream?: EmailStream;      // 'txn' (default) always sends; 'marketing' respects the suppression list
+  type?: string;             // login_code, claim_code, lead_company, outreach_step1, ...
+  listingId?: number;
+  ownerId?: number;
+  headers?: Record<string, string>;
+}
+
+// Every send is logged to the `emails` table (best-effort — a logging failure never blocks a send).
+// Marketing mail is suppression-gated and carries one-click List-Unsubscribe headers; transactional
+// mail (codes, receipts) is never suppressed so a user can always sign in.
+export async function sendEmail(to: string, subject: string, html: string, opts: SendOpts = {}): Promise<boolean> {
+  const stream: EmailStream = opts.stream ?? 'txn';
+  const toLc = to.toLowerCase();
+
+  if (stream === 'marketing') {
+    try {
+      if (await isSuppressed(toLc)) {
+        await logEmail({ to_email: toLc, stream, type: opts.type, subject, status: 'suppressed', listing_id: opts.listingId, owner_id: opts.ownerId });
+        return false;
+      }
+    } catch (e) { /* if the check fails, do not send marketing mail we can't gate */ return false; }
+  }
+
+  let headers = opts.headers;
+  if (stream === 'marketing') {
+    try {
+      const url = `${env.SITE_URL}/api/unsubscribe?t=${await unsubToken(toLc)}`;
+      headers = { 'List-Unsubscribe': `<${url}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click', ...(headers ?? {}) };
+    } catch { /* no SESSION_SECRET → skip headers rather than fail */ }
+  }
+
   if (!env.RESEND_API_KEY) {
     // Dev only: codes are printed so flows can be tested without Resend. Production fails closed.
     if (env.DEV_BYPASS_TURNSTILE === '1') {
@@ -10,15 +45,33 @@ export async function sendEmail(to: string, subject: string, html: string, text?
       return true;
     }
     console.error('RESEND_API_KEY missing; email not sent');
+    try { await logEmail({ to_email: toLc, stream, type: opts.type, subject, status: 'failed', error: 'no_api_key', listing_id: opts.listingId, owner_id: opts.ownerId }); } catch {}
     return false;
   }
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ from: env.FROM_EMAIL, to: [to], subject, html, text: text ?? html.replace(/<[^>]+>/g, '') }),
-  });
-  if (!res.ok) console.error('resend error', res.status);
-  return res.ok;
+
+  let ok = false;
+  let resendId: string | undefined;
+  let errMsg: string | undefined;
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ from: env.FROM_EMAIL, to: [to], subject, html, text: opts.text ?? html.replace(/<[^>]+>/g, ''), headers }),
+    });
+    ok = res.ok;
+    if (res.ok) {
+      const j = (await res.json().catch(() => null)) as { id?: string } | null;
+      resendId = j?.id;
+    } else {
+      errMsg = `resend_${res.status}`;
+      console.error('resend error', res.status);
+    }
+  } catch (e) {
+    errMsg = 'fetch_error';
+    console.error('resend fetch failed', (e as Error)?.message);
+  }
+  try { await logEmail({ to_email: toLc, stream, type: opts.type, subject, status: ok ? 'sent' : 'failed', error: errMsg, resend_id: resendId, listing_id: opts.listingId, owner_id: opts.ownerId }); } catch {}
+  return ok;
 }
 
 export function emailShell(title: string, body: string): string {

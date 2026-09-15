@@ -84,6 +84,31 @@ export function timingSafeEqual(a: string, b: string): boolean {
   return out === 0;
 }
 
+// ---------- base64url + HMAC (used for signed unsubscribe tokens and webhook verification) ----------
+export function bytesToBase64(bytes: Uint8Array): string {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+export function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+export function b64urlEncodeStr(s: string): string {
+  return bytesToBase64(new TextEncoder().encode(s)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+export function b64urlDecodeStr(s: string): string {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4);
+  return new TextDecoder().decode(base64ToBytes(b64));
+}
+export async function hmacHex(secret: string, msg: string): Promise<string> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(msg));
+  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export function isEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s) && s.length <= 254;
 }
