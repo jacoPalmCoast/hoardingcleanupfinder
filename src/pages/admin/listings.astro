@@ -2,7 +2,7 @@
 import Admin from '../../layouts/Admin.astro';
 import { env } from '../../lib/env';
 import { SERVICES } from '../../data/services';
-import { parseServices } from '../../lib/util';
+import { parseServices, tsToDate } from '../../lib/util';
 import type { Listing } from '../../lib/db';
 import { CERTIFICATIONS, LANGUAGES, parseAttrs, parseFaq, CUSTOM_FAQ_LIMIT } from '../../data/attrs';
 const id = Number(Astro.url.searchParams.get('id') ?? 0);
@@ -25,7 +25,7 @@ if (id) {
 const msg = Astro.url.searchParams.get('msg');
 const a = one ? parseAttrs(one.attrs) : null;
 const faq = one ? parseFaq(one.custom_faq) : [];
-const when = (t: number) => new Date(t * 1000).toLocaleString('en-US', { timeZone: 'America/New_York' });
+const when = (t: unknown) => { const d = tsToDate(t); return d ? d.toLocaleString('en-US', { timeZone: 'America/New_York' }) : '—'; };
 ---
 <Admin title="Listings">
   {msg === 'saved' && <div class="notice" role="status">Saved.</div>}

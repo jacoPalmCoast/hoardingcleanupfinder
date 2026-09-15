@@ -23,6 +23,34 @@ export function now(): number {
   return Math.floor(Date.now() / 1000);
 }
 
+/** Parse a listings timestamp defensively. Column is unix-seconds INTEGER, but some rows were
+ *  backfilled as a "YYYY-MM-DD HH:MM:SS" UTC text value; a raw `v * 1000` on those yields NaN and
+ *  `new Date(NaN).toISOString()` throws, which 500s the whole page. Returns null when unparseable. */
+export function tsToDate(v: unknown): Date | null {
+  if (v == null) return null;
+  if (typeof v === 'number') {
+    const d = new Date(v * 1000);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof v === 'string') {
+    if (/^\d+$/.test(v)) {
+      const d = new Date(Number(v) * 1000);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    // SQLite datetime() text is UTC; make it explicit so parsing is deterministic across runtimes.
+    const hasZone = /[zZ]|[+-]\d\d:?\d\d$/.test(v);
+    const d = new Date((v.includes('T') ? v : v.replace(' ', 'T')) + (hasZone ? '' : 'Z'));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+/** YYYY-MM-DD for a listings timestamp, or null if it can't be parsed. Never throws. */
+export function isoDay(v: unknown): string | null {
+  const d = tsToDate(v);
+  return d ? d.toISOString().slice(0, 10) : null;
+}
+
 export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 }

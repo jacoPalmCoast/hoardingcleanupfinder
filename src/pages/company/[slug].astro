@@ -4,7 +4,7 @@ import ListingCard from '../../components/ListingCard.astro';
 import QuoteForm from '../../components/QuoteForm.astro';
 import Faq from '../../components/Faq.astro';
 import { getListingBySlug, nearbyListings, isLive } from '../../lib/db';
-import { formatPhone, parseServices, hostOf } from '../../lib/util';
+import { formatPhone, parseServices, hostOf, isoDay } from '../../lib/util';
 import { SERVICE_BY_SLUG } from '../../data/services';
 import { STATES } from '../../data/states';
 import { parseAttrs, parseFaq, attrFacts, publicAttrs } from '../../data/attrs';
@@ -30,7 +30,7 @@ const msg = Astro.url.searchParams.get('msg');
 const url = `${env.SITE_URL}/company/${l.slug}`;
 const description = `${l.name} provides ${serviceNames.map((n) => n.toLowerCase()).join(', ')} in ${l.city}, ${stateName}${attrs.hours24 ? ', available 24 hours' : ''}. Phone, website, certifications and quote request.`;
 const jsonld = [
-  webPageSchema(url, `${l.name} — ${l.city}, ${l.state}`, description, { speakable: true, dateModified: new Date(l.updated_at * 1000).toISOString().slice(0, 10) }),
+  webPageSchema(url, `${l.name} — ${l.city}, ${l.state}`, description, { speakable: true, dateModified: isoDay(l.updated_at) ?? undefined }),
   breadcrumbSchema([{ name: 'Home', url: env.SITE_URL }, { name: stateName, url: `${env.SITE_URL}/state/${l.state.toLowerCase()}` }, { name: l.city, url: `${env.SITE_URL}/${l.state.toLowerCase()}/${l.city_slug}` }, { name: l.name }]),
   ...listingSchema(l, services, attrs, faq),
 ];
