@@ -2,6 +2,7 @@
 import Admin from '../../layouts/Admin.astro';
 import { adminCounts } from '../../lib/db';
 import { env } from '../../lib/env';
+import { tsToDate } from '../../lib/util';
 const c = await adminCounts();
 const recent = (await env.DB.prepare(`SELECT id, name, city, state, is_featured, featured_until, created_at FROM listings WHERE is_featured = 1 ORDER BY featured_until DESC LIMIT 20`).all<any>()).results;
 ---
@@ -19,7 +20,7 @@ const recent = (await env.DB.prepare(`SELECT id, name, city, state, is_featured,
   <h2>Featured listings</h2>
   {recent.length === 0 ? <p>None yet.</p> : (
     <div class="table-wrap"><table><thead><tr><th>Company</th><th>City</th><th>Featured until</th></tr></thead><tbody>
-      {recent.map((r: any) => <tr><td><a href={`/admin/listings?id=${r.id}`}>{r.name}</a></td><td>{r.city}, {r.state}</td><td>{new Date(r.featured_until * 1000).toLocaleDateString('en-US')}</td></tr>)}
+      {recent.map((r: any) => <tr><td><a href={`/admin/listings?id=${r.id}`}>{r.name}</a></td><td>{r.city}, {r.state}</td><td>{tsToDate(r.featured_until)?.toLocaleDateString('en-US') ?? '—'}</td></tr>)}
     </tbody></table></div>
   )}
 </Admin>
