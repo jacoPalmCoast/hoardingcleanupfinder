@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { env } from '../../lib/env';
 import { clean, isEmail, redirect, escapeHtml } from '../../lib/util';
-import { verifyTurnstile, clientIp, sendEmail, emailShell } from '../../lib/services';
+import { verifyTurnstile, clientIp, sendEmail, emailShell, adminEmail } from '../../lib/services';
 import { getListingById, rateLimit, addReview } from '../../lib/db';
 
 export const POST: APIRoute = async ({ request }) => {
@@ -22,9 +22,10 @@ export const POST: APIRoute = async ({ request }) => {
   // Held as 'pending' — never shown until a person approves it in the admin moderation queue.
   await addReview({ listingId: l.id, author, rating, body, email, ip });
   await sendEmail(
-    env.FROM_EMAIL.replace(/.*<|>.*/g, ''),
+    adminEmail(),
     `[review:${rating}★] ${l.name} (${l.city}, ${l.state})`,
     emailShell('New review — needs moderation', `<p><a href="${env.SITE_URL}/company/${l.slug}">${escapeHtml(l.name)}</a></p><p><strong>${rating}★</strong> from ${escapeHtml(author)} (${escapeHtml(email)})</p><p>${escapeHtml(body).replace(/\n/g, '<br>')}</p><p><a href="${env.SITE_URL}/admin/reviews">Moderate in admin</a></p>`),
+    { type: 'admin_review', listingId: l.id },
   );
   return redirect(`/company/${l.slug}?msg=review-received`);
 };

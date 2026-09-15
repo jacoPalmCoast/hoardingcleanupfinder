@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { env } from '../../../lib/env';
 import { audit } from '../../../lib/audit';
 import { clean, isEmail, redirect, sha256, now, hostOf, escapeHtml, timingSafeEqual } from '../../../lib/util';
-import { getOrCreateOwner, createOwnerSession, isSecure, sendEmail, emailShell } from '../../../lib/services';
+import { getOrCreateOwner, createOwnerSession, isSecure, sendEmail, emailShell, adminEmail } from '../../../lib/services';
 import { getListingById } from '../../../lib/db';
 
 export const POST: APIRoute = async ({ request }) => {
@@ -41,7 +41,7 @@ export const POST: APIRoute = async ({ request }) => {
     await audit('system', email, l.id, 'claim.instant', null, { email, matched_host: siteHost });
   } else {
     await audit('system', email, l.id, 'claim.review', null, { email, site_host: siteHost || null });
-    await sendEmail(env.FROM_EMAIL.replace(/.*<|>.*/g, ''), `[claim review] ${l.name} by ${email}`, emailShell('Claim needs review', `<p>${escapeHtml(email)} verified a code for <a href="${env.SITE_URL}/company/${l.slug}">${escapeHtml(l.name)}</a> but the email domain does not match the website (${escapeHtml(siteHost || 'none')}). <a href="${env.SITE_URL}/admin/claims">Approve or reject</a>.</p>`));
+    await sendEmail(adminEmail(), `[claim review] ${l.name} by ${email}`, emailShell('Claim needs review', `<p>${escapeHtml(email)} verified a code for <a href="${env.SITE_URL}/company/${l.slug}">${escapeHtml(l.name)}</a> but the email domain does not match the website (${escapeHtml(siteHost || 'none')}). <a href="${env.SITE_URL}/admin/claims">Approve or reject</a>.</p>`), { type: 'admin_claim_review', listingId: l.id });
   }
   const cookie = await createOwnerSession(ownerId, isSecure(request));
   return redirect(instant ? `/account?msg=claimed` : `/account?msg=claim-review`, 303, { 'set-cookie': cookie });

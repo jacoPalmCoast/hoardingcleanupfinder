@@ -6,6 +6,7 @@ export interface Env {
   SITE_URL: string;
   SITE_NAME: string;
   FROM_EMAIL: string;
+  ADMIN_EMAIL?: string;             // where operator notifications go (leads, reports, reviews, claims). Falls back to FROM_EMAIL.
   FEATURED_MONTHLY_USD: string;
   FEATURED_ANNUAL_USD: string;
   ADMIN_PASSWORD?: string;

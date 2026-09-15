@@ -1,0 +1,24 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { listSuppressions } from '../../lib/db';
+import { tsToDate } from '../../lib/util';
+const rows = await listSuppressions();
+---
+<Admin title="Suppressed addresses">
+  <p class="small">These addresses never receive marketing mail (transactional mail like sign-in codes still goes through). Bounces and complaints are added automatically by the Resend webhook; unsubscribes add themselves. Remove one only if you're sure it was a mistake.</p>
+  {rows.length === 0 ? <p>No suppressed addresses.</p> : (
+    <div class="table-wrap"><table><thead><tr><th>Address</th><th>Reason</th><th>Source</th><th>Since</th><th></th></tr></thead><tbody>
+      {rows.map((r) => (
+        <tr>
+          <td>{r.email}</td>
+          <td>{r.reason}</td>
+          <td>{r.source ?? '—'}</td>
+          <td style="white-space:nowrap">{tsToDate(r.created_at)?.toLocaleDateString('en-US') ?? '—'}</td>
+          <td class="actions">
+            <form action="/api/admin/suppression" method="post" style="display:inline"><input type="hidden" name="email" value={r.email} /><input type="hidden" name="action" value="remove" /><button class="btn small secondary">Remove</button></form>
+          </td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  )}
+</Admin>

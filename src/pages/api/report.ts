@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { env } from '../../lib/env';
 import { clean, isEmail, redirect, escapeHtml } from '../../lib/util';
-import { verifyTurnstile, clientIp, sendEmail, emailShell } from '../../lib/services';
+import { verifyTurnstile, clientIp, sendEmail, emailShell, adminEmail } from '../../lib/services';
 import { getListingById, rateLimit } from '../../lib/db';
 
 export const POST: APIRoute = async ({ request }) => {
@@ -16,6 +16,6 @@ export const POST: APIRoute = async ({ request }) => {
   const email = clean(form.get('email'), 254).toLowerCase();
   if (!message || !isEmail(email)) return redirect(`/company/${l.slug}/report`);
   await env.DB.prepare(`INSERT INTO reports(listing_id, kind, message, email) VALUES (?1,?2,?3,?4)`).bind(l.id, kind, message, email).run();
-  await sendEmail(env.FROM_EMAIL.replace(/.*<|>.*/g, ''), `[report:${kind}] ${l.name} (${l.city}, ${l.state})`, emailShell('Listing report', `<p><a href="${env.SITE_URL}/company/${l.slug}">${escapeHtml(l.name)}</a></p><p><strong>${kind}</strong> from ${escapeHtml(email)}</p><p>${escapeHtml(message).replace(/\n/g, '<br>')}</p><p><a href="${env.SITE_URL}/admin/reports">Open in admin</a></p>`));
+  await sendEmail(adminEmail(), `[report:${kind}] ${l.name} (${l.city}, ${l.state})`, emailShell('Listing report', `<p><a href="${env.SITE_URL}/company/${l.slug}">${escapeHtml(l.name)}</a></p><p><strong>${kind}</strong> from ${escapeHtml(email)}</p><p>${escapeHtml(message).replace(/\n/g, '<br>')}</p><p><a href="${env.SITE_URL}/admin/reports">Open in admin</a></p>`), { type: 'admin_report', listingId: l.id });
   return redirect(`/company/${l.slug}?msg=report-sent`);
 };

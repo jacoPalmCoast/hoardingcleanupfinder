@@ -87,6 +87,14 @@ export async function sendEmail(to: string, subject: string, html: string, opts:
   return ok;
 }
 
+// The inbox that receives operator notifications (new pending listings, leads, reports, reviews,
+// claims to review). Uses ADMIN_EMAIL when set; falls back to the bare from-address so nothing is
+// silently dropped. Sending to a real operator inbox — not the from-address — is what makes these
+// notifications actually reach a person and avoids a from==to deliverability flag.
+export function adminEmail(): string {
+  return (env.ADMIN_EMAIL || env.FROM_EMAIL).replace(/.*<|>.*/g, '').trim();
+}
+
 export function emailShell(title: string, body: string): string {
   return `<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#222;max-width:560px;margin:0 auto;padding:24px">
 <h2 style="color:#1F6F78;font-weight:600;margin:0 0 16px">${title}</h2>

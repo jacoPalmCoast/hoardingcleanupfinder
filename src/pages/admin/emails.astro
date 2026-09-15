@@ -1,0 +1,35 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { recentEmails, emailStats } from '../../lib/db';
+import { tsToDate } from '../../lib/util';
+const rows = await recentEmails(150);
+const s = await emailStats();
+const when = (ts: number | null) => (ts ? tsToDate(ts)?.toLocaleString('en-US') ?? '—' : '');
+// Most informative delivery marker per row, worst-first.
+const mark = (r: any): string => r.complained_at ? 'complaint' : r.bounced_at ? 'bounced' : r.status === 'failed' ? 'failed' : r.status === 'suppressed' ? 'suppressed' : r.clicked_at ? 'clicked' : r.opened_at ? 'opened' : r.delivered_at ? 'delivered' : r.status;
+---
+<Admin title="Email log">
+  <div class="stats">
+    <div class="stat"><b>{s.total}</b><span>Sent, 30 days</span></div>
+    <div class="stat"><b>{s.sent}</b><span>Accepted</span></div>
+    <div class="stat"><b>{s.failed}</b><span>Failed</span></div>
+    <div class="stat"><b>{s.suppressed}</b><span>Suppressed</span></div>
+    <div class="stat"><b>{s.bounced}</b><span>Bounced</span></div>
+    <div class="stat"><b>{s.complained}</b><span>Complaints</span></div>
+  </div>
+  <p class="small">Last 150 messages. Delivery/open/bounce/complaint markers are filled in by the Resend webhook once it's connected. <a href="/admin/suppressions">Manage suppressions</a>.</p>
+  {rows.length === 0 ? <p>No email sent yet.</p> : (
+    <div class="table-wrap"><table><thead><tr><th>When</th><th>To</th><th>Stream</th><th>Type</th><th>Subject</th><th>Status</th></tr></thead><tbody>
+      {rows.map((r) => (
+        <tr>
+          <td style="white-space:nowrap">{when(r.created_at)}</td>
+          <td>{r.to_email}</td>
+          <td>{r.stream}</td>
+          <td>{r.type ?? '—'}</td>
+          <td style="max-width:280px">{r.subject ?? '—'}{r.error ? <><br/><span class="small" style="color:#b00">{r.error}</span></> : null}</td>
+          <td style="white-space:nowrap">{mark(r)}</td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  )}
+</Admin>

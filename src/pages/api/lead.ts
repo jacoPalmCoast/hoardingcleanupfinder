@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { env } from '../../lib/env';
 import { clean, isEmail, redirect, formatPhone, escapeHtml, now } from '../../lib/util';
-import { verifyTurnstile, clientIp, sendEmail, emailShell } from '../../lib/services';
+import { verifyTurnstile, clientIp, sendEmail, emailShell, adminEmail } from '../../lib/services';
 import { getListingById, rateLimit } from '../../lib/db';
 import type { Listing } from '../../lib/db';
 import { SERVICE_BY_SLUG, isService } from '../../data/services';
@@ -59,7 +59,7 @@ ${message ? `<p><strong>Notes:</strong><br>${escapeHtml(message).replace(/\n/g, 
 <p>Reply directly to the customer. This request was ${targets.length > 1 ? `sent to ${targets.length} companies` : 'sent only to you'}.</p>`;
   await Promise.all(targets.filter((l) => l.email).map((l) => sendEmail(l.email!, `Quote request: ${svcName} in ${zip}`, emailShell('New quote request', body))));
   // Owner copy, so leads without a company email can still be worked by hand.
-  await sendEmail(env.FROM_EMAIL.replace(/.*<|>.*/g, ''), `[lead #${leadId}] ${svcName} ${zip} → ${targets.map((l) => l.name).join(', ') || 'no match'}`, emailShell('Lead copy', body));
+  await sendEmail(adminEmail(), `[lead #${leadId}] ${svcName} ${zip} → ${targets.map((l) => l.name).join(', ') || 'no match'}`, emailShell('Lead copy', body), { type: 'admin_lead' });
   await sendEmail(email, targets.length === 1 ? 'We sent your request to a cleanup company' : targets.length > 1 ? `We sent your request to ${targets.length} cleanup companies` : 'We received your request', emailShell('Your quote request', `<p>Thanks, ${escapeHtml(name)}. Your ${svcName.toLowerCase()} request for ZIP ${zip} went to: ${targets.map((l) => escapeHtml(l.name)).join(', ') || 'our team, who will find a company for you'}.</p><p>If you hear nothing within one business day, reply to this email and we will chase it.</p>`));
 
   return redirect(backWith('lead-sent', '#quote'));

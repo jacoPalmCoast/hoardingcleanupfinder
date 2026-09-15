@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { env } from '../../../lib/env';
 import { clean, isEmail, redirect, digits, slugify, safeUrl, escapeHtml } from '../../../lib/util';
-import { verifyTurnstile, clientIp, sendEmail, emailShell } from '../../../lib/services';
+import { verifyTurnstile, clientIp, sendEmail, emailShell, adminEmail } from '../../../lib/services';
 import { rateLimit } from '../../../lib/db';
 import { SERVICE_BY_SLUG, isService } from '../../../data/services';
 import { isState } from '../../../data/states';
@@ -39,7 +39,7 @@ export const POST: APIRoute = async ({ request }) => {
   )
     .bind(slug, name, phone, pd, website, email, address || null, city, slugify(city), state, zip, description, JSON.stringify(services))
     .run();
-  await sendEmail(env.FROM_EMAIL.replace(/.*<|>.*/g, ''), `[pending] ${name} (${city}, ${state})`, emailShell('New listing submitted', `<p>${escapeHtml(name)}, ${escapeHtml(city)}, ${state}. <a href="${env.SITE_URL}/admin/pending">Review in admin</a>.</p>`));
+  await sendEmail(adminEmail(), `[pending] ${name} (${city}, ${state})`, emailShell('New listing submitted', `<p>${escapeHtml(name)}, ${escapeHtml(city)}, ${state}. <a href="${env.SITE_URL}/admin/pending">Review in admin</a>.</p>`), { type: 'admin_pending' });
   await sendEmail(email, `We received your listing for ${name}`, emailShell('Listing received', `<p>Thanks. We review every listing within one business day and will email you when it is live. Once it is, you can claim it to manage details and photos.</p>`));
   return redirect('/add-listing?msg=submitted');
 };

@@ -8,7 +8,7 @@ if (!ok) return Astro.redirect('/admin/login', 302);
 ---
 <Base title={`Admin · ${title}`} description="Admin" noindex>
   <nav class="small" style="margin-bottom:12px" aria-label="Admin">
-    <a href="/admin">Overview</a> · <a href="/admin/billing">Billing</a> · <a href="/admin/pending">Pending</a> · <a href="/admin/claims">Claims</a> · <a href="/admin/leads">Leads</a> · <a href="/admin/reviews">Reviews</a> · <a href="/admin/reports">Reports</a> · <a href="/admin/listings">Listings</a> · <form class="inline" action="/api/admin/logout" method="post"><button type="submit" class="linkbtn">Sign out</button></form>
+    <a href="/admin">Overview</a> · <a href="/admin/billing">Billing</a> · <a href="/admin/pending">Pending</a> · <a href="/admin/claims">Claims</a> · <a href="/admin/leads">Leads</a> · <a href="/admin/reviews">Reviews</a> · <a href="/admin/reports">Reports</a> · <a href="/admin/listings">Listings</a> · <a href="/admin/emails">Email</a> · <form class="inline" action="/api/admin/logout" method="post"><button type="submit" class="linkbtn">Sign out</button></form>
   </nav>
   <h1>{title}</h1>
   <slot />

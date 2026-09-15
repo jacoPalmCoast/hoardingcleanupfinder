@@ -296,3 +296,31 @@ export async function reviewsForModeration(limit = 200): Promise<(Review & { nam
 export async function moderateReview(id: number, status: 'approved' | 'rejected'): Promise<void> {
   await env.DB.prepare(`UPDATE reviews SET status = ?2, moderated_at = unixepoch() WHERE id = ?1`).bind(id, status).run();
 }
+
+// ---------- Admin: email log + suppression management ----------
+export interface EmailRow {
+  id: number; to_email: string; stream: string; type: string | null; subject: string | null;
+  status: string; error: string | null; created_at: number;
+  delivered_at: number | null; opened_at: number | null; clicked_at: number | null;
+  bounced_at: number | null; complained_at: number | null;
+}
+export async function recentEmails(limit = 100): Promise<EmailRow[]> {
+  return (await env.DB.prepare(`SELECT id, to_email, stream, type, subject, status, error, created_at, delivered_at, opened_at, clicked_at, bounced_at, complained_at FROM emails ORDER BY created_at DESC LIMIT ?1`).bind(limit).all<EmailRow>()).results;
+}
+export interface EmailStats { total: number; sent: number; failed: number; suppressed: number; bounced: number; complained: number }
+export async function emailStats(): Promise<EmailStats> {
+  const r = await env.DB.prepare(
+    `SELECT COUNT(*) AS total,
+      SUM(status='sent') AS sent, SUM(status='failed') AS failed, SUM(status='suppressed') AS suppressed,
+      SUM(bounced_at IS NOT NULL) AS bounced, SUM(complained_at IS NOT NULL) AS complained
+     FROM emails WHERE created_at > ?1`,
+  ).bind(now() - 30 * 86400).first<EmailStats>();
+  return r ?? { total: 0, sent: 0, failed: 0, suppressed: 0, bounced: 0, complained: 0 };
+}
+export interface Suppression { email: string; reason: string; source: string | null; created_at: number }
+export async function listSuppressions(limit = 200): Promise<Suppression[]> {
+  return (await env.DB.prepare(`SELECT email, reason, source, created_at FROM suppressions ORDER BY created_at DESC LIMIT ?1`).bind(limit).all<Suppression>()).results;
+}
+export async function removeSuppression(email: string): Promise<void> {
+  await env.DB.prepare(`DELETE FROM suppressions WHERE email = ?1`).bind(email.toLowerCase()).run();
+}
