@@ -3,6 +3,7 @@ import Base from '../../layouts/Base.astro';
 import { currentOwner } from '../../lib/services';
 import { env } from '../../lib/env';
 import { isLive } from '../../lib/db';
+import { tsToDate } from '../../lib/util';
 import type { Listing } from '../../lib/db';
 const owner = await currentOwner(Astro.request);
 const msg = Astro.url.searchParams.get('msg');
@@ -55,9 +56,16 @@ const email = Astro.url.searchParams.get('email') ?? '';
       <div class="grid">
         {listings.map((l) => (
           <div class="card">
-            <div class="badges">{isLive(l) ? <span class="badge featured">Featured until {new Date((l.featured_until ?? 0) * 1000).toLocaleDateString('en-US')}</span> : <span class="badge">Free listing</span>}</div>
+            <div class="badges">{isLive(l) ? <span class="badge featured">Featured until {(tsToDate(l.featured_until)?.toLocaleDateString('en-US')) ?? '—'}</span> : <span class="badge">Free listing</span>}</div>
             <h3><a href={`/company/${l.slug}`}>{l.name}</a></h3>
             <div class="meta">{l.city}, {l.state}</div>
+            {(isLive(l) || l.subscription_status) && (
+              <p class="small" style="margin:8px 0 0">
+                {l.plan_amount ? `${l.plan_interval === 'year' ? 'Annual' : 'Monthly'} plan · $${(l.plan_amount / 100).toLocaleString('en-US')}${l.plan_interval === 'year' ? '/yr' : '/mo'}` : 'Featured plan'}
+                {l.subscription_status ? ` · ${l.subscription_status}` : ''}
+                {l.featured_until ? ` · ${l.subscription_status === 'active' || l.subscription_status === 'trialing' ? 'renews' : 'ends'} ${(tsToDate(l.featured_until)?.toLocaleDateString('en-US')) ?? ''}` : ''}
+              </p>
+            )}
             <div class="actions">
               <a class="btn small" href={`/account/edit/${l.id}`}>Edit listing</a>
               {isLive(l) || l.stripe_customer_id ? <a class="btn small secondary" href="/api/stripe/portal">Manage billing</a> : <a class="btn small secondary" href={`/featured/${l.slug}`}>Get featured</a>}

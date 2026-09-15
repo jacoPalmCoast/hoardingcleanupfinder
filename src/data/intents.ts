@@ -30,7 +30,7 @@ export interface Intent {
 
 const where = (c: IntentCtx) => (c.city ? `${c.city}, ${c.state}` : c.stateName);
 const near = (c: IntentCtx) => (c.city ? `in ${c.city}` : `in ${c.stateName}`);
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const plural = (n: number, w: string) => `${n} ${n === 1 ? w : w.endsWith('y') ? w.slice(0, -1) + 'ies' : w + 's'}`;
 const COST = {
   'hoarding-cleanup': { low: 1500, high: 5000, unit: 'for a typical home; severe cases run $10,000 to $25,000' },
   'biohazard-cleanup': { low: 1500, high: 6000, unit: 'for a single room; large or multi-room scenes run higher' },

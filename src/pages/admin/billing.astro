@@ -1,0 +1,75 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { env } from '../../lib/env';
+import { now } from '../../lib/util';
+import { tsToDate } from '../../lib/util';
+
+// Every listing that has ever had a Stripe customer, newest activity first, with the owner email.
+type Row = {
+  id: number; slug: string; name: string; city: string; state: string;
+  is_featured: number; featured_until: number | null; subscription_status: string | null;
+  plan_interval: string | null; plan_amount: number | null;
+  stripe_customer_id: string | null; stripe_subscription_id: string | null; owner_email: string | null;
+};
+const rows = (await env.DB.prepare(
+  `SELECT l.id, l.slug, l.name, l.city, l.state, l.is_featured, l.featured_until, l.subscription_status,
+          l.plan_interval, l.plan_amount, l.stripe_customer_id, l.stripe_subscription_id,
+          (SELECT o.email FROM owner_listings ol JOIN owners o ON o.id = ol.owner_id WHERE ol.listing_id = l.id ORDER BY ol.owner_id LIMIT 1) AS owner_email
+   FROM listings l WHERE l.stripe_customer_id IS NOT NULL
+   ORDER BY l.is_featured DESC, l.featured_until DESC`,
+).all<Row>()).results;
+
+const t = now();
+const ACTIVE = new Set(['active', 'trialing', 'past_due']);
+const isActive = (r: Row) => !!r.subscription_status && ACTIVE.has(r.subscription_status) && (r.featured_until ?? 0) > t;
+// MRR: normalise each active subscription's amount to a monthly figure (annual / 12), in dollars.
+const monthly = (r: Row) => {
+  if (!r.plan_amount) return 0;
+  const d = r.plan_amount / 100;
+  return r.plan_interval === 'year' ? d / 12 : d;
+};
+const activeRows = rows.filter(isActive);
+const mrr = activeRows.reduce((s, r) => s + monthly(r), 0);
+const pastDue = rows.filter((r) => r.subscription_status === 'past_due').length;
+const canceled = rows.filter((r) => r.subscription_status === 'canceled' || (!isActive(r) && r.subscription_status)).length;
+const money = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
+const planLabel = (r: Row) => r.plan_interval === 'year' ? 'Annual' : r.plan_interval === 'month' ? 'Monthly' : '—';
+const when = (v: unknown) => { const d = tsToDate(v); return d ? d.toLocaleDateString('en-US') : '—'; };
+const stripeBase = 'https://dashboard.stripe.com';
+---
+<Admin title="Billing">
+  <p class="small">Paying and lapsed customers for the directory's Stripe account. Featured state is controlled only by Stripe webhooks; this page reads what they wrote.</p>
+
+  <div class="stats">
+    <div class="stat"><b>{activeRows.length}</b><span>Active subscriptions</span></div>
+    <div class="stat"><b>{money(Math.round(mrr))}</b><span>Est. MRR</span></div>
+    <div class="stat"><b>{money(Math.round(mrr * 12))}</b><span>Est. annual run-rate</span></div>
+    <div class="stat"><b>{pastDue}</b><span>Past due</span></div>
+    <div class="stat"><b>{canceled}</b><span>Canceled / lapsed</span></div>
+  </div>
+
+  {rows.length === 0 ? (
+    <p>No customers yet. When a company buys a featured spot, they appear here with plan, status and renewal date.</p>
+  ) : (
+    <div class="table-wrap"><table>
+      <thead><tr><th>Company</th><th>Owner</th><th>Plan</th><th>Amount</th><th>Status</th><th>Featured until</th><th>Stripe</th></tr></thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr>
+            <td><a href={`/admin/listings?id=${r.id}`}>{r.name}</a><br/><span class="small">{r.city}, {r.state}{isActive(r) ? '' : ' · not live'}</span></td>
+            <td class="small">{r.owner_email ?? '—'}</td>
+            <td>{planLabel(r)}</td>
+            <td>{r.plan_amount ? money(r.plan_amount / 100) + (r.plan_interval === 'year' ? '/yr' : '/mo') : '—'}</td>
+            <td>{r.subscription_status ?? '—'}</td>
+            <td>{when(r.featured_until)}</td>
+            <td class="small">
+              {r.stripe_customer_id ? <a href={`${stripeBase}/customers/${r.stripe_customer_id}`} target="_blank" rel="noopener">customer ↗</a> : '—'}
+              {r.stripe_subscription_id && <> · <a href={`${stripeBase}/subscriptions/${r.stripe_subscription_id}`} target="_blank" rel="noopener">sub ↗</a></>}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table></div>
+  )}
+  <p class="hint">MRR normalises annual plans to a monthly figure (price ÷ 12). Stripe links open the account's dashboard; make sure you're in the matching mode (test vs live). Plan and amount are captured from Stripe on each subscription event.</p>
+</Admin>

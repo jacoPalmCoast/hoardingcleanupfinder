@@ -27,6 +27,8 @@ export interface Listing {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   subscription_status: string | null;
+  plan_interval: string | null;
+  plan_amount: number | null;
   status: string;
   source: string | null;
   place_id: string | null;

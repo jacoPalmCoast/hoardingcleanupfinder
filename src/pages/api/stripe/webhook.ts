@@ -50,10 +50,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (active && !hasEnd) console.warn(`stripe webhook: missing current_period_end for sub ${sub.id}, listing ${listingId}; using 31-day fallback`);
     const periodEnd = hasEnd ? pe : now() + 31 * 86400;
     const until = active ? periodEnd + GRACE_SECONDS : 0;
+    const price = (item as any)?.price;
+    const planInterval = price?.recurring?.interval ?? null; // 'month' | 'year'
+    const rawAmt = Number(price?.unit_amount);
+    const planAmount = Number.isFinite(rawAmt) ? rawAmt : null; // cents
     await env.DB.prepare(
-      `UPDATE listings SET is_featured = ?2, featured_until = ?3, stripe_subscription_id = ?4, subscription_status = ?5, updated_at = unixepoch() WHERE id = ?1`,
+      `UPDATE listings SET is_featured = ?2, featured_until = ?3, stripe_subscription_id = ?4, subscription_status = ?5, plan_interval = ?6, plan_amount = ?7, updated_at = unixepoch() WHERE id = ?1`,
     )
-      .bind(listingId, active ? 1 : 0, until || null, sub.id, sub.status)
+      .bind(listingId, active ? 1 : 0, until || null, sub.id, sub.status, planInterval, planAmount)
       .run();
     await audit('system', 'stripe', listingId, 'featured.sync', null, { is_featured: active ? 1 : 0, featured_until: until || null, subscription_status: sub.status });
     const row = await env.DB.prepare(`SELECT slug, state, city_slug, services FROM listings WHERE id = ?1`).bind(listingId).first<{ slug: string; state: string; city_slug: string; services: string }>();
