@@ -4,7 +4,8 @@ import ListingCard from '../../components/ListingCard.astro';
 import QuoteForm from '../../components/QuoteForm.astro';
 import Faq from '../../components/Faq.astro';
 import Socials from '../../components/Socials.astro';
-import { getListingBySlug, nearbyListings, isLive } from '../../lib/db';
+import Reviews from '../../components/Reviews.astro';
+import { getListingBySlug, nearbyListings, isLive, approvedReviews } from '../../lib/db';
 import { formatPhone, parseServices, hostOf, isoDay } from '../../lib/util';
 import { SERVICE_BY_SLUG } from '../../data/services';
 import { STATES } from '../../data/states';
@@ -26,6 +27,9 @@ const customFaq = featured ? parseFaq(l.custom_faq) : [];
 const longAbout = featured && l.long_about ? l.long_about.trim() : '';
 const faq = [...customFaq, ...listingIntents(l, services, attrs, serviceNames)];
 const nearby = l.lat && l.lng ? await nearbyListings(l.lat, l.lng, 6, l.id) : [];
+// Guarded so a review-table hiccup can never take down a public company page.
+let reviews: Awaited<ReturnType<typeof approvedReviews>> = [];
+try { reviews = await approvedReviews(l.id); } catch { reviews = []; }
 const stateName = STATES[l.state] ?? l.state;
 const msg = Astro.url.searchParams.get('msg');
 const url = `${env.SITE_URL}/company/${l.slug}`;
@@ -49,6 +53,7 @@ if (l.is_claimed !== 1) {
   <p class="crumbs"><a href="/">Home</a> › <a href={`/state/${l.state.toLowerCase()}`}>{stateName}</a> › <a href={`/${l.state.toLowerCase()}/${l.city_slug}`}>{l.city}</a> › {l.name}</p>
   {msg === 'lead-sent' && <div class="notice" role="status">Your request was sent. Expect a call or email from the company, usually within one business day.</div>}
   {msg === 'report-sent' && <div class="notice" role="status">Thanks. We review every report within one business day.</div>}
+  {msg === 'review-received' && <div class="notice" role="status">Thanks — your review was received. A person checks each one before it goes live, usually within one business day.</div>}
   <div class="two">
     <article>
       <div class="badges">
@@ -92,6 +97,8 @@ if (l.is_claimed !== 1) {
       </section>
 
       <Faq items={faq} heading={`Questions about ${l.name}`} />
+
+      <Reviews reviews={reviews} name={l.name} reviewUrl={`/company/${l.slug}/review`} />
 
       <section class="small" style="margin-top:32px">
         <p>

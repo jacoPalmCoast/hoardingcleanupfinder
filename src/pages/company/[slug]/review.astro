@@ -1,0 +1,32 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { getListingBySlug } from '../../../lib/db';
+import { env } from '../../../lib/env';
+const l = await getListingBySlug(Astro.params.slug ?? '');
+if (!l || l.status !== 'active') return new Response(null, { status: 404 });
+const siteKey = env.TURNSTILE_SITE_KEY ?? '';
+---
+<Base title={`Review ${l.name}`} description={`Leave a review for ${l.name} in ${l.city}, ${l.state}.`} noindex>
+  <h1>Review {l.name}</h1>
+  <p class="lede">{l.city}, {l.state}. Reviews are read by a person before they go live, usually within one business day. Please describe your own experience — reviews that name no specifics, or that read as spam, are not published.</p>
+  <form action="/api/review" method="post" style="max-width:560px">
+    <input type="hidden" name="listing_id" value={l.id} />
+    <label for="rating">Your rating</label>
+    <select id="rating" name="rating" required>
+      <option value="5">★★★★★ — Excellent</option>
+      <option value="4">★★★★ — Good</option>
+      <option value="3">★★★ — Okay</option>
+      <option value="2">★★ — Poor</option>
+      <option value="1">★ — Bad</option>
+    </select>
+    <label for="body">Your review</label>
+    <textarea id="body" name="body" required minlength="20" maxlength="2000" placeholder="What was the job, and how did it go?"></textarea>
+    <label for="author">Your name <span class="small">(shown with the review)</span></label>
+    <input id="author" name="author" type="text" required maxlength="80" autocomplete="name" />
+    <label for="email">Your email <span class="small">(not shown — used only if we need to verify)</span></label>
+    <input id="email" name="email" type="email" required maxlength="254" autocomplete="email" />
+    {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-size="flexible" style="margin-top:12px"></div>}
+    <button class="btn" type="submit" style="margin-top:12px">Submit review</button>
+  </form>
+  {siteKey && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
+</Base>

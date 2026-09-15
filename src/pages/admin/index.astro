@@ -15,6 +15,7 @@ const recent = (await env.DB.prepare(`SELECT id, name, city, state, is_featured,
     <div class="stat"><b>{c.featured}</b><span>Featured (paid)</span></div>
     <div class="stat"><b>{c.leads_30d}</b><span>Leads, 30 days</span></div>
     <div class="stat"><b>{c.open_reports}</b><span>Open reports</span></div>
+    <div class="stat"><b>{c.pending_reviews}</b><span><a href="/admin/reviews">Reviews to moderate</a></span></div>
     <div class="stat"><b>{c.cities}</b><span>Cities</span></div>
   </div>
   <h2>Featured listings</h2>

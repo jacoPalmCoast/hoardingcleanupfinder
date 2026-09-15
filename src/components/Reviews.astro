@@ -1,0 +1,44 @@
+---
+import type { Review } from '../lib/db';
+import { isoDay } from '../lib/util';
+interface Props { reviews: Review[]; name: string; reviewUrl: string }
+const { reviews, name, reviewUrl } = Astro.props;
+const stars = (n: number) => '★★★★★☆☆☆☆☆'.slice(5 - n, 10 - n);
+const fmt = (ts: number) => {
+  const d = isoDay(ts);
+  if (!d) return '';
+  return new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { year: 'numeric', month: 'long', timeZone: 'UTC' });
+};
+---
+<section class="reviews" aria-labelledby="reviews-h">
+  <div class="reviews-head">
+    <h2 id="reviews-h">{reviews.length > 0 ? `Reviews of ${name}` : `Reviewed ${name}?`}</h2>
+    <a class="btn small secondary" href={reviewUrl}>Leave a review</a>
+  </div>
+  {reviews.length === 0 ? (
+    <p class="small">No customer reviews here yet. If you've worked with {name}, you can be the first — reviews are checked before they go live.</p>
+  ) : (
+    <ul class="review-list">
+      {reviews.map((r) => (
+        <li class="review">
+          <p class="review-stars"><span aria-hidden="true">{stars(r.rating)}</span><span class="sr-only">Rated {r.rating} out of 5</span></p>
+          <p class="review-body">{r.body}</p>
+          <p class="review-meta">{r.author}{fmt(r.created_at) ? ` · ${fmt(r.created_at)}` : ''}</p>
+        </li>
+      ))}
+    </ul>
+  )}
+  <p class="small reviews-note">Reviews are submitted by site visitors and checked by a person before publishing. They are separate from any Google rating shown above.</p>
+</section>
+
+<style>
+  .reviews { margin-top: 32px; }
+  .reviews-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .reviews-head h2 { margin: 0; }
+  .review-list { list-style: none; padding: 0; margin: 16px 0 0; }
+  .review { padding: 16px 0; border-top: 1px solid #e6e8e8; }
+  .review-stars { margin: 0 0 6px; color: #0f6d6a; letter-spacing: 2px; font-size: 16px; }
+  .review-body { margin: 0 0 8px; line-height: 1.55; white-space: pre-line; }
+  .review-meta { margin: 0; font-size: 13px; color: #555; }
+  .reviews-note { margin-top: 16px; color: #666; }
+</style>

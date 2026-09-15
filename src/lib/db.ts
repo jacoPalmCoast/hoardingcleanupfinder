@@ -206,6 +206,7 @@ export async function adminCounts() {
       (SELECT COUNT(*) FROM listings WHERE is_featured = 1 AND featured_until > ?1) AS featured,
       (SELECT COUNT(*) FROM leads WHERE created_at > ?1 - 2592000) AS leads_30d,
       (SELECT COUNT(*) FROM reports WHERE status = 'open') AS open_reports,
+      (SELECT COUNT(*) FROM reviews WHERE status = 'pending') AS pending_reviews,
       (SELECT COUNT(*) FROM cities) AS cities`,
   )
     .bind(t)
@@ -251,4 +252,47 @@ export async function logEmail(e: EmailLog): Promise<void> {
 // field is from a fixed allowlist (never user input) — safe to interpolate.
 export async function markEmailByResendId(resendId: string, field: 'delivered_at' | 'opened_at' | 'clicked_at' | 'bounced_at' | 'complained_at'): Promise<void> {
   await env.DB.prepare(`UPDATE emails SET ${field} = unixepoch() WHERE resend_id = ?1`).bind(resendId).run();
+}
+
+// ---------- Native visitor reviews ----------
+// Collected on-site, moderated before display, and kept separate from the Google
+// rating on the listing. Only `status = 'approved'` rows are ever shown publicly.
+export interface Review {
+  id: number;
+  listing_id: number;
+  author: string;
+  rating: number;
+  body: string;
+  email: string | null;
+  ip: string | null;
+  status: string;
+  created_at: number;
+  moderated_at: number | null;
+}
+
+export async function addReview(r: { listingId: number; author: string; rating: number; body: string; email?: string; ip?: string }): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO reviews(listing_id, author, rating, body, email, ip) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+  ).bind(r.listingId, r.author, r.rating, r.body, r.email ?? null, r.ip ?? null).run();
+}
+
+// Public: approved reviews for a listing, newest first.
+export async function approvedReviews(listingId: number, limit = 30): Promise<Review[]> {
+  const r = await env.DB.prepare(
+    `SELECT * FROM reviews WHERE listing_id = ?1 AND status = 'approved' ORDER BY created_at DESC LIMIT ?2`,
+  ).bind(listingId, limit).all<Review>();
+  return r.results;
+}
+
+// Admin: the moderation queue (pending first, then recently moderated for context).
+export async function reviewsForModeration(limit = 200): Promise<(Review & { name: string; slug: string })[]> {
+  const r = await env.DB.prepare(
+    `SELECT rv.*, l.name, l.slug FROM reviews rv JOIN listings l ON l.id = rv.listing_id
+     WHERE rv.status = 'pending' ORDER BY rv.created_at ASC LIMIT ?1`,
+  ).bind(limit).all<Review & { name: string; slug: string }>();
+  return r.results;
+}
+
+export async function moderateReview(id: number, status: 'approved' | 'rejected'): Promise<void> {
+  await env.DB.prepare(`UPDATE reviews SET status = ?2, moderated_at = unixepoch() WHERE id = ?1`).bind(id, status).run();
 }

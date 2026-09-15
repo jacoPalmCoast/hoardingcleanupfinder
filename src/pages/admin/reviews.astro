@@ -1,0 +1,26 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { reviewsForModeration } from '../../lib/db';
+import { tsToDate } from '../../lib/util';
+const rows = await reviewsForModeration();
+const stars = (n: number) => '★★★★★☆☆☆☆☆'.slice(5 - n, 10 - n);
+---
+<Admin title="Reviews to moderate">
+  {rows.length === 0 ? <p>Nothing pending.</p> : (
+    <div class="table-wrap"><table><thead><tr><th>When</th><th>Listing</th><th>Rating</th><th>Review</th><th>From</th><th></th></tr></thead><tbody>
+      {rows.map((r) => (
+        <tr>
+          <td>{tsToDate(r.created_at)?.toLocaleDateString('en-US') ?? '—'}</td>
+          <td><a href={`/company/${r.slug}`}>{r.name}</a></td>
+          <td style="color:#0f6d6a;letter-spacing:1px;white-space:nowrap">{stars(r.rating)}</td>
+          <td style="max-width:360px;white-space:pre-line">{r.body}</td>
+          <td class="small">{r.author}<br/>{r.email}</td>
+          <td class="actions">
+            <form action="/api/admin/review" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="approve" /><button class="btn small">Approve</button></form>
+            <form action="/api/admin/review" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="reject" /><button class="btn small danger">Reject</button></form>
+          </td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  )}
+</Admin>
