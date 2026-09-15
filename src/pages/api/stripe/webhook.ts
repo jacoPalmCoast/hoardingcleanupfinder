@@ -5,7 +5,7 @@ import { audit } from '../../../lib/audit';
 import { queueIndexNow } from '../../../lib/indexnow';
 import { stripe, GRACE_SECONDS } from '../../../lib/stripe';
 import { sendEmail, emailShell } from '../../../lib/services';
-import { escapeHtml } from '../../../lib/util';
+import { escapeHtml, now } from '../../../lib/util';
 
 // Invariant 2: this handler is the only writer of is_featured / featured_until.
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -42,8 +42,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
     const active = sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due';
     const item = sub.items.data[0];
-    const periodEnd = (item as any)?.current_period_end ?? (sub as any).current_period_end ?? 0;
-    const until = active ? Number(periodEnd) + GRACE_SECONDS : 0;
+    const rawEnd = (item as any)?.current_period_end ?? (sub as any).current_period_end;
+    const pe = Number(rawEnd);
+    // Never leave an active (paid) subscription without a featured window: if Stripe omits/garbles the
+    // period end, fall back to 31 days out so the customer isn't charged and shown as not-featured.
+    const hasEnd = Number.isFinite(pe) && pe > 0;
+    if (active && !hasEnd) console.warn(`stripe webhook: missing current_period_end for sub ${sub.id}, listing ${listingId}; using 31-day fallback`);
+    const periodEnd = hasEnd ? pe : now() + 31 * 86400;
+    const until = active ? periodEnd + GRACE_SECONDS : 0;
     await env.DB.prepare(
       `UPDATE listings SET is_featured = ?2, featured_until = ?3, stripe_subscription_id = ?4, subscription_status = ?5, updated_at = unixepoch() WHERE id = ?1`,
     )

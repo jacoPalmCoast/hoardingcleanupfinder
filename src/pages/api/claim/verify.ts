@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { env } from '../../../lib/env';
 import { audit } from '../../../lib/audit';
-import { clean, isEmail, redirect, sha256, now, hostOf, escapeHtml } from '../../../lib/util';
+import { clean, isEmail, redirect, sha256, now, hostOf, escapeHtml, timingSafeEqual } from '../../../lib/util';
 import { getOrCreateOwner, createOwnerSession, isSecure, sendEmail, emailShell } from '../../../lib/services';
 import { getListingById } from '../../../lib/db';
 
@@ -20,7 +20,7 @@ export const POST: APIRoute = async ({ request }) => {
     .bind(l.id, email)
     .first<{ id: number; code: string; attempts: number; created_at: number }>();
   if (!claim || claim.attempts >= 5 || now() - claim.created_at > 20 * 60) return redirect(back);
-  if (claim.code !== (await sha256(code))) {
+  if (!timingSafeEqual(claim.code, await sha256(code))) {
     await env.DB.prepare(`UPDATE claims SET attempts = attempts + 1 WHERE id = ?1`).bind(claim.id).run();
     return redirect(back);
   }

@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { env } from '../../../lib/env';
-import { clean, isEmail, redirect, sha256, now } from '../../../lib/util';
+import { clean, isEmail, redirect, sha256, now, timingSafeEqual } from '../../../lib/util';
 import { createOwnerSession, isSecure } from '../../../lib/services';
 
 export const POST: APIRoute = async ({ request }) => {
@@ -13,7 +13,7 @@ export const POST: APIRoute = async ({ request }) => {
     .bind(email, now())
     .first<{ id: number; code: string; attempts: number }>();
   if (!row || row.attempts >= 5) return redirect(back);
-  if (row.code !== (await sha256(code))) {
+  if (!timingSafeEqual(row.code, await sha256(code))) {
     await env.DB.prepare(`UPDATE login_codes SET attempts = attempts + 1 WHERE id = ?1`).bind(row.id).run();
     return redirect(back);
   }

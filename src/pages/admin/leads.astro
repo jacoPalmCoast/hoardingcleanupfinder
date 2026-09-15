@@ -2,7 +2,8 @@
 import Admin from '../../layouts/Admin.astro';
 import { env } from '../../lib/env';
 const rows = (await env.DB.prepare(`SELECT * FROM leads ORDER BY created_at DESC LIMIT 200`).all<any>()).results;
-const ids = [...new Set(rows.flatMap((r: any) => JSON.parse(r.routed_to || '[]')))] as number[];
+const routed = (v: string | null): number[] => { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } };
+const ids = [...new Set(rows.flatMap((r: any) => routed(r.routed_to)))] as number[];
 const names: Record<number, string> = {};
 if (ids.length) for (const row of (await env.DB.prepare(`SELECT id, name FROM listings WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all<any>()).results) names[row.id] = row.name;
 ---
@@ -15,7 +16,7 @@ if (ids.length) for (const row of (await env.DB.prepare(`SELECT id, name FROM li
           <td>{r.name}<br/>{r.email}<br/>{r.phone}</td>
           <td>{r.zip} {r.city} {r.state}</td>
           <td>{r.service}</td>
-          <td>{JSON.parse(r.routed_to || '[]').map((id: number) => names[id] ?? id).join(', ') || '—'}</td>
+          <td>{routed(r.routed_to).map((id: number) => names[id] ?? id).join(', ') || '—'}</td>
           <td>{r.message}</td>
           <td class="actions">
             <form action="/api/admin/lead" method="post"><input type="hidden" name="id" value={r.id} />
