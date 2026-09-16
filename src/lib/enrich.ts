@@ -64,8 +64,9 @@ export async function mxOk(domain: string): Promise<boolean> {
 }
 
 function score(source: string, c: Classified, siteHost: string | null, mx: boolean): number {
-  let s = source === 'mailto' ? 55 : source === 'listing' ? 50 : source === 'website' ? 42 : source === 'hunter' ? 60 : 25;
-  if (siteHost && sameDomain(c.domain, siteHost)) s += 30;
+  let s = source === 'mailto' ? 55 : source === 'listing' ? 50 : source === 'website' ? 42 : source === 'hunter' ? 60 : 20;
+  // Own-domain bonus only for addresses actually found (a guess is on the domain by construction).
+  if (source !== 'guess' && siteHost && sameDomain(c.domain, siteHost)) s += 30;
   if (mx) s += 18;
   if (c.is_free) s -= 8;
   return Math.max(0, Math.min(100, s));
@@ -75,7 +76,8 @@ async function upsertCandidate(listingId: number, c: Classified, source: string,
   if (c.is_disposable) return; // never store disposable
   const mx = await mxOk(c.domain);
   const conf = score(source, c, siteHost, mx);
-  const status = mx && conf >= 60 ? 'verified' : 'candidate';
+  // A guess is never "verified" — only an address actually found (or provider-confirmed) can be.
+  const status = source !== 'guess' && mx && conf >= 60 ? 'verified' : 'candidate';
   await env.DB.prepare(
     `INSERT INTO email_candidates(listing_id, email, source, confidence, mx_ok, is_role, is_free, is_disposable, status, checked_at)
      VALUES (?1,?2,?3,?4,?5,?6,?7,0,?8,unixepoch())

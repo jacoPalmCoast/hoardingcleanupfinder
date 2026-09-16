@@ -77,10 +77,12 @@ export async function campaignStats(id: number): Promise<{ queued: number; sent:
 export async function queueCampaign(id: number): Promise<number> {
   const c = await getCampaign(id);
   if (!c || !isSegment(c.segment)) return 0;
-  const list = await recipients(c.segment);
+  // Dedupe by email so a domain shared across listings (e.g. franchise HQ) is contacted once.
+  const seen = new Set<string>();
+  const unique = list.filter((r) => { const e = r.email.toLowerCase(); if (seen.has(e)) return false; seen.add(e); return true; });
   let n = 0;
-  for (let i = 0; i < list.length; i += 50) {
-    const batch = list.slice(i, i + 50).map((r) =>
+  for (let i = 0; i < unique.length; i += 50) {
+    const batch = unique.slice(i, i + 50).map((r) =>
       env.DB.prepare(`INSERT OR IGNORE INTO outreach_sends(campaign_id, listing_id, email) VALUES (?1,?2,?3)`).bind(id, r.id, r.email.toLowerCase()),
     );
     if (batch.length) { await env.DB.batch(batch); n += batch.length; }
