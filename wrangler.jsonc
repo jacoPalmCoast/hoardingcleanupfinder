@@ -1,11 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "hoardingcleanupfinder",
-  "main": "@astrojs/cloudflare/entrypoints/server",
+  "main": "./src/worker.ts",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": "./dist", "binding": "ASSETS" },
   "observability": { "enabled": true },
+  // Native Cloudflare Cron Trigger — runs the daily job via the scheduled() handler in
+  // src/worker.ts, inside the Worker runtime (no public request, no edge/WAF). 13:00 UTC daily.
+  "triggers": { "crons": ["0 13 * * *"] },
   // keep_vars: a deploy must never wipe variables set in the dashboard (it did once — it
   // dropped TURNSTILE_SITE_KEY and reset FROM_EMAIL). Public, non-secret values live here;
   // secrets only in the dashboard.
