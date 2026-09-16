@@ -342,8 +342,10 @@ export async function listingSocials(listingId: number): Promise<{ platform: str
 
 // ---- AI extraction agent (Workers AI) — reads page text like an analyst to pull names/emails ----
 export async function aiEnabled(): Promise<boolean> { return !!env.AI && (await getSetting('enrich_ai')) === 'on'; }
-async function aiExtract(text: string): Promise<{ people: { name: string; role?: string }[]; emails: string[] }> {
-  if (!env.AI) return { people: [], emails: [] };
+// Returns null when the model call FAILS (so we don't mark the listing attempted); returns an
+// (possibly empty) result when it succeeds.
+async function aiExtract(text: string): Promise<{ people: { name: string; role?: string }[]; emails: string[] } | null> {
+  if (!env.AI) return null;
   const prompt = `You are extracting contact data from a cleanup company's website text. Extract the real PEOPLE (person name + their role/title if stated, e.g. Owner, President) and any EMAIL addresses for this business. Do NOT include company names as people. Respond with ONLY compact JSON, no prose: {"people":[{"name":"First Last","role":"Owner"}],"emails":["x@y.com"]}\n\nTEXT:\n${text.slice(0, 6000)}`;
   try {
     const res = (await env.AI.run('@cf/meta/llama-3.1-8b-instruct', { messages: [{ role: 'user', content: prompt }], max_tokens: 400 })) as { response?: string };
@@ -351,7 +353,7 @@ async function aiExtract(text: string): Promise<{ people: { name: string; role?:
     if (!jsonStr) return { people: [], emails: [] };
     const parsed = JSON.parse(jsonStr) as { people?: { name?: string; role?: string }[]; emails?: string[] };
     return { people: Array.isArray(parsed.people) ? parsed.people.map((p) => ({ name: String(p.name ?? ''), role: p.role ? String(p.role) : undefined })) : [], emails: Array.isArray(parsed.emails) ? parsed.emails.map(String) : [] };
-  } catch { return { people: [], emails: [] }; }
+  } catch { return null; }
 }
 // Bounded, gated pass: for already-crawled listings that still have NO named contact, re-read the
 // homepage + about page with the LLM to find owner names/emails the pattern rules missed.
@@ -363,23 +365,26 @@ export async function aiEnrichBatch(limit = 20): Promise<{ processed: number; fo
        AND NOT EXISTS (SELECT 1 FROM people p WHERE p.listing_id = l.id AND p.source IN ('schema','team_page','hunter','smart'))
      ORDER BY l.id LIMIT ?1`,
   ).bind(limit).all<{ id: number; website: string }>()).results;
-  let found = 0;
+  let found = 0, processed = 0;
+  const markDone = (id: number) => env.DB.prepare(`UPDATE enrichment_state SET ai_done = 1 WHERE listing_id = ?1`).bind(id).run();
   for (const r of rows) {
-    await env.DB.prepare(`UPDATE enrichment_state SET ai_done = 1 WHERE listing_id = ?1`).bind(r.id).run(); // mark attempted (don't retry)
-    const host = hostOfUrl(r.website); if (!host) continue;
+    const host = hostOfUrl(r.website); if (!host) { await markDone(r.id); continue; }
     const base = `https://${host}`;
     const texts: string[] = [];
     const home = await fetchText(base) ?? await fetchText(`https://www.${host}`);
     if (home) texts.push(stripTags(home));
     const about = (await fetchText(`${base}/about`)) ?? (await fetchText(`${base}/about-us`)) ?? (await fetchText(`${base}/team`));
     if (about) texts.push(stripTags(about));
-    if (texts.length === 0) continue;
+    if (texts.length === 0) { await markDone(r.id); continue; }
     const ex = await aiExtract(texts.join('\n').slice(0, 8000));
+    if (ex === null) break; // model unavailable — stop; don't mark, retry next run
     for (const p of ex.people) { const name = p.name.trim(); if (looksLikeName(name)) { await upsertPerson(r.id, name, p.role ? (normRole(p.role) ?? p.role.slice(0, 40)) : null, null, 'smart', 70); found++; } }
     for (const e of ex.emails) { const c = classify(e); if (c) { await upsertCandidate(r.id, c, 'website', host); } }
     await promoteBest(r.id); await promotePerson(r.id);
+    await markDone(r.id);
+    processed++;
   }
-  return { processed: rows.length, found };
+  return { processed, found };
 }
 
 // Process a batch of listings that have a website and haven't been crawled yet.
