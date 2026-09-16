@@ -2,7 +2,7 @@
 import Admin from '../../../layouts/Admin.astro';
 import { getListingById, listingStats, isLive } from '../../../lib/db';
 import { companyContacts, companyTimeline, STAGES, STAGE_LABEL } from '../../../lib/crm';
-import { hunterEnabled, listingPeople, listingSocials } from '../../../lib/enrich';
+import { hunterEnabled, listingPeople, listingSocials, opencorpEnabled } from '../../../lib/enrich';
 import { env } from '../../../lib/env';
 import { now, tsToDate, formatPhone } from '../../../lib/util';
 
@@ -27,9 +27,16 @@ const candidates = (await env.DB.prepare(
   `SELECT id, email, source, confidence, mx_ok, status FROM email_candidates WHERE listing_id = ?1 AND status != 'rejected' ORDER BY (status='primary') DESC, confidence DESC LIMIT 8`,
 ).bind(id).all<{ id: number; email: string; source: string; confidence: number; mx_ok: number | null; status: string }>()).results;
 const hunter = hunterEnabled();
+const records = opencorpEnabled();
 const people = await listingPeople(id);
 const socials = await listingSocials(id);
 const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) ?? '';
+const PLATFORM_LABEL: Record<string, string> = {
+  facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', x: 'X (Twitter)', youtube: 'YouTube',
+  tiktok: 'TikTok', yelp: 'Yelp', bbb: 'BBB', trustpilot: 'Trustpilot', google: 'Google Business',
+  angi: 'Angi', yellowpages: 'Yellow Pages', manta: 'Manta', thumbtack: 'Thumbtack', homeadvisor: 'HomeAdvisor',
+  nextdoor: 'Nextdoor', foursquare: 'Foursquare', chamber: 'Chamber of Commerce', alignable: 'Alignable', mapquest: 'MapQuest',
+};
 ---
 <Admin title={l.name}>
   <p class="small" style="margin:-6px 0 10px"><a href="/admin/crm">← Pipeline</a> · <a href={`/company/${l.slug}`}>View public page</a> · <a href={`/admin/analytics?id=${id}`}>Full analytics</a></p>
@@ -110,10 +117,11 @@ const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 
 
       {socials.length > 0 && (
         <div class="card" style="margin-top:14px">
-          <h3 style="margin:0 0 8px">Online profiles</h3>
+          <h3 style="margin:0 0 8px">Profiles &amp; listings</h3>
           <ul style="list-style:none;padding:0;margin:0">
-            {socials.map((sc) => <li style="margin-bottom:4px"><a href={sc.url} rel="nofollow noopener" target="_blank">{sc.platform}</a></li>)}
+            {socials.map((sc) => <li style="margin-bottom:4px"><a href={sc.url} rel="nofollow noopener" target="_blank">{PLATFORM_LABEL[sc.platform] ?? sc.platform}</a></li>)}
           </ul>
+          <p class="small" style="margin:8px 0 0;color:#666">Where this business appears online. We link out only — these directories aren't scraped.</p>
         </div>
       )}
 
@@ -128,6 +136,9 @@ const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 
               </li>
             ))}
           </ul>
+        )}
+        {records && l.name && (
+          <form action="/api/admin/enrich" method="post" style="margin-top:10px"><input type="hidden" name="action" value="records_one" /><input type="hidden" name="listing_id" value={id} /><input type="hidden" name="back" value={`/admin/crm/${id}`} /><button class="btn small secondary" type="submit">Look up owner in state records</button></form>
         )}
       </div>
 

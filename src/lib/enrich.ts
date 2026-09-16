@@ -101,7 +101,7 @@ async function fetchText(url: string, timeoutMs = 7000): Promise<string | null> 
 }
 
 export interface CrawlResult { found: number; status: string }
-export async function crawlListing(listing: { id: number; website: string | null; email: string | null }): Promise<CrawlResult> {
+export async function crawlListing(listing: { id: number; website: string | null; email: string | null; name?: string | null; state?: string | null }): Promise<CrawlResult> {
   const host = listing.website ? hostOfUrl(listing.website) : null;
   // Fold any scraped listing email in as a candidate first (still validated + scored).
   if (listing.email) { const c = classify(listing.email); if (c) await upsertCandidate(listing.id, c, 'listing', host); }
@@ -135,6 +135,12 @@ export async function crawlListing(listing: { id: number; website: string | null
   const socials = new Map<string, string>();
   for (const html of pages) for (const sc of extractSocial(html)) socials.set(sc.url, sc.platform);
   await storeSocial(listing.id, [...socials.entries()].map(([url, platform]) => ({ platform, url })));
+
+  // Public-records fallback for owner/officer NAMES the website never published: query state
+  // business filings (OpenCorporates) by company name + state and store officers as people.
+  if (opencorpEnabled() && listing.name && !(await hasNamedPerson(listing.id))) {
+    await opencorpEnrich(listing.id, listing.name, listing.state ?? null);
+  }
 
   // Provider fallback for the hard cases: only when the site published nothing AND a key is set —
   // bounded to one domain-search call per listing, so it targets Hunter spend where it adds most.
@@ -189,6 +195,12 @@ const ROLE_PATTERNS: [RegExp, string][] = [
   [/\boffice manager\b/i, 'Office Manager'],
   [/\b(managing director|director of operations|director)\b/i, 'Director'],
   [/\b(vice president|vp)\b/i, 'Vice President'],
+  // LLC / corporate-filing officer titles (OpenCorporates)
+  [/\bmanaging member\b/i, 'Managing Member'],
+  [/\b(authorized )?member\b/i, 'Member'],
+  [/\borganizer\b/i, 'Organizer'],
+  [/\b(registered agent|agent)\b/i, 'Registered Agent'],
+  [/\b(treasurer|secretary|incorporator)\b/i, 'Officer'],
   [/\bmanager\b/i, 'Manager'],
 ];
 function normRole(text: string): string | null { for (const [re, label] of ROLE_PATTERNS) if (re.test(text)) return label; return null; }
@@ -274,7 +286,7 @@ async function inferNameFromPrimaryEmail(listingId: number): Promise<void> {
 export async function promotePerson(listingId: number): Promise<void> {
   const best = await env.DB.prepare(
     `SELECT id FROM people WHERE listing_id = ?1
-     ORDER BY (role IN ('Owner','Owner/Operator','Co-Owner','Founder','Co-Founder','President','Principal')) DESC,
+     ORDER BY (role IN ('Owner','Owner/Operator','Co-Owner','Founder','Co-Founder','President','Principal','Managing Member','Member')) DESC,
               (role IS NOT NULL) DESC, confidence DESC LIMIT 1`,
   ).bind(listingId).first<{ id: number }>();
   if (!best) return;
@@ -313,9 +325,16 @@ export function discoverInternalLinks(html: string, host: string): string[] {
 }
 
 const SOCIAL: [RegExp, string][] = [
+  // Social
   [/facebook\.com/i, 'facebook'], [/instagram\.com/i, 'instagram'], [/linkedin\.com/i, 'linkedin'],
-  [/(?:twitter\.com|\bx\.com)/i, 'x'], [/yelp\.com/i, 'yelp'], [/(?:youtube\.com|youtu\.be)/i, 'youtube'],
-  [/tiktok\.com/i, 'tiktok'], [/bbb\.org/i, 'bbb'],
+  [/(?:twitter\.com|\bx\.com)/i, 'x'], [/(?:youtube\.com|youtu\.be)/i, 'youtube'], [/tiktok\.com/i, 'tiktok'],
+  // Business listings / directories / reviews
+  [/yelp\.com/i, 'yelp'], [/bbb\.org/i, 'bbb'], [/trustpilot\.com/i, 'trustpilot'],
+  [/(?:g\.page|google\.com\/maps|maps\.google|business\.site|goo\.gl\/maps)/i, 'google'],
+  [/(?:angi\.com|angieslist\.com)/i, 'angi'], [/(?:yellowpages\.com|yp\.com)/i, 'yellowpages'],
+  [/manta\.com/i, 'manta'], [/thumbtack\.com/i, 'thumbtack'], [/homeadvisor\.com/i, 'homeadvisor'],
+  [/nextdoor\.com/i, 'nextdoor'], [/(?:foursquare\.com|4sq\.com)/i, 'foursquare'],
+  [/chamberofcommerce\.com/i, 'chamber'], [/alignable\.com/i, 'alignable'], [/(?:mapquest\.com)/i, 'mapquest'],
 ];
 export function extractSocial(html: string): { platform: string; url: string }[] {
   const out = new Map<string, string>();
@@ -390,12 +409,12 @@ export async function aiEnrichBatch(limit = 20): Promise<{ processed: number; fo
 // Process a batch of listings that have a website and haven't been crawled yet.
 export async function runBatch(limit = 12): Promise<{ processed: number; found: number }> {
   const rows = (await env.DB.prepare(
-    `SELECT l.id, l.website, l.email FROM listings l
+    `SELECT l.id, l.website, l.email, l.name, l.state FROM listings l
      LEFT JOIN enrichment_state es ON es.listing_id = l.id
      WHERE l.status = 'active' AND l.website IS NOT NULL AND l.website != ''
        AND (es.status IS NULL OR es.status = 'pending')
      ORDER BY l.id LIMIT ?1`,
-  ).bind(limit).all<{ id: number; website: string | null; email: string | null }>()).results;
+  ).bind(limit).all<{ id: number; website: string | null; email: string | null; name: string | null; state: string | null }>()).results;
   let found = 0;
   // Small concurrency pool to keep within subrequest/time limits.
   const pool = 4;
@@ -482,6 +501,112 @@ export async function hunterEnrich(listingId: number, host: string): Promise<num
     if (n) { await promoteBest(listingId); await promotePerson(listingId); }
     return n;
   } catch { return 0; }
+}
+
+// ---- Public records provider (OpenCorporates) — owner/officer names from state business filings ----
+export function opencorpEnabled(): boolean { return !!env.OPENCORPORATES_TOKEN; }
+
+async function hasNamedPerson(listingId: number): Promise<boolean> {
+  const r = await env.DB.prepare(
+    `SELECT 1 FROM people WHERE listing_id = ?1 AND source IN ('schema','team_page','hunter','smart','records') LIMIT 1`,
+  ).bind(listingId).first();
+  return !!r;
+}
+
+// Normalize a listing's business name for a records search: drop trailing legal suffixes/punctuation
+// so "Smith Hoarding Cleanup, LLC" matches the filing "SMITH HOARDING CLEANUP LLC".
+function cleanCompanyName(name: string): string {
+  return name.replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+// Token overlap between the listing name and a filing name — guards against a wrong-company match.
+function nameMatch(a: string, b: string): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/\b(llc|inc|incorporated|co|corp|corporation|company|ltd|lp|llp|pllc|the)\b/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 2);
+  const A = new Set(norm(a)); const B = new Set(norm(b));
+  if (A.size === 0 || B.size === 0) return false;
+  let hit = 0; for (const w of A) if (B.has(w)) hit++;
+  return hit >= Math.min(2, A.size) && hit / A.size >= 0.5;
+}
+const US_STATE_CODE: Record<string, string> = {
+  AL: 'al', AK: 'ak', AZ: 'az', AR: 'ar', CA: 'ca', CO: 'co', CT: 'ct', DE: 'de', FL: 'fl', GA: 'ga',
+  HI: 'hi', ID: 'id', IL: 'il', IN: 'in', IA: 'ia', KS: 'ks', KY: 'ky', LA: 'la', ME: 'me', MD: 'md',
+  MA: 'ma', MI: 'mi', MN: 'mn', MS: 'ms', MO: 'mo', MT: 'mt', NE: 'ne', NV: 'nv', NH: 'nh', NJ: 'nj',
+  NM: 'nm', NY: 'ny', NC: 'nc', ND: 'nd', OH: 'oh', OK: 'ok', OR: 'or', PA: 'pa', RI: 'ri', SC: 'sc',
+  SD: 'sd', TN: 'tn', TX: 'tx', UT: 'ut', VT: 'vt', VA: 'va', WA: 'wa', WV: 'wv', WI: 'wi', WY: 'wy', DC: 'dc',
+};
+// Officer roles worth keeping as a business contact (skip agents-for-service that are law firms, etc.).
+function officerRole(position: string | null | undefined): string | null {
+  if (!position) return 'Member';
+  const r = normRole(position);
+  return r ?? position.trim().slice(0, 40);
+}
+// Query OpenCorporates for the company by name + jurisdiction, take the best-matching active filing,
+// and store its officers as people (source 'records'). One search + one company fetch per listing.
+export async function opencorpEnrich(listingId: number, name: string, state: string | null): Promise<number> {
+  const token = env.OPENCORPORATES_TOKEN; if (!token) return 0;
+  const juris = state ? US_STATE_CODE[state.toUpperCase()] : null;
+  const q = cleanCompanyName(name); if (!q) return 0;
+  try {
+    const url = `https://api.opencorporates.com/v0.4/companies/search?q=${encodeURIComponent(q)}` +
+      (juris ? `&jurisdiction_code=us_${juris}` : '') + `&order=score&per_page=5&api_token=${token}`;
+    const res = await fetch(url, { headers: { accept: 'application/json' } });
+    if (!res.ok) return 0;
+    const j = (await res.json()) as { results?: { companies?: { company?: { name?: string; company_number?: string; jurisdiction_code?: string; inactive?: boolean } }[] } };
+    const companies = (j.results?.companies ?? []).map((c) => c.company).filter(Boolean) as { name?: string; company_number?: string; jurisdiction_code?: string; inactive?: boolean }[];
+    // Prefer an active filing whose name actually matches the listing.
+    const best = companies.find((c) => c.name && nameMatch(name, c.name) && !c.inactive)
+      ?? companies.find((c) => c.name && nameMatch(name, c.name));
+    if (!best || !best.company_number || !best.jurisdiction_code) return 0;
+    // Fetch the full company record to read its officers.
+    const detUrl = `https://api.opencorporates.com/v0.4/companies/${best.jurisdiction_code}/${encodeURIComponent(best.company_number)}?api_token=${token}`;
+    const detRes = await fetch(detUrl, { headers: { accept: 'application/json' } });
+    if (!detRes.ok) return 0;
+    const det = (await detRes.json()) as { results?: { company?: { officers?: { officer?: { name?: string; position?: string; inactive?: boolean } }[] } } };
+    const officers = (det.results?.company?.officers ?? []).map((o) => o.officer).filter(Boolean) as { name?: string; position?: string; inactive?: boolean }[];
+    let n = 0;
+    for (const o of officers) {
+      if (o.inactive) continue;
+      // Filings store names as "LAST, FIRST" or "FIRST LAST" in caps — normalize to "First Last".
+      const nm = normalizeOfficerName(o.name); if (!nm) continue;
+      await upsertPerson(listingId, nm, officerRole(o.position), null, 'records', 78);
+      n++;
+      if (n >= 6) break;
+    }
+    if (n) await promotePerson(listingId);
+    return n;
+  } catch { return 0; }
+}
+// Bounded pass: run the records provider over active listings that still have NO named contact
+// (owner-name gap), independent of whether they have a website. Cheap-ish: 2 API calls per listing.
+export async function opencorpBatch(limit = 20): Promise<{ processed: number; found: number }> {
+  if (!opencorpEnabled()) return { processed: 0, found: 0 };
+  const rows = (await env.DB.prepare(
+    `SELECT l.id, l.name, l.state FROM listings l
+     WHERE l.status = 'active' AND l.name IS NOT NULL AND l.name != ''
+       AND NOT EXISTS (SELECT 1 FROM people p WHERE p.listing_id = l.id AND p.source IN ('schema','team_page','hunter','smart','records'))
+       AND NOT EXISTS (SELECT 1 FROM records_state rs WHERE rs.listing_id = l.id)
+     ORDER BY l.id LIMIT ?1`,
+  ).bind(limit).all<{ id: number; name: string; state: string | null }>()).results;
+  let found = 0, processed = 0;
+  for (const r of rows) {
+    const n = await opencorpEnrich(r.id, r.name, r.state);
+    found += n; processed++;
+    await env.DB.prepare(`INSERT OR REPLACE INTO records_state(listing_id, found, last_run) VALUES (?1,?2,unixepoch())`).bind(r.id, n).run();
+  }
+  return { processed, found };
+}
+
+// "SMITH, JOHN A" / "JOHN SMITH" (caps) -> "John Smith". Returns null if it doesn't look like a person.
+export function normalizeOfficerName(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let s = raw.replace(/\s+/g, ' ').trim();
+  if (/\b(LLC|INC|CORP|COMPANY|TRUST|BANK|GROUP|HOLDINGS|SERVICES|LP|LLP|PLLC|MANAGEMENT|CAPITAL|PARTNERS|ASSOCIATES|ENTERPRISES)\b/i.test(s)) return null;
+  if (s.includes(',')) { const [last, first] = s.split(',', 2); s = `${first.trim()} ${last.trim()}`; }
+  // Drop a trailing middle initial and any suffix.
+  const parts = s.split(/\s+/).filter((p) => !/^(jr|sr|ii|iii|iv|md|esq)\.?$/i.test(p));
+  const titled = parts.map((p) => /^[A-Za-z][A-Za-z'’\-]*$/.test(p) ? p[0].toUpperCase() + p.slice(1).toLowerCase() : p).filter(Boolean);
+  const clean = titled.filter((p) => !/^[A-Z]$/.test(p)); // drop bare middle initials like "A"
+  const cand = (clean.length >= 2 ? clean : titled).slice(0, 3).join(' ');
+  return looksLikeName(cand) ? cand : null;
 }
 
 // Verify a single address with Hunter's verifier; promotes/demotes by the result.

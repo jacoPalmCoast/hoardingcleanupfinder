@@ -30,6 +30,8 @@ export interface Env {
   CF_ACCOUNT_ID?: string;           // Cloudflare account tag for the GraphQL Analytics query (public)
   CF_RUM_SITE_TAG?: string;         // Web Analytics site tag to filter RUM events on (public)
   HUNTER_API_KEY?: string;          // optional Hunter.io key — powers provider-based email enrichment + verification
+  OPENCORPORATES_TOKEN?: string;    // optional OpenCorporates API token — owner/officer names from state filings
+  GOOGLE_PLACES_KEY?: string;       // optional Google Places API key — extra business details by place_id
 }
 
 export const env = cfEnv as unknown as Env;

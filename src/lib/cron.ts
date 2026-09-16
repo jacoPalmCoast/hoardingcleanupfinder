@@ -3,7 +3,7 @@ import { now, escapeHtml } from './util';
 import { sendEmail, emailShell } from './services';
 import { rollupEvents, pruneEvents, statsForDayRange, type ListingStats } from './db';
 import { renderTemplate } from './outreach';
-import { runBatch, aiEnrichBatch } from './enrich';
+import { runBatch, aiEnrichBatch, opencorpBatch } from './enrich';
 import { mailingAddress } from './settings';
 
 // Daily job entry point. Invoked by the scheduler (GitHub Actions or cron-worker) via
@@ -210,6 +210,7 @@ export async function runDailyJobs(): Promise<CronResult> {
     ['outreach', outreach],
     ['enrich', async () => (await runBatch(80)).found],
     ['ai_enrich', async () => (await aiEnrichBatch(25)).found], // no-op unless the AI toggle is on
+    ['records', async () => (await opencorpBatch(30)).found],   // no-op unless OPENCORPORATES_TOKEN is set
   ];
   for (const [name, fn] of jobs) {
     try { ran.push(`${name}:${await fn()}`); } catch (e) { console.error('cron ' + name, (e as Error)?.message); ran.push(`${name}:err`); }

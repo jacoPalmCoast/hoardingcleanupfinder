@@ -3,7 +3,7 @@ import { requireAdmin } from '../../../lib/adminGuard';
 import { clean, redirect } from '../../../lib/util';
 import { env } from '../../../lib/env';
 import { getListingById } from '../../../lib/db';
-import { runBatch, hunterEnrich, hunterVerify, promoteBest, hostOfUrl, inferAllNames, aiEnrichBatch, aiEnabled } from '../../../lib/enrich';
+import { runBatch, hunterEnrich, hunterVerify, promoteBest, hostOfUrl, inferAllNames, aiEnrichBatch, aiEnabled, opencorpBatch, opencorpEnabled, opencorpEnrich } from '../../../lib/enrich';
 
 export const POST: APIRoute = async ({ request }) => {
   const denied = await requireAdmin(request);
@@ -26,6 +26,19 @@ export const POST: APIRoute = async ({ request }) => {
     const n = Math.min(Math.max(Number(clean(form.get('n'), 4)) || 15, 1), 40);
     const r = await aiEnrichBatch(n);
     return redirect(`/admin/crm/enrichment?airan=${r.processed}&aifound=${r.found}`);
+  }
+  if (action === 'records_batch') {
+    if (!opencorpEnabled()) return redirect('/admin/crm/enrichment?recoff=1');
+    const n = Math.min(Math.max(Number(clean(form.get('n'), 4)) || 20, 1), 40);
+    const r = await opencorpBatch(n);
+    return redirect(`/admin/crm/enrichment?recran=${r.processed}&recfound=${r.found}`);
+  }
+  if (action === 'records_one') {
+    if (!opencorpEnabled()) return redirect(back);
+    const id = Number(clean(form.get('listing_id'), 12));
+    const l = id ? await getListingById(id) : null;
+    if (l && l.name) await opencorpEnrich(l.id, l.name, l.state ?? null);
+    return redirect(back);
   }
   if (action === 'set_primary' || action === 'reject') {
     const cid = Number(clean(form.get('candidate_id'), 12));

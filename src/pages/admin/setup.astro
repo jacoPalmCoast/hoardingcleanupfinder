@@ -30,6 +30,8 @@ const groups: { title: string; rows: Row[] }[] = [
   { title: 'Analytics & enrichment', rows: [
     { label: 'Cloudflare traffic (admin)', ok: !!env.CF_ANALYTICS_TOKEN, note: env.CF_ANALYTICS_TOKEN ? 'Traffic pulled into Admin → Analytics.' : 'Add CF_ANALYTICS_TOKEN to mirror Cloudflare traffic into admin.' },
     { label: 'Email verification (Hunter)', ok: !!env.HUNTER_API_KEY, note: env.HUNTER_API_KEY ? 'Provider enrichment + verification on.' : 'Optional: add HUNTER_API_KEY for verified deliverability + more found emails.' },
+    { label: 'Owner names from records (OpenCorporates)', ok: !!env.OPENCORPORATES_TOKEN, note: env.OPENCORPORATES_TOKEN ? 'Registered owner/officer names pulled from state filings for companies with no named contact.' : 'Optional: add OPENCORPORATES_TOKEN to pull registered owner/officer names from state business filings.' },
+    { label: 'Business details (Google Places)', ok: !!env.GOOGLE_PLACES_KEY, note: env.GOOGLE_PLACES_KEY ? 'Connected.' : 'Optional: add GOOGLE_PLACES_KEY for extra verified business details (hours, phone, address) by place.' },
   ]},
   { title: 'Security & automation', rows: [
     { label: 'Spam protection (Turnstile)', ok: !!env.TURNSTILE_SECRET_KEY, note: env.TURNSTILE_SECRET_KEY ? 'Forms protected.' : 'Set TURNSTILE keys to protect public forms.' },
