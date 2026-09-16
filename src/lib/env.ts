@@ -28,6 +28,7 @@ export interface Env {
   CF_ANALYTICS_TOKEN?: string;      // Cloudflare API token (read-only Account Analytics) — pulls Web Analytics into admin
   CF_ACCOUNT_ID?: string;           // Cloudflare account tag for the GraphQL Analytics query (public)
   CF_RUM_SITE_TAG?: string;         // Web Analytics site tag to filter RUM events on (public)
+  HUNTER_API_KEY?: string;          // optional Hunter.io key — powers provider-based email enrichment + verification
 }
 
 export const env = cfEnv as unknown as Env;

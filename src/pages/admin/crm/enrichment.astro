@@ -1,0 +1,68 @@
+---
+import Admin from '../../../layouts/Admin.astro';
+import { coverage, hunterEnabled } from '../../../lib/enrich';
+import { env } from '../../../lib/env';
+
+const cov = await coverage();
+const hunter = hunterEnabled();
+const ran = Astro.url.searchParams.get('ran');
+const found = Astro.url.searchParams.get('found');
+const pct = cov.total ? Math.round((cov.withEmail / cov.total) * 100) : 0;
+
+const cands = (await env.DB.prepare(
+  `SELECT ec.id, ec.listing_id, ec.email, ec.source, ec.confidence, ec.mx_ok, ec.is_role, ec.is_free, ec.status, l.name
+   FROM email_candidates ec JOIN listings l ON l.id = ec.listing_id
+   WHERE ec.status != 'rejected'
+   ORDER BY (ec.status = 'primary') DESC, ec.created_at DESC LIMIT 120`,
+).all<{ id: number; listing_id: number; email: string; source: string; confidence: number; mx_ok: number | null; is_role: number; is_free: number; status: string; name: string }>()).results;
+---
+<Admin title="Email enrichment">
+  <p class="small" style="margin:-6px 0 12px"><a href="/admin/crm">← Pipeline</a> · <a href="/admin/crm/outreach">Outreach →</a></p>
+  {ran && <div class="notice" role="status">Crawled {ran} listings, found {found} candidate{found === '1' ? '' : 's'}. Run again to continue the backlog.</div>}
+
+  <div class="stats">
+    <div class="stat"><b>{pct}%</b><span>Have a usable email</span></div>
+    <div class="stat"><b>{cov.withEmail.toLocaleString('en-US')}</b><span>of {cov.total.toLocaleString('en-US')} companies</span></div>
+    <div class="stat"><b>{cov.primary.toLocaleString('en-US')}</b><span>Enriched (primary)</span></div>
+    <div class="stat"><b>{cov.verified.toLocaleString('en-US')}</b><span>Verified candidates</span></div>
+    <div class="stat"><b>{cov.pending.toLocaleString('en-US')}</b><span>Sites left to crawl</span></div>
+  </div>
+
+  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin:16px 0">
+    <form action="/api/admin/enrich" method="post" style="display:flex;gap:8px;align-items:center">
+      <input type="hidden" name="action" value="run_batch" />
+      <label for="n" class="small">Crawl next</label>
+      <input id="n" name="n" type="number" value="12" min="1" max="40" style="width:70px" />
+      <button class="btn small" type="submit">Run now</button>
+    </form>
+    <p class="small" style="margin:0;max-width:520px">Reads each company's own website (homepage + contact page) for a published email, validates the domain has mail (MX), and falls back to role addresses (info@, contact@) on valid domains. The daily job also crawls up to 60/day automatically, so the backlog clears on its own.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <strong>Provider verification {hunter ? '· on' : '· off'}</strong>
+    <p class="small" style="margin:6px 0 0">{hunter
+      ? 'Hunter.io is connected. Use “Find via provider” on a company to pull more addresses, and “Verify” to confirm deliverability with a real score.'
+      : 'For maximum reach and verified deliverability, add a Hunter.io API key as the Worker secret HUNTER_API_KEY. Website crawling + MX validation work without it.'}</p>
+  </div>
+
+  <h2 style="margin:6px 0 8px">Candidates ({cands.length})</h2>
+  {cands.length === 0 ? <p class="small">None yet — run a crawl.</p> : (
+    <div class="table-wrap"><table><thead><tr><th>Email</th><th>Company</th><th>Source</th><th>Conf.</th><th>MX</th><th>Status</th><th></th></tr></thead><tbody>
+      {cands.map((c) => (
+        <tr>
+          <td>{c.email} {c.is_role ? <span class="small">(role)</span> : null}{c.is_free ? <span class="small">(free)</span> : null}</td>
+          <td style="white-space:nowrap"><a href={`/admin/crm/${c.listing_id}`}>{c.name}</a></td>
+          <td>{c.source}</td>
+          <td style="text-align:right">{c.confidence}</td>
+          <td>{c.mx_ok == null ? '—' : c.mx_ok ? '✓' : '✗'}</td>
+          <td><strong style={c.status === 'primary' ? 'color:#0f6d6a' : ''}>{c.status}</strong></td>
+          <td class="actions" style="white-space:nowrap">
+            {c.status !== 'primary' && <form action="/api/admin/enrich" method="post" style="display:inline"><input type="hidden" name="action" value="set_primary" /><input type="hidden" name="candidate_id" value={c.id} /><button class="linkbtn small" type="submit">Use</button></form>}
+            {hunter && <form action="/api/admin/enrich" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="action" value="hunter_verify" /><input type="hidden" name="candidate_id" value={c.id} /><button class="linkbtn small" type="submit">Verify</button></form>}
+            <form action="/api/admin/enrich" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="action" value="reject" /><input type="hidden" name="candidate_id" value={c.id} /><button class="linkbtn small" type="submit">Reject</button></form>
+          </td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  )}
+</Admin>

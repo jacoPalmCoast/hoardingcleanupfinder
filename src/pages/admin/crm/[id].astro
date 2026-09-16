@@ -2,6 +2,7 @@
 import Admin from '../../../layouts/Admin.astro';
 import { getListingById, listingStats, isLive } from '../../../lib/db';
 import { companyContacts, companyTimeline, STAGES, STAGE_LABEL } from '../../../lib/crm';
+import { hunterEnabled } from '../../../lib/enrich';
 import { env } from '../../../lib/env';
 import { now, tsToDate, formatPhone } from '../../../lib/util';
 
@@ -22,6 +23,10 @@ const [contacts, timeline, s] = await Promise.all([
   companyTimeline(id),
   listingStats(id, 30),
 ]);
+const candidates = (await env.DB.prepare(
+  `SELECT id, email, source, confidence, mx_ok, status FROM email_candidates WHERE listing_id = ?1 AND status != 'rejected' ORDER BY (status='primary') DESC, confidence DESC LIMIT 8`,
+).bind(id).all<{ id: number; email: string; source: string; confidence: number; mx_ok: number | null; status: string }>()).results;
+const hunter = hunterEnabled();
 const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) ?? '';
 ---
 <Admin title={l.name}>
@@ -99,6 +104,27 @@ const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 
           </ul>
         )}
         <p class="small" style="margin:10px 0 0">Phone: {l.phone ? formatPhone(l.phone) : '—'}<br/>Website: {l.website ? <a href={l.website} rel="nofollow noopener" target="_blank">link</a> : '—'}</p>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h3 style="margin:0 0 8px">Found emails</h3>
+        {candidates.length === 0 ? <p class="small" style="margin:0">None yet. Run enrichment from <a href="/admin/crm/enrichment">the enrichment page</a>{l.website ? ', or find via provider below' : ''}.</p> : (
+          <ul style="list-style:none;padding:0;margin:0">
+            {candidates.map((c) => (
+              <li style="margin-bottom:8px">
+                <span style={c.status === 'primary' ? 'font-weight:600;color:#0f6d6a' : ''}>{c.email}</span>
+                <br/><span class="small">{c.source} · conf {c.confidence} · MX {c.mx_ok == null ? '?' : c.mx_ok ? '✓' : '✗'} · {c.status}</span>
+                <div style="margin-top:2px">
+                  {c.status !== 'primary' && <form action="/api/admin/enrich" method="post" style="display:inline"><input type="hidden" name="action" value="set_primary" /><input type="hidden" name="candidate_id" value={c.id} /><input type="hidden" name="back" value={`/admin/crm/${id}`} /><button class="linkbtn small" type="submit">Use</button></form>}
+                  <form action="/api/admin/enrich" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="action" value="reject" /><input type="hidden" name="candidate_id" value={c.id} /><input type="hidden" name="back" value={`/admin/crm/${id}`} /><button class="linkbtn small" type="submit">Reject</button></form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {hunter && l.website && (
+          <form action="/api/admin/enrich" method="post" style="margin-top:8px"><input type="hidden" name="action" value="hunter_domain" /><input type="hidden" name="listing_id" value={id} /><input type="hidden" name="back" value={`/admin/crm/${id}`} /><button class="btn small secondary" type="submit">Find via provider</button></form>
+        )}
       </div>
     </aside>
   </div>

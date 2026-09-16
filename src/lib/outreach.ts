@@ -21,7 +21,11 @@ export function isSegment(s: string): s is Segment {
   return s === 'unclaimed' || s === 'claimed_not_featured' || s === 'lapsed' || s === 'all_with_email';
 }
 
-const EMAIL_SQL = `COALESCE((SELECT o.email FROM owner_listings ol JOIN owners o ON o.id = ol.owner_id WHERE ol.listing_id = l.id LIMIT 1), l.email)`;
+// Prefer the enriched 'primary' candidate, then a claimed owner's email, then the scraped listing email.
+const EMAIL_SQL = `COALESCE(
+  (SELECT ec.email FROM email_candidates ec WHERE ec.listing_id = l.id AND ec.status = 'primary' LIMIT 1),
+  (SELECT o.email FROM owner_listings ol JOIN owners o ON o.id = ol.owner_id WHERE ol.listing_id = l.id LIMIT 1),
+  l.email)`;
 
 export interface Recipient { id: number; name: string; city: string; state: string; slug: string; email: string }
 export async function recipients(segment: Segment, limit = 5000): Promise<Recipient[]> {

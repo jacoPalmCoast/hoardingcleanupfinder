@@ -28,7 +28,7 @@ const overdue = (ts: number | null) => ts != null && ts < Math.floor(Date.now() 
     {(q || stage) && <a class="btn small secondary" href="/admin/crm">Clear</a>}
   </form>
 
-  <p class="small">{rows.length} shown{stage ? ` in ${STAGE_LABEL[stage as never]}` : ''}{q ? ` matching “${q}”` : ''}. Follow-ups due first. <a href="/admin/crm/tasks">Open tasks →</a> · <a href="/admin/crm/tickets">Support inbox →</a> · <a href="/admin/crm/outreach">Outreach →</a></p>
+  <p class="small">{rows.length} shown{stage ? ` in ${STAGE_LABEL[stage as never]}` : ''}{q ? ` matching “${q}”` : ''}. Follow-ups due first. <a href="/admin/crm/tasks">Open tasks →</a> · <a href="/admin/crm/tickets">Support inbox →</a> · <a href="/admin/crm/outreach">Outreach →</a> · <a href="/admin/crm/enrichment">Email enrichment →</a></p>
 
   {rows.length === 0 ? <p>No companies match.</p> : (
     <div class="table-wrap"><table><thead><tr><th>Company</th><th>City</th><th>Stage</th><th>Next follow-up</th><th>Last activity</th></tr></thead><tbody>

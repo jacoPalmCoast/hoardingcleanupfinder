@@ -3,6 +3,7 @@ import { now, escapeHtml } from './util';
 import { sendEmail, emailShell } from './services';
 import { rollupEvents, pruneEvents, statsForDayRange, type ListingStats } from './db';
 import { renderTemplate } from './outreach';
+import { runBatch } from './enrich';
 
 // Daily job entry point. Invoked by the scheduler (GitHub Actions or cron-worker) via
 // POST /api/cron/run, and by the standalone worker's scheduled() handler.
@@ -204,6 +205,7 @@ export async function runDailyJobs(): Promise<CronResult> {
     ['claim_followup', claimFollowup],
     ['monthly_report', monthlyReports],
     ['outreach', outreach],
+    ['enrich', async () => (await runBatch(30)).found],
   ];
   for (const [name, fn] of jobs) {
     try { ran.push(`${name}:${await fn()}`); } catch (e) { console.error('cron ' + name, (e as Error)?.message); ran.push(`${name}:err`); }
