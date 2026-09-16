@@ -164,12 +164,14 @@ function monthlyReportBody(name: string, slug: string, label: string, s: Listing
 // set (marketing can't legally go out without the CAN-SPAM footer), and every send is suppression-
 // checked inside sendEmail (marketing stream). Capped per run to warm the sending domain.
 const OUTREACH_CAP = 40;
-interface SendRow { send_id: number; email: string; listing_id: number; campaign_id: number; subject: string; body: string; name: string; city: string; state: string; slug: string }
+interface SendRow { send_id: number; email: string; listing_id: number; campaign_id: number; subject: string; body: string; name: string; city: string; state: string; slug: string; contact_first: string | null; contact_name: string | null }
 async function outreach(): Promise<number> {
   if (!(await mailingAddress())) return 0; // gate: no marketing sends without a physical address on file
   const rows = (await env.DB.prepare(
     `SELECT s.id AS send_id, s.email, s.listing_id, c.id AS campaign_id, c.subject, c.body,
-        l.name, l.city, l.state, l.slug
+        l.name, l.city, l.state, l.slug,
+        (SELECT p.first_name FROM people p WHERE p.listing_id = l.id AND p.is_primary = 1 LIMIT 1) AS contact_first,
+        (SELECT p.name FROM people p WHERE p.listing_id = l.id AND p.is_primary = 1 LIMIT 1) AS contact_name
      FROM outreach_sends s
      JOIN outreach_campaigns c ON c.id = s.campaign_id AND c.status = 'sending'
      JOIN listings l ON l.id = s.listing_id

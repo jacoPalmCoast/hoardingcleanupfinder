@@ -2,7 +2,7 @@
 import Admin from '../../../layouts/Admin.astro';
 import { getListingById, listingStats, isLive } from '../../../lib/db';
 import { companyContacts, companyTimeline, STAGES, STAGE_LABEL } from '../../../lib/crm';
-import { hunterEnabled } from '../../../lib/enrich';
+import { hunterEnabled, listingPeople } from '../../../lib/enrich';
 import { env } from '../../../lib/env';
 import { now, tsToDate, formatPhone } from '../../../lib/util';
 
@@ -27,6 +27,7 @@ const candidates = (await env.DB.prepare(
   `SELECT id, email, source, confidence, mx_ok, status FROM email_candidates WHERE listing_id = ?1 AND status != 'rejected' ORDER BY (status='primary') DESC, confidence DESC LIMIT 8`,
 ).bind(id).all<{ id: number; email: string; source: string; confidence: number; mx_ok: number | null; status: string }>()).results;
 const hunter = hunterEnabled();
+const people = await listingPeople(id);
 const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) ?? '';
 ---
 <Admin title={l.name}>
@@ -104,6 +105,20 @@ const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 
           </ul>
         )}
         <p class="small" style="margin:10px 0 0">Phone: {l.phone ? formatPhone(l.phone) : '—'}<br/>Website: {l.website ? <a href={l.website} rel="nofollow noopener" target="_blank">link</a> : '—'}</p>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h3 style="margin:0 0 8px">People</h3>
+        {people.length === 0 ? <p class="small" style="margin:0">No names found. Run enrichment, or add a Hunter key for named contacts.</p> : (
+          <ul style="list-style:none;padding:0;margin:0">
+            {people.map((p) => (
+              <li style="margin-bottom:6px">
+                <span style={p.is_primary ? 'font-weight:600;color:#0f6d6a' : ''}>{p.name}</span>{p.role ? <span class="small"> · {p.role}</span> : null}
+                <br/><span class="small" style="color:#666">{p.source} · conf {p.confidence}{p.email ? ' · ' + p.email : ''}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div class="card" style="margin-top:14px">

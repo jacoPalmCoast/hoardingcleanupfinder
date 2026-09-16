@@ -27,10 +27,13 @@ const EMAIL_SQL = `COALESCE(
   (SELECT o.email FROM owner_listings ol JOIN owners o ON o.id = ol.owner_id WHERE ol.listing_id = l.id LIMIT 1),
   l.email)`;
 
-export interface Recipient { id: number; name: string; city: string; state: string; slug: string; email: string }
+const PERSON_FIRST = `(SELECT p.first_name FROM people p WHERE p.listing_id = l.id AND p.is_primary = 1 LIMIT 1)`;
+const PERSON_NAME = `(SELECT p.name FROM people p WHERE p.listing_id = l.id AND p.is_primary = 1 LIMIT 1)`;
+
+export interface Recipient { id: number; name: string; city: string; state: string; slug: string; email: string; contact_first: string | null; contact_name: string | null }
 export async function recipients(segment: Segment, limit = 5000): Promise<Recipient[]> {
   return (await env.DB.prepare(
-    `SELECT l.id, l.name, l.city, l.state, l.slug, ${EMAIL_SQL} AS email
+    `SELECT l.id, l.name, l.city, l.state, l.slug, ${EMAIL_SQL} AS email, ${PERSON_FIRST} AS contact_first, ${PERSON_NAME} AS contact_name
      FROM listings l
      WHERE l.status = 'active' AND ${PREDICATE[segment]}
        AND ${EMAIL_SQL} IS NOT NULL AND ${EMAIL_SQL} != ''
@@ -94,10 +97,15 @@ export async function setCampaignStatus(id: number, status: 'sending' | 'paused'
   await env.DB.prepare(`UPDATE outreach_campaigns SET status = ?2 WHERE id = ?1`).bind(id, status).run();
 }
 
-export function renderTemplate(tpl: string, r: { name: string; city: string; state: string; slug: string }): string {
+export function renderTemplate(tpl: string, r: { name: string; city: string; state: string; slug: string; contact_first?: string | null; contact_name?: string | null }): string {
   const claim = `${env.SITE_URL}/claim/${r.slug}`;
   const featured = `${env.SITE_URL}/featured/${r.slug}`;
+  const first = (r.contact_first ?? '').trim();
+  const full = (r.contact_name ?? '').trim();
+  // first_name falls back to "there" so "Hi {{first_name}}," never renders "Hi ,".
   return tpl
+    .replace(/\{\{\s*first_name\s*\}\}/g, escapeHtml(first || 'there'))
+    .replace(/\{\{\s*contact_name\s*\}\}/g, escapeHtml(full))
     .replace(/\{\{\s*name\s*\}\}/g, escapeHtml(r.name))
     .replace(/\{\{\s*city\s*\}\}/g, escapeHtml(r.city))
     .replace(/\{\{\s*state\s*\}\}/g, escapeHtml(r.state))

@@ -3,7 +3,7 @@ import { requireAdmin } from '../../../lib/adminGuard';
 import { clean, redirect } from '../../../lib/util';
 import { env } from '../../../lib/env';
 import { getListingById } from '../../../lib/db';
-import { runBatch, hunterEnrich, hunterVerify, promoteBest, hostOfUrl } from '../../../lib/enrich';
+import { runBatch, hunterEnrich, hunterVerify, promoteBest, hostOfUrl, inferAllNames } from '../../../lib/enrich';
 
 export const POST: APIRoute = async ({ request }) => {
   const denied = await requireAdmin(request);
@@ -16,6 +16,10 @@ export const POST: APIRoute = async ({ request }) => {
     const n = Math.min(Math.max(Number(clean(form.get('n'), 4)) || 12, 1), 40);
     const r = await runBatch(n);
     return redirect(`/admin/crm/enrichment?ran=${r.processed}&found=${r.found}`);
+  }
+  if (action === 'infer_names') {
+    const n = await inferAllNames();
+    return redirect(`/admin/crm/enrichment?named=${n}`);
   }
   if (action === 'set_primary' || action === 'reject') {
     const cid = Number(clean(form.get('candidate_id'), 12));

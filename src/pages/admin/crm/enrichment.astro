@@ -7,6 +7,7 @@ const cov = await coverage();
 const hunter = hunterEnabled();
 const ran = Astro.url.searchParams.get('ran');
 const found = Astro.url.searchParams.get('found');
+const named = Astro.url.searchParams.get('named');
 const pct = cov.total ? Math.round((cov.withEmail / cov.total) * 100) : 0;
 
 const cands = (await env.DB.prepare(
@@ -19,12 +20,13 @@ const cands = (await env.DB.prepare(
 <Admin title="Email enrichment">
   <p class="small" style="margin:-6px 0 12px"><a href="/admin/crm">← Pipeline</a> · <a href="/admin/crm/outreach">Outreach →</a></p>
   {ran && <div class="notice" role="status">Crawled {ran} listings, found {found} candidate{found === '1' ? '' : 's'}. Run again to continue the backlog.</div>}
+  {named && <div class="notice" role="status">Inferred {named} contact name{named === '1' ? '' : 's'} from email addresses.</div>}
 
   <div class="stats">
     <div class="stat"><b>{pct}%</b><span>Have a usable email</span></div>
     <div class="stat"><b>{cov.withEmail.toLocaleString('en-US')}</b><span>of {cov.total.toLocaleString('en-US')} companies</span></div>
+    <div class="stat"><b>{cov.withName.toLocaleString('en-US')}</b><span>with a contact name</span></div>
     <div class="stat"><b>{cov.primary.toLocaleString('en-US')}</b><span>Enriched (primary)</span></div>
-    <div class="stat"><b>{cov.verified.toLocaleString('en-US')}</b><span>Verified candidates</span></div>
     <div class="stat"><b>{cov.pending.toLocaleString('en-US')}</b><span>Sites left to crawl</span></div>
   </div>
 
@@ -34,6 +36,10 @@ const cands = (await env.DB.prepare(
       <label for="n" class="small">Crawl next</label>
       <input id="n" name="n" type="number" value="12" min="1" max="40" style="width:70px" />
       <button class="btn small" type="submit">Run now</button>
+    </form>
+    <form action="/api/admin/enrich" method="post" style="display:inline">
+      <input type="hidden" name="action" value="infer_names" />
+      <button class="btn small secondary" type="submit">Infer names from emails</button>
     </form>
     <p class="small" style="margin:0;max-width:520px">Reads each company's own website (homepage + contact page) for a published email, validates the domain has mail (MX), and falls back to role addresses (info@, contact@) on valid domains. The daily job also crawls up to 60/day automatically, so the backlog clears on its own.</p>
   </div>
