@@ -119,7 +119,10 @@ export async function crawlListing(listing: { id: number; website: string | null
   let found = 0;
   for (const e of emails) { const c = classify(e); if (c) { await upsertCandidate(listing.id, c, e && home && home.includes('mailto:' + e) ? 'mailto' : 'website', host); found++; } }
 
-  // If the site yielded nothing but the domain is real, guess role addresses on the validated domain.
+  // Provider fallback for the hard cases: only when the site published nothing AND a key is set —
+  // bounded to one domain-search call per listing, so it targets Hunter spend where it adds most.
+  if (found === 0 && hunterEnabled()) { found += await hunterEnrich(listing.id, host); }
+  // If still nothing but the domain is real, guess role addresses on the validated domain.
   if (found === 0 && (await mxOk(host))) {
     for (const local of ['info', 'contact', 'office', 'hello']) {
       const c = classify(`${local}@${host}`); if (c) { await upsertCandidate(listing.id, c, 'guess', host); found++; }

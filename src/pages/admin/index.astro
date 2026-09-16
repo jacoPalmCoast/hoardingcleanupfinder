@@ -5,8 +5,14 @@ import { env } from '../../lib/env';
 import { tsToDate } from '../../lib/util';
 const c = await adminCounts();
 const recent = (await env.DB.prepare(`SELECT id, name, city, state, is_featured, featured_until, created_at FROM listings WHERE is_featured = 1 ORDER BY featured_until DESC LIMIT 20`).all<any>()).results;
+const lastCron = await env.DB.prepare(`SELECT ran, ok, created_at FROM cron_runs ORDER BY id DESC LIMIT 1`).first<{ ran: string; ok: number; created_at: number }>().catch(() => null);
 ---
 <Admin title="Overview">
+  <p class="small" style="margin:-6px 0 12px">
+    {lastCron
+      ? <>Daily automation last ran <strong style={lastCron.ok ? '' : 'color:#b00'}>{lastCron.ok ? 'OK' : 'with errors'}</strong> — {tsToDate(lastCron.created_at)?.toLocaleString('en-US') ?? ''} · <span style="color:#666">{lastCron.ran}</span></>
+      : <span style="color:#666">Daily automation hasn't run yet (first scheduled run 13:00 UTC).</span>}
+  </p>
   <div class="stats">
     <div class="stat"><b>{c.active}</b><span>Active listings</span></div>
     <div class="stat"><b>{c.pending}</b><span>Pending review</span></div>

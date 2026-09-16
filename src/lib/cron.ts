@@ -205,12 +205,17 @@ export async function runDailyJobs(): Promise<CronResult> {
     ['claim_followup', claimFollowup],
     ['monthly_report', monthlyReports],
     ['outreach', outreach],
-    ['enrich', async () => (await runBatch(30)).found],
+    ['enrich', async () => (await runBatch(80)).found],
   ];
   for (const [name, fn] of jobs) {
     try { ran.push(`${name}:${await fn()}`); } catch (e) { console.error('cron ' + name, (e as Error)?.message); ran.push(`${name}:err`); }
   }
   // Prune raw events last, after the rollup has consumed them.
   try { await pruneEvents(); ran.push('prune:ok'); } catch (e) { console.error('cron prune', (e as Error)?.message); ran.push('prune:err'); }
+  // Log the run so scheduled execution is verifiable from the admin (keep the last 60).
+  try {
+    await env.DB.prepare(`INSERT INTO cron_runs(ran, ok) VALUES (?1, ?2)`).bind(ran.join(' '), ran.some((r) => r.endsWith(':err')) ? 0 : 1).run();
+    await env.DB.prepare(`DELETE FROM cron_runs WHERE id NOT IN (SELECT id FROM cron_runs ORDER BY id DESC LIMIT 60)`).run();
+  } catch (e) { console.error('cron log', (e as Error)?.message); }
   return { ran, ts: now() };
 }
