@@ -4,6 +4,7 @@ import ListingCard from '../../components/ListingCard.astro';
 import SearchForm from '../../components/SearchForm.astro';
 import QuoteForm from '../../components/QuoteForm.astro';
 import { citiesForState, listingsForState } from '../../lib/db';
+import { trackImpressions, waitCtx } from '../../lib/events';
 import { STATES, isState } from '../../data/states';
 import Faq from '../../components/Faq.astro';
 import { STATE_NOTES } from '../../data/stateNotes';
@@ -18,6 +19,7 @@ if (Astro.params.st !== st.toLowerCase()) return Astro.redirect(`/state/${st.toL
 const name = STATES[st];
 const [cities, listings] = await Promise.all([citiesForState(st), listingsForState(st, 60)]);
 if (listings.length === 0) return new Response(null, { status: 404 });
+trackImpressions(listings.map((l) => l.id), Astro.request, 'state', waitCtx(Astro.locals));
 const note = STATE_NOTES[st];
 const verified = listings.filter((l) => l.is_verified === 1).length;
 const hours24 = listings.filter((l) => parseAttrs(l.attrs).hours24).length;
@@ -46,7 +48,7 @@ const jsonld = [
   <div class="two">
     <section>
       <h2>Companies serving {name}</h2>
-      <div class="grid">{listings.map((l) => <ListingCard l={l} />)}</div>
+      <div class="grid">{listings.map((l) => <ListingCard l={l} source="state" />)}</div>
       <Faq items={faq} heading={`Cleanup in ${name}: what to know`} />
     </section>
     <aside><QuoteForm state={st} heading={`Get quotes in ${name}`} /></aside>

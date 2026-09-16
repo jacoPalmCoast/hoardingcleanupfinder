@@ -102,5 +102,8 @@ const ld = { '@context': 'https://schema.org', '@graph': graph };
       </div>
       <div class="wrap small" style="margin-top:20px">If you are in immediate danger or someone needs urgent medical help, call 911. Information on this site is general and not medical or legal advice.</div>
     </footer>
+    {env.WEB_ANALYTICS_TOKEN && (
+      <script is:inline defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon={`{"token": "${env.WEB_ANALYTICS_TOKEN}"}`}></script>
+    )}
   </body>
 </html>

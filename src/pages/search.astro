@@ -3,6 +3,7 @@ import Base from '../layouts/Base.astro';
 import SearchForm from '../components/SearchForm.astro';
 import ListingCard from '../components/ListingCard.astro';
 import { searchListings, searchByZip } from '../lib/db';
+import { trackImpressions, waitCtx } from '../lib/events';
 import { SERVICE_BY_SLUG, isService } from '../data/services';
 import { STATES } from '../data/states';
 
@@ -19,6 +20,7 @@ if (/^\d{5}$/.test(q)) {
   const code = Object.entries(STATES).find(([, n]) => n.toLowerCase() === q.toLowerCase())?.[0];
   results = await searchListings(code ?? q, service || undefined);
 }
+if (results.length > 0) trackImpressions(results.map((l) => l.id), Astro.request, 'search', waitCtx(Astro.locals));
 const title = q ? `${service ? SERVICE_BY_SLUG[service].name : 'Cleanup companies'} near ${q}` : 'Search';
 ---
 
@@ -33,7 +35,7 @@ const title = q ? `${service ? SERVICE_BY_SLUG[service].name : 'Cleanup companie
   {results.length > 0 && (
     <>
       <p class="small">{results.length} result{results.length === 1 ? '' : 's'}. Featured companies pay for placement and are labeled.</p>
-      <div class="grid">{results.map((l) => <ListingCard l={l} />)}</div>
+      <div class="grid">{results.map((l) => <ListingCard l={l} source="search" />)}</div>
     </>
   )}
 </Base>

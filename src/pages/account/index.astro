@@ -2,16 +2,18 @@
 import Base from '../../layouts/Base.astro';
 import { currentOwner } from '../../lib/services';
 import { env } from '../../lib/env';
-import { isLive } from '../../lib/db';
+import { isLive, listingStats, type ListingStats } from '../../lib/db';
 import { tsToDate } from '../../lib/util';
 import type { Listing } from '../../lib/db';
 const owner = await currentOwner(Astro.request);
 const msg = Astro.url.searchParams.get('msg');
 let listings: Listing[] = [];
 let pending: { name: string; slug: string }[] = [];
+const stats = new Map<number, ListingStats>();
 if (owner) {
   listings = (await env.DB.prepare(`SELECT l.* FROM listings l JOIN owner_listings ol ON ol.listing_id = l.id WHERE ol.owner_id = ?1 ORDER BY l.name`).bind(owner.id).all<Listing>()).results;
   pending = (await env.DB.prepare(`SELECT l.name, l.slug FROM claims c JOIN listings l ON l.id = c.listing_id WHERE c.email = ?1 AND c.status = 'review'`).bind(owner.email).all<{ name: string; slug: string }>()).results;
+  await Promise.all(listings.map(async (l) => stats.set(l.id, await listingStats(l.id, 30))));
 }
 const siteKey = env.TURNSTILE_SITE_KEY ?? '';
 const step = Astro.url.searchParams.get('step');
@@ -66,8 +68,14 @@ const email = Astro.url.searchParams.get('email') ?? '';
                 {l.featured_until ? ` · ${l.subscription_status === 'active' || l.subscription_status === 'trialing' ? 'renews' : 'ends'} ${(tsToDate(l.featured_until)?.toLocaleDateString('en-US')) ?? ''}` : ''}
               </p>
             )}
+            {stats.get(l.id) && (
+              <p class="small" style="margin:8px 0 0;color:#0f6d6a">
+                Last 30 days: <strong>{(stats.get(l.id)!.unique_views || stats.get(l.id)!.views).toLocaleString('en-US')}</strong> visitors · <strong>{stats.get(l.id)!.calls.toLocaleString('en-US')}</strong> call taps · <strong>{stats.get(l.id)!.website.toLocaleString('en-US')}</strong> website · <strong>{stats.get(l.id)!.leads.toLocaleString('en-US')}</strong> quote requests
+              </p>
+            )}
             <div class="actions">
               <a class="btn small" href={`/account/edit/${l.id}`}>Edit listing</a>
+              <a class="btn small secondary" href={`/account/performance/${l.id}`}>Performance</a>
               {isLive(l) || l.stripe_customer_id ? <form action="/api/stripe/portal" method="post" style="display:inline"><button type="submit" class="btn small secondary">Manage billing</button></form> : <a class="btn small secondary" href={`/featured/${l.slug}`}>Get featured</a>}
             </div>
           </div>

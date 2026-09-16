@@ -4,6 +4,7 @@ import ListingCard from '../../../components/ListingCard.astro';
 import QuoteForm from '../../../components/QuoteForm.astro';
 import Faq from '../../../components/Faq.astro';
 import { getCity, listingsForCity, MIN_LISTINGS_FOR_PAGE } from '../../../lib/db';
+import { trackImpressions, waitCtx } from '../../../lib/events';
 import { STATES, isState } from '../../../data/states';
 import { SERVICE_BY_SLUG } from '../../../data/services';
 import { STATE_NOTES } from '../../../data/stateNotes';
@@ -21,6 +22,7 @@ const city = await getCity(st, citySlug);
 if (!city) return new Response(null, { status: 404 });
 const listings = await listingsForCity(st, citySlug, svc.slug);
 if (listings.length < MIN_LISTINGS_FOR_PAGE) return new Response(null, { status: 404 });
+trackImpressions(listings.map((l) => l.id), Astro.request, 'city', waitCtx(Astro.locals));
 const stateName = STATES[st];
 const title = `${svc.name} in ${city.name}, ${st}`;
 const url = `${env.SITE_URL}/${st.toLowerCase()}/${citySlug}/${svc.slug}`;
@@ -46,7 +48,7 @@ const jsonld = [
   <p class="lede">{svc.description} {listings.length} companies in {city.name} list this service{hours24 ? `; ${hours24} respond 24 hours a day` : ''}.</p>
   <div class="two">
     <section>
-      <div class="grid">{listings.map((l) => <ListingCard l={l} showCity={false} />)}</div>
+      <div class="grid">{listings.map((l) => <ListingCard l={l} showCity={false} source="city" />)}</div>
       <Faq items={faq} heading={`${svc.name} in ${city.name}: what to know`} />
     </section>
     <aside><QuoteForm city={city.name} state={st} heading={`Get ${svc.name.toLowerCase()} quotes`} /></aside>

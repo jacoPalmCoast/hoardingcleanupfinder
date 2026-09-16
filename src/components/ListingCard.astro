@@ -5,8 +5,8 @@ import { formatPhone, parseServices, hostOf } from '../lib/util';
 import { SERVICE_BY_SLUG } from '../data/services';
 import { parseAttrs } from '../data/attrs';
 
-interface Props { l: Listing; showCity?: boolean }
-const { l, showCity = true } = Astro.props;
+interface Props { l: Listing; showCity?: boolean; source?: string }
+const { l, showCity = true, source = 'city' } = Astro.props;
 const featured = isLive(l);
 const services = parseServices(l.services);
 const a = parseAttrs(l.attrs);
@@ -27,8 +27,8 @@ const a = parseAttrs(l.attrs);
   {l.description && <p style="margin-bottom:6px">{l.description}</p>}
   <div class="small">{services.map((s) => SERVICE_BY_SLUG[s]?.name).filter(Boolean).join(' · ')}</div>
   <div class="actions">
-    {l.phone && <a class="btn small" href={`tel:${l.phone_digits}`}>Call {formatPhone(l.phone)}</a>}
-    {l.website && <a class="btn small secondary" href={l.website} rel="nofollow noopener" target="_blank">Website<span class="sr-only"> ({hostOf(l.website)}, opens in new tab)</span></a>}
+    {l.phone && <a class="btn small" href={`/api/go/call/${l.id}?s=${source}`} rel="nofollow">Call {formatPhone(l.phone)}</a>}
+    {l.website && <a class="btn small secondary" href={`/api/go/website/${l.id}?s=${source}`} rel="nofollow noopener" target="_blank">Website<span class="sr-only"> ({hostOf(l.website)}, opens in new tab)</span></a>}
     <a class="btn small secondary" href={`/company/${l.slug}#quote`}>Request a quote</a>
   </div>
 </article>

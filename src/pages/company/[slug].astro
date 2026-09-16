@@ -12,10 +12,13 @@ import { STATES } from '../../data/states';
 import { parseAttrs, parseFaq, attrFacts, publicAttrs } from '../../data/attrs';
 import { listingIntents } from '../../data/intents';
 import { listingSchema, webPageSchema, breadcrumbSchema } from '../../lib/seo';
+import { trackEvent, waitCtx } from '../../lib/events';
 import { env } from '../../lib/env';
 
 const l = await getListingBySlug(Astro.params.slug ?? '');
 if (!l || l.status !== 'active') return new Response(null, { status: 404 });
+// Count this page view (real visitors only; bots are filtered inside trackEvent).
+trackEvent('view', l.id, Astro.request, 'company', waitCtx(Astro.locals));
 const services = parseServices(l.services);
 const serviceNames = services.map((s) => SERVICE_BY_SLUG[s]?.name).filter(Boolean) as string[];
 const featured = isLive(l);
@@ -66,8 +69,8 @@ if (l.is_claimed !== 1) {
       <p class="lede">{l.description ?? `${l.name} serves ${l.city}, ${stateName} and the surrounding area.`}</p>
       <dl class="facts">
         <dt>Services</dt><dd>{serviceNames.join(', ') || '—'}</dd>
-        <dt>Phone</dt><dd>{l.phone ? <a href={`tel:${l.phone_digits}`}>{formatPhone(l.phone)}</a> : '—'}</dd>
-        <dt>Website</dt><dd>{l.website ? <a href={l.website} rel="nofollow noopener" target="_blank">{hostOf(l.website)}<span class="sr-only"> (opens in new tab)</span></a> : '—'}</dd>
+        <dt>Phone</dt><dd>{l.phone ? <a href={`/api/go/call/${l.id}?s=company`} rel="nofollow">{formatPhone(l.phone)}</a> : '—'}</dd>
+        <dt>Website</dt><dd>{l.website ? <a href={`/api/go/website/${l.id}?s=company`} rel="nofollow noopener" target="_blank">{hostOf(l.website)}<span class="sr-only"> (opens in new tab)</span></a> : '—'}</dd>
         <dt>Location</dt><dd>{l.address ? `${l.address}` : `${l.city}, ${l.state}${l.zip ? ' ' + l.zip : ''}`}</dd>
         {facts.map((f) => <><dt>{f.label}</dt><dd>{f.value}</dd></>)}
         {l.review_count > 0 && l.rating && <><dt>Reviews</dt><dd>{l.place_id
@@ -78,7 +81,7 @@ if (l.is_claimed !== 1) {
         <p class="small">Not provided yet: {gaps.join(', ')}. <a href={`/claim/${l.slug}`}>Claim this listing</a> to add them.</p>
       )}
       <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
-        {l.phone && <a class="btn" href={`tel:${l.phone_digits}`}>Call {formatPhone(l.phone)}</a>}
+        {l.phone && <a class="btn" href={`/api/go/call/${l.id}?s=company`} rel="nofollow">Call {formatPhone(l.phone)}</a>}
         <a class="btn secondary" href="#quote">Request a quote</a>
       </div>
       <Socials attrs={attrs} />

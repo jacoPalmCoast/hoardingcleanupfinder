@@ -24,6 +24,7 @@ export interface Env {
   RESEND_WEBHOOK_SECRET?: string;   // Svix signing secret for the Resend delivery webhook (whsec_...)
   CRON_SECRET?: string;             // bearer secret for POST /api/cron/run
   MAILING_ADDRESS?: string;         // physical postal address for the CAN-SPAM marketing footer (P2)
+  WEB_ANALYTICS_TOKEN?: string;     // Cloudflare Web Analytics beacon token; if set, the beacon loads (aggregate traffic)
 }
 
 export const env = cfEnv as unknown as Env;

@@ -1,6 +1,7 @@
 import { env } from './env';
 import { now, escapeHtml } from './util';
 import { sendEmail, emailShell } from './services';
+import { rollupEvents, pruneEvents, statsForDayRange, type ListingStats } from './db';
 
 // Daily job entry point. Invoked by the scheduler (GitHub Actions or cron-worker) via
 // POST /api/cron/run, and by the standalone worker's scheduled() handler.
@@ -109,18 +110,70 @@ async function claimFollowup(): Promise<number> {
   return n;
 }
 
+// 5) Monthly performance report — on the 1st (or 2nd, as a safety net) of the month, email each
+// claimed listing's owner their previous calendar month's numbers. Transactional (their own data),
+// sent only to owners, only when there's something to report. Idempotent via the emails log.
+function prevMonthDayRange(t: number): { startDay: number; endDay: number; label: string } {
+  const d = new Date(t * 1000);
+  const y = d.getUTCFullYear(), m = d.getUTCMonth(); // m = current month, 0-based
+  const startTs = Date.UTC(y, m - 1, 1) / 1000;      // first day of previous month
+  const curMonthStartTs = Date.UTC(y, m, 1) / 1000;  // first day of current month
+  const label = new Date(startTs * 1000).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  return { startDay: Math.floor(startTs / 86400), endDay: Math.floor(curMonthStartTs / 86400) - 1, label };
+}
+
+async function monthlyReports(): Promise<number> {
+  const t = now();
+  if (new Date(t * 1000).getUTCDate() > 2) return 0; // only around the start of the month
+  const { startDay, endDay, label } = prevMonthDayRange(t);
+  const rows = (await env.DB.prepare(
+    `SELECT l.id, l.name, l.slug, l.city, ${ownerEmailSub} AS email
+     FROM listings l
+     WHERE l.status = 'active' AND EXISTS (SELECT 1 FROM owner_listings ol WHERE ol.listing_id = l.id)`,
+  ).all<{ id: number; name: string; slug: string; city: string; email: string | null }>()).results;
+  let n = 0;
+  for (const l of rows) {
+    if (!l.email) continue;
+    if (await alreadySent('monthly_report', l.id, 25)) continue;
+    const s = await statsForDayRange(l.id, startDay, endDay);
+    if (s.views + s.calls + s.website + s.leads === 0) continue; // nothing to report — don't send a page of zeros
+    await sendEmail(l.email, `Your ${label} report for ${l.name}`, emailShell(`${label} performance`, monthlyReportBody(l.name, l.slug, label, s)), { stream: 'txn', type: 'monthly_report', listingId: l.id });
+    n++;
+  }
+  return n;
+}
+
+function monthlyReportBody(name: string, slug: string, label: string, s: ListingStats): string {
+  const row = (k: string, v: number) => `<tr><td style="padding:6px 16px 6px 0">${k}</td><td style="padding:6px 0;text-align:right"><strong>${v.toLocaleString('en-US')}</strong></td></tr>`;
+  return `<p>Here's how <a href="${env.SITE_URL}/company/${slug}">${escapeHtml(name)}</a> did on Hoarding Cleanup Finder in ${label}.</p>
+    <table style="border-collapse:collapse;margin:8px 0 16px">
+      ${row('People who viewed your listing', s.unique_views || s.views)}
+      ${row('Times shown in search &amp; city lists', s.impressions)}
+      ${row('Phone taps (click-to-call)', s.calls)}
+      ${row('Website clicks', s.website)}
+      ${row('Quote requests', s.leads)}
+      ${row('New reviews', s.reviews)}
+    </table>
+    <p class="small">"People who viewed" counts unique visitors; phone taps count how many people tapped your number on a phone or clicked to call, not connected calls. <a href="${env.SITE_URL}/account">See more in your account</a>.</p>`;
+}
+
 export interface CronResult { ran: string[]; ts: number }
 
 export async function runDailyJobs(): Promise<CronResult> {
   const ran: string[] = [];
+  // Roll up yesterday's raw analytics into durable daily counts before anything reads them.
+  try { ran.push(`rollup:${await rollupEvents()}`); } catch (e) { console.error('cron rollup', (e as Error)?.message); ran.push('rollup:err'); }
   const jobs: [string, () => Promise<number>][] = [
     ['renewal', renewalReminders],
     ['past_due', pastDueNudge],
     ['winback', winback],
     ['claim_followup', claimFollowup],
+    ['monthly_report', monthlyReports],
   ];
   for (const [name, fn] of jobs) {
     try { ran.push(`${name}:${await fn()}`); } catch (e) { console.error('cron ' + name, (e as Error)?.message); ran.push(`${name}:err`); }
   }
+  // Prune raw events last, after the rollup has consumed them.
+  try { await pruneEvents(); ran.push('prune:ok'); } catch (e) { console.error('cron prune', (e as Error)?.message); ran.push('prune:err'); }
   return { ran, ts: now() };
 }

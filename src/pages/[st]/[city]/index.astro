@@ -4,6 +4,7 @@ import ListingCard from '../../../components/ListingCard.astro';
 import QuoteForm from '../../../components/QuoteForm.astro';
 import Faq from '../../../components/Faq.astro';
 import { getCity, listingsForCity, countByCityService, MIN_LISTINGS_FOR_PAGE } from '../../../lib/db';
+import { trackImpressions, waitCtx } from '../../../lib/events';
 import { STATES, isState } from '../../../data/states';
 import { SERVICES } from '../../../data/services';
 import { STATE_NOTES } from '../../../data/stateNotes';
@@ -20,6 +21,7 @@ const city = await getCity(st, citySlug);
 if (!city) return new Response(null, { status: 404 });
 const listings = await listingsForCity(st, citySlug);
 if (listings.length < MIN_LISTINGS_FOR_PAGE) return new Response(null, { status: 404 });
+trackImpressions(listings.map((l) => l.id), Astro.request, 'city', waitCtx(Astro.locals));
 const counts = await countByCityService(st, citySlug);
 const stateName = STATES[st];
 const title = `Hoarding cleanup in ${city.name}, ${st}`;
@@ -51,7 +53,7 @@ const jsonld = [
   </div>
   <div class="two">
     <section>
-      <div class="grid">{listings.map((l) => <ListingCard l={l} showCity={false} />)}</div>
+      <div class="grid">{listings.map((l) => <ListingCard l={l} showCity={false} source="city" />)}</div>
       <p class="small" style="margin-top:16px">Featured companies pay for placement and are labeled. Everyone else is ordered by verification and review count. <a href="/about">How listings work.</a></p>
       <Faq items={faq} heading={`Hoarding cleanup in ${city.name}: what to know`} />
     </section>

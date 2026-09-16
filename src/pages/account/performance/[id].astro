@@ -1,0 +1,52 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { currentOwner, ownerOwns } from '../../../lib/services';
+import { getListingById, listingStats, listingSeries, isLive } from '../../../lib/db';
+
+const owner = await currentOwner(Astro.request);
+if (!owner) return Astro.redirect('/account', 302);
+const id = Number(Astro.params.id);
+if (!Number.isInteger(id) || !(await ownerOwns(owner.id, id))) return Astro.redirect('/account', 302);
+const listing = await getListingById(id);
+if (!listing) return Astro.redirect('/account', 302);
+
+const daysRaw = Number(Astro.url.searchParams.get('days'));
+const days = [7, 30, 90].includes(daysRaw) ? daysRaw : 30;
+const s = await listingStats(id, days);
+const series = await listingSeries(id, days);
+const max = Math.max(1, ...series.map((p) => p.views));
+const barW = 8, gap = 3, h = 48;
+const featured = isLive(listing);
+---
+<Base title={`Performance — ${listing.name}`} description="Your listing performance." noindex>
+  <p class="small" style="margin-bottom:4px"><a href="/account">← Your listings</a></p>
+  <h1 style="margin:0 0 2px">{listing.name}</h1>
+  <p class="small" style="margin:0 0 14px">{listing.city}, {listing.state}</p>
+
+  <nav class="small" style="margin-bottom:14px">
+    Range: {[7, 30, 90].map((d) => (d === days ? <strong style="margin-right:10px">{d} days</strong> : <a href={`/account/performance/${id}?days=${d}`} style="margin-right:10px">{d} days</a>))}
+  </nav>
+
+  <div class="stats">
+    <div class="stat"><b>{(s.unique_views || s.views).toLocaleString('en-US')}</b><span>Visitors</span></div>
+    <div class="stat"><b>{s.impressions.toLocaleString('en-US')}</b><span>Times shown in lists</span></div>
+    <div class="stat"><b>{s.calls.toLocaleString('en-US')}</b><span>Call taps</span></div>
+    <div class="stat"><b>{s.website.toLocaleString('en-US')}</b><span>Website clicks</span></div>
+    <div class="stat"><b>{s.leads.toLocaleString('en-US')}</b><span>Quote requests</span></div>
+    <div class="stat"><b>{s.reviews.toLocaleString('en-US')}</b><span>New reviews</span></div>
+  </div>
+
+  <h2 style="margin:22px 0 6px">Daily visits</h2>
+  {series.some((p) => p.views > 0) ? (
+    <svg width={series.length * (barW + gap)} height={h + 4} role="img" aria-label="Daily views bar chart">
+      {series.map((p, i) => (
+        <rect x={i * (barW + gap)} y={h - Math.round((p.views / max) * h)} width={barW} height={Math.max(1, Math.round((p.views / max) * h))} fill="#0f6d6a" rx="1"><title>{p.views} views</title></rect>
+      ))}
+    </svg>
+  ) : <p class="small">No visits recorded yet in this range.</p>}
+
+  <section class="prose" style="margin-top:24px">
+    <p class="small">"Visitors" counts the unique people who opened your listing. "Call taps" and "website clicks" count how many people tapped to call or clicked through to your site — not connected calls. "Times shown in lists" counts appearances in search and city results, updated once a day.
+    {!featured && <> Featured listings sit at the top of their city and typically get more of all of these — <a href={`/featured/${listing.slug}`}>get featured</a>.</>}</p>
+  </section>
+</Base>

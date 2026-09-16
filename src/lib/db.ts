@@ -324,3 +324,175 @@ export async function listSuppressions(limit = 200): Promise<Suppression[]> {
 export async function removeSuppression(email: string): Promise<void> {
   await env.DB.prepare(`DELETE FROM suppressions WHERE email = ?1`).bind(email.toLowerCase()).run();
 }
+
+// ---------- Visitor analytics (reporting side) ----------
+// Reads durable per-day counts from events_daily (rolled up nightly) and adds the current day's raw
+// click events so today isn't missing. Impressions are reported through the last rollup (yesterday).
+export interface ListingStats {
+  views: number; unique_views: number; calls: number; website: number; directions: number;
+  impressions: number; leads: number; reviews: number;
+}
+const emptyStats = (): ListingStats => ({ views: 0, unique_views: 0, calls: 0, website: 0, directions: 0, impressions: 0, leads: 0, reviews: 0 });
+function addKind(s: ListingStats, kind: string, n: number, u: number): void {
+  if (kind === 'view') { s.views += n; s.unique_views += u; }
+  else if (kind === 'call') s.calls += n;
+  else if (kind === 'website') s.website += n;
+  else if (kind === 'directions') s.directions += n;
+  else if (kind === 'impression') s.impressions += n;
+}
+
+export async function listingStats(listingId: number, days: number): Promise<ListingStats> {
+  const dayNum = Math.floor(now() / 86400);
+  const startDay = dayNum - (days - 1);
+  const startTs = startDay * 86400;
+  const todayTs = dayNum * 86400;
+  const [rollup, today, leadsRow, revRow] = await env.DB.batch([
+    env.DB.prepare(`SELECT kind, SUM(n) AS n, SUM(uniques) AS u FROM events_daily WHERE listing_id = ?1 AND day >= ?2 GROUP BY kind`).bind(listingId, startDay),
+    env.DB.prepare(`SELECT kind, COUNT(*) AS n, COUNT(DISTINCT session) AS u FROM events WHERE listing_id = ?1 AND created_at >= ?2 GROUP BY kind`).bind(listingId, todayTs),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM leads WHERE listing_id = ?1 AND created_at >= ?2`).bind(listingId, startTs),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM reviews WHERE listing_id = ?1 AND created_at >= ?2`).bind(listingId, startTs),
+  ]);
+  const s = emptyStats();
+  for (const r of rollup.results as { kind: string; n: number; u: number }[]) addKind(s, r.kind, r.n || 0, r.u || 0);
+  for (const r of today.results as { kind: string; n: number; u: number }[]) addKind(s, r.kind, r.n || 0, r.u || 0);
+  s.leads = (leadsRow.results[0] as { n: number } | undefined)?.n || 0;
+  s.reviews = (revRow.results[0] as { n: number } | undefined)?.n || 0;
+  return s;
+}
+
+// Fixed calendar window (both day numbers inclusive) — used by the monthly report. Fully in the
+// past, so events_daily has it all; no today-raw merge needed.
+export async function statsForDayRange(listingId: number, startDay: number, endDay: number): Promise<ListingStats> {
+  const startTs = startDay * 86400;
+  const endTs = (endDay + 1) * 86400;
+  const [rollup, leadsRow, revRow] = await env.DB.batch([
+    env.DB.prepare(`SELECT kind, SUM(n) AS n, SUM(uniques) AS u FROM events_daily WHERE listing_id = ?1 AND day BETWEEN ?2 AND ?3 GROUP BY kind`).bind(listingId, startDay, endDay),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM leads WHERE listing_id = ?1 AND created_at >= ?2 AND created_at < ?3`).bind(listingId, startTs, endTs),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM reviews WHERE listing_id = ?1 AND created_at >= ?2 AND created_at < ?3`).bind(listingId, startTs, endTs),
+  ]);
+  const s = emptyStats();
+  for (const r of rollup.results as { kind: string; n: number; u: number }[]) addKind(s, r.kind, r.n || 0, r.u || 0);
+  s.leads = (leadsRow.results[0] as { n: number } | undefined)?.n || 0;
+  s.reviews = (revRow.results[0] as { n: number } | undefined)?.n || 0;
+  return s;
+}
+
+export interface DayPoint { day: number; views: number; calls: number; website: number }
+// Dense daily series (oldest→newest), gaps filled with zeros, for a sparkline.
+export async function listingSeries(listingId: number, days: number): Promise<DayPoint[]> {
+  const dayNum = Math.floor(now() / 86400);
+  const startDay = dayNum - (days - 1);
+  const rows = (await env.DB.prepare(
+    `SELECT day,
+        SUM(CASE WHEN kind='view' THEN n ELSE 0 END) AS views,
+        SUM(CASE WHEN kind='call' THEN n ELSE 0 END) AS calls,
+        SUM(CASE WHEN kind='website' THEN n ELSE 0 END) AS website
+     FROM events_daily WHERE listing_id = ?1 AND day >= ?2 GROUP BY day`,
+  ).bind(listingId, startDay).all<{ day: number; views: number; calls: number; website: number }>()).results;
+  const byDay = new Map(rows.map((r) => [r.day, r]));
+  const out: DayPoint[] = [];
+  for (let d = startDay; d <= dayNum; d++) {
+    const r = byDay.get(d);
+    out.push({ day: d, views: r?.views || 0, calls: r?.calls || 0, website: r?.website || 0 });
+  }
+  return out;
+}
+
+export interface TopListing { id: number; name: string; slug: string; city: string; state: string; views: number; calls: number; website: number }
+export interface SiteOverview {
+  totals: ListingStats;
+  topListings: TopListing[];
+  topCities: { city: string; state: string; views: number }[];
+}
+export async function siteOverview(days: number): Promise<SiteOverview> {
+  const dayNum = Math.floor(now() / 86400);
+  const startDay = dayNum - (days - 1);
+  const startTs = startDay * 86400;
+  const todayTs = dayNum * 86400;
+  const [rollup, today, leadsRow, revRow, top, cities] = await env.DB.batch([
+    env.DB.prepare(`SELECT kind, SUM(n) AS n, SUM(uniques) AS u FROM events_daily WHERE day >= ?1 GROUP BY kind`).bind(startDay),
+    env.DB.prepare(`SELECT kind, COUNT(*) AS n, COUNT(DISTINCT session) AS u FROM events WHERE created_at >= ?1 AND kind != 'impression' GROUP BY kind`).bind(todayTs),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM leads WHERE created_at >= ?1`).bind(startTs),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM reviews WHERE created_at >= ?1`).bind(startTs),
+    env.DB.prepare(
+      `SELECT ed.listing_id AS id, l.name, l.slug, l.city, l.state,
+          SUM(CASE WHEN ed.kind='view' THEN ed.n ELSE 0 END) AS views,
+          SUM(CASE WHEN ed.kind='call' THEN ed.n ELSE 0 END) AS calls,
+          SUM(CASE WHEN ed.kind='website' THEN ed.n ELSE 0 END) AS website
+       FROM events_daily ed JOIN listings l ON l.id = ed.listing_id
+       WHERE ed.day >= ?1 AND ed.listing_id > 0
+       GROUP BY ed.listing_id HAVING views > 0 ORDER BY views DESC LIMIT 20`,
+    ).bind(startDay),
+    env.DB.prepare(
+      `SELECT l.city, l.state, SUM(ed.n) AS views
+       FROM events_daily ed JOIN listings l ON l.id = ed.listing_id
+       WHERE ed.day >= ?1 AND ed.kind = 'view' AND ed.listing_id > 0
+       GROUP BY l.city, l.state ORDER BY views DESC LIMIT 15`,
+    ).bind(startDay),
+  ]);
+  const totals = emptyStats();
+  for (const r of rollup.results as { kind: string; n: number; u: number }[]) addKind(totals, r.kind, r.n || 0, r.u || 0);
+  for (const r of today.results as { kind: string; n: number; u: number }[]) addKind(totals, r.kind, r.n || 0, r.u || 0);
+  totals.leads = (leadsRow.results[0] as { n: number } | undefined)?.n || 0;
+  totals.reviews = (revRow.results[0] as { n: number } | undefined)?.n || 0;
+  return {
+    totals,
+    topListings: top.results as TopListing[],
+    topCities: cities.results as { city: string; state: string; views: number }[],
+  };
+}
+
+// ---------- Nightly rollup + prune (called by the daily cron) ----------
+// Aggregate every raw day that is complete (day < today) and not yet rolled. Idempotent via
+// events_rollup_state. Impression rows carry a JSON id list that is exploded into per-listing counts.
+export async function rollupEvents(maxDays = 30): Promise<number> {
+  const today = Math.floor(now() / 86400);
+  const done = new Set((await env.DB.prepare(`SELECT day FROM events_rollup_state`).all<{ day: number }>()).results.map((r) => r.day));
+  const daysWithData = (await env.DB.prepare(
+    `SELECT DISTINCT created_at / 86400 AS day FROM events WHERE created_at < ?1 ORDER BY day`,
+  ).bind(today * 86400).all<{ day: number }>()).results.map((r) => r.day).filter((d) => !done.has(d)).slice(0, maxDays);
+  let rolled = 0;
+  for (const day of daysWithData) {
+    const from = day * 86400, to = (day + 1) * 86400;
+    // Direct-kind events (view/call/website/directions): count + uniques per listing.
+    const direct = (await env.DB.prepare(
+      `SELECT listing_id, kind, COUNT(*) AS n, COUNT(DISTINCT session) AS u
+       FROM events WHERE created_at >= ?1 AND created_at < ?2 AND kind != 'impression' AND listing_id IS NOT NULL
+       GROUP BY listing_id, kind`,
+    ).bind(from, to).all<{ listing_id: number; kind: string; n: number; u: number }>()).results;
+    // Impression rows: explode the id lists into per-listing counts for the day.
+    const impRows = (await env.DB.prepare(
+      `SELECT ids FROM events WHERE created_at >= ?1 AND created_at < ?2 AND kind = 'impression' AND ids IS NOT NULL`,
+    ).bind(from, to).all<{ ids: string }>()).results;
+    const imp = new Map<number, number>();
+    for (const row of impRows) {
+      let arr: unknown;
+      try { arr = JSON.parse(row.ids); } catch { arr = null; }
+      if (Array.isArray(arr)) for (const id of arr) { const n = Number(id); if (Number.isInteger(n)) imp.set(n, (imp.get(n) || 0) + 1); }
+    }
+    const stmts = [
+      ...direct.map((r) => env.DB.prepare(
+        `INSERT INTO events_daily(day, listing_id, kind, n, uniques) VALUES (?1,?2,?3,?4,?5)
+         ON CONFLICT(day, listing_id, kind) DO UPDATE SET n = n + ?4, uniques = uniques + ?5`,
+      ).bind(day, r.listing_id, r.kind, r.n, r.u)),
+      ...[...imp.entries()].map(([id, n]) => env.DB.prepare(
+        `INSERT INTO events_daily(day, listing_id, kind, n, uniques) VALUES (?1,?2,'impression',?3,0)
+         ON CONFLICT(day, listing_id, kind) DO UPDATE SET n = n + ?3`,
+      ).bind(day, id, n)),
+      env.DB.prepare(`INSERT OR IGNORE INTO events_rollup_state(day) VALUES (?1)`).bind(day),
+    ];
+    if (stmts.length) await env.DB.batch(stmts);
+    rolled++;
+  }
+  return rolled;
+}
+
+// Drop raw rows once rolled up: impressions after 14 days, other events after 92.
+export async function pruneEvents(): Promise<void> {
+  const t = now();
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM events WHERE kind = 'impression' AND created_at < ?1`).bind(t - 14 * 86400),
+    env.DB.prepare(`DELETE FROM events WHERE kind != 'impression' AND created_at < ?1`).bind(t - 92 * 86400),
+    env.DB.prepare(`DELETE FROM events_rollup_state WHERE day < ?1`).bind(Math.floor(t / 86400) - 400),
+  ]);
+}

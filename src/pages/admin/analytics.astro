@@ -1,0 +1,87 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { siteOverview, listingStats, listingSeries, getListingById } from '../../lib/db';
+
+const daysRaw = Number(Astro.url.searchParams.get('days'));
+const days = [7, 30, 90].includes(daysRaw) ? daysRaw : 30;
+const idRaw = Number(Astro.url.searchParams.get('id'));
+const id = Number.isInteger(idRaw) && idRaw > 0 ? idRaw : 0;
+
+const listing = id ? await getListingById(id) : null;
+const detail = listing ? await listingStats(listing.id, days) : null;
+const series = listing ? await listingSeries(listing.id, days) : [];
+const overview = listing ? null : await siteOverview(days);
+
+const max = Math.max(1, ...series.map((p) => p.views));
+const barW = 8, gap = 3, h = 44;
+const q = (d: number) => `?days=${d}${id ? `&id=${id}` : ''}`;
+---
+<Admin title="Analytics">
+  <nav class="small" style="margin-bottom:12px">
+    Range: {[7, 30, 90].map((d) => (d === days ? <strong style="margin-right:10px">{d} days</strong> : <a href={`/admin/analytics${q(d)}`} style="margin-right:10px">{d} days</a>))}
+    {listing && <> · <a href={`/admin/analytics?days=${days}`}>← all listings</a></>}
+  </nav>
+
+  {listing && detail ? (
+    <>
+      <h2 style="margin:0 0 2px"><a href={`/company/${listing.slug}`}>{listing.name}</a></h2>
+      <p class="small" style="margin:0 0 16px">{listing.city}, {listing.state} · last {days} days</p>
+      <div class="stats">
+        <div class="stat"><b>{detail.unique_views.toLocaleString('en-US')}</b><span>Unique visitors</span></div>
+        <div class="stat"><b>{detail.views.toLocaleString('en-US')}</b><span>Page views</span></div>
+        <div class="stat"><b>{detail.impressions.toLocaleString('en-US')}</b><span>Impressions</span></div>
+        <div class="stat"><b>{detail.calls.toLocaleString('en-US')}</b><span>Call taps</span></div>
+        <div class="stat"><b>{detail.website.toLocaleString('en-US')}</b><span>Website clicks</span></div>
+        <div class="stat"><b>{detail.leads.toLocaleString('en-US')}</b><span>Quote requests</span></div>
+        <div class="stat"><b>{detail.reviews.toLocaleString('en-US')}</b><span>Reviews</span></div>
+      </div>
+      <h3 style="margin:20px 0 6px">Daily views</h3>
+      {series.some((p) => p.views > 0) ? (
+        <svg width={series.length * (barW + gap)} height={h + 4} role="img" aria-label="Daily views bar chart">
+          {series.map((p, i) => (
+            <rect x={i * (barW + gap)} y={h - Math.round((p.views / max) * h)} width={barW} height={Math.max(1, Math.round((p.views / max) * h))} fill="#0f6d6a" rx="1"><title>{p.views} views</title></rect>
+          ))}
+        </svg>
+      ) : <p class="small">No views recorded yet in this range.</p>}
+      <p class="small" style="margin-top:16px">Call taps and website clicks count how many people tapped to call or clicked through — not connected calls. Impressions are counts of appearing in search and city lists, updated after the nightly rollup.</p>
+    </>
+  ) : overview && (
+    <>
+      <div class="stats">
+        <div class="stat"><b>{overview.totals.unique_views.toLocaleString('en-US')}</b><span>Unique visitors</span></div>
+        <div class="stat"><b>{overview.totals.views.toLocaleString('en-US')}</b><span>Page views</span></div>
+        <div class="stat"><b>{overview.totals.impressions.toLocaleString('en-US')}</b><span>Impressions</span></div>
+        <div class="stat"><b>{overview.totals.calls.toLocaleString('en-US')}</b><span>Call taps</span></div>
+        <div class="stat"><b>{overview.totals.website.toLocaleString('en-US')}</b><span>Website clicks</span></div>
+        <div class="stat"><b>{overview.totals.leads.toLocaleString('en-US')}</b><span>Quote requests</span></div>
+        <div class="stat"><b>{overview.totals.reviews.toLocaleString('en-US')}</b><span>Reviews</span></div>
+      </div>
+      <p class="small">Site-wide, last {days} days. Impressions, top lists and per-listing history build up after the first nightly rollup. For full traffic sources and devices, use Cloudflare Web Analytics.</p>
+
+      <h3 style="margin:22px 0 6px">Top listings by views</h3>
+      {overview.topListings.length === 0 ? <p class="small">No view data yet.</p> : (
+        <div class="table-wrap"><table><thead><tr><th>Company</th><th>City</th><th style="text-align:right">Views</th><th style="text-align:right">Call taps</th><th style="text-align:right">Website</th><th></th></tr></thead><tbody>
+          {overview.topListings.map((r) => (
+            <tr>
+              <td>{r.name}</td>
+              <td style="white-space:nowrap">{r.city}, {r.state}</td>
+              <td style="text-align:right">{r.views.toLocaleString('en-US')}</td>
+              <td style="text-align:right">{r.calls.toLocaleString('en-US')}</td>
+              <td style="text-align:right">{r.website.toLocaleString('en-US')}</td>
+              <td><a href={`/admin/analytics?days=${days}&id=${r.id}`}>Details</a></td>
+            </tr>
+          ))}
+        </tbody></table></div>
+      )}
+
+      <h3 style="margin:22px 0 6px">Top cities by views</h3>
+      {overview.topCities.length === 0 ? <p class="small">No view data yet.</p> : (
+        <div class="table-wrap"><table><thead><tr><th>City</th><th style="text-align:right">Views</th></tr></thead><tbody>
+          {overview.topCities.map((c) => (
+            <tr><td>{c.city}, {c.state}</td><td style="text-align:right">{c.views.toLocaleString('en-US')}</td></tr>
+          ))}
+        </tbody></table></div>
+      )}
+    </>
+  )}
+</Admin>
