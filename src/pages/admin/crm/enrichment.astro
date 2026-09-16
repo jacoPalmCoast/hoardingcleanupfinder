@@ -1,13 +1,17 @@
 ---
 import Admin from '../../../layouts/Admin.astro';
-import { coverage, hunterEnabled } from '../../../lib/enrich';
+import { coverage, hunterEnabled, aiEnabled } from '../../../lib/enrich';
 import { env } from '../../../lib/env';
 
 const cov = await coverage();
 const hunter = hunterEnabled();
+const ai = await aiEnabled();
 const ran = Astro.url.searchParams.get('ran');
 const found = Astro.url.searchParams.get('found');
 const named = Astro.url.searchParams.get('named');
+const airan = Astro.url.searchParams.get('airan');
+const aifound = Astro.url.searchParams.get('aifound');
+const aioff = Astro.url.searchParams.get('aioff');
 const pct = cov.total ? Math.round((cov.withEmail / cov.total) * 100) : 0;
 
 const cands = (await env.DB.prepare(
@@ -21,6 +25,8 @@ const cands = (await env.DB.prepare(
   <p class="small" style="margin:-6px 0 12px"><a href="/admin/crm">← Pipeline</a> · <a href="/admin/crm/outreach">Outreach →</a></p>
   {ran && <div class="notice" role="status">Crawled {ran} listings, found {found} candidate{found === '1' ? '' : 's'}. Run again to continue the backlog.</div>}
   {named && <div class="notice" role="status">Inferred {named} contact name{named === '1' ? '' : 's'} from email addresses.</div>}
+  {airan && <div class="notice" role="status">AI pass read {airan} listing{airan === '1' ? '' : 's'}, found {aifound} name{aifound === '1' ? '' : 's'}.</div>}
+  {aioff && <div class="notice warn" role="alert">The deep enrichment agent is off. Turn it on in <a href="/admin/setup">Setup</a> first.</div>}
 
   <div class="stats">
     <div class="stat"><b>{pct}%</b><span>Have a usable email</span></div>
@@ -41,6 +47,13 @@ const cands = (await env.DB.prepare(
       <input type="hidden" name="action" value="infer_names" />
       <button class="btn small secondary" type="submit">Infer names from emails</button>
     </form>
+    {ai && (
+      <form action="/api/admin/enrich" method="post" style="display:inline">
+        <input type="hidden" name="action" value="ai_batch" />
+        <input type="hidden" name="n" value="15" />
+        <button class="btn small secondary" type="submit">Run AI name pass</button>
+      </form>
+    )}
     <p class="small" style="margin:0;max-width:520px">Reads each company's own website (homepage + contact page) for a published email, validates the domain has mail (MX), and falls back to role addresses (info@, contact@) on valid domains. The daily job also crawls up to 60/day automatically, so the backlog clears on its own.</p>
   </div>
 
@@ -49,6 +62,9 @@ const cands = (await env.DB.prepare(
     <p class="small" style="margin:6px 0 0">{hunter
       ? 'Hunter.io is connected. Use “Find via provider” on a company to pull more addresses, and “Verify” to confirm deliverability with a real score.'
       : 'For maximum reach and verified deliverability, add a Hunter.io API key as the Worker secret HUNTER_API_KEY. Website crawling + MX validation work without it.'}</p>
+    <p class="small" style="margin:8px 0 0"><strong>Deep enrichment agent {ai ? '· on' : '· off'}.</strong> {ai
+      ? 'The daily job re-reads sites without a named contact using an on-platform language model to find owner names. Toggle in Setup.'
+      : 'Turn on in Setup to have the agent read page text and extract owner names the pattern rules miss (~25/day, has a usage cost).'}</p>
   </div>
 
   <h2 style="margin:6px 0 8px">Candidates ({cands.length})</h2>
