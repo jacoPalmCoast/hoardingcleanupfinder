@@ -25,6 +25,9 @@ export interface Env {
   CRON_SECRET?: string;             // bearer secret for POST /api/cron/run
   MAILING_ADDRESS?: string;         // physical postal address for the CAN-SPAM marketing footer (P2)
   WEB_ANALYTICS_TOKEN?: string;     // Cloudflare Web Analytics beacon token; if set, the beacon loads (aggregate traffic)
+  CF_ANALYTICS_TOKEN?: string;      // Cloudflare API token (read-only Account Analytics) — pulls Web Analytics into admin
+  CF_ACCOUNT_ID?: string;           // Cloudflare account tag for the GraphQL Analytics query (public)
+  CF_RUM_SITE_TAG?: string;         // Web Analytics site tag to filter RUM events on (public)
 }
 
 export const env = cfEnv as unknown as Env;

@@ -1,6 +1,7 @@
 ---
 import Admin from '../../layouts/Admin.astro';
 import { siteOverview, listingStats, listingSeries, getListingById } from '../../lib/db';
+import { cfTraffic, cfConfigured, type CfDimCount } from '../../lib/cfAnalytics';
 
 const daysRaw = Number(Astro.url.searchParams.get('days'));
 const days = [7, 30, 90].includes(daysRaw) ? daysRaw : 30;
@@ -11,6 +12,17 @@ const listing = id ? await getListingById(id) : null;
 const detail = listing ? await listingStats(listing.id, days) : null;
 const series = listing ? await listingSeries(listing.id, days) : [];
 const overview = listing ? null : await siteOverview(days);
+// Aggregate traffic from Cloudflare Web Analytics (only on the site overview, not per-listing).
+const traffic = listing ? null : await cfTraffic(days);
+const trafficReady = cfConfigured();
+const breakdown = (title: string, rows: CfDimCount[]) => ({ title, rows });
+const breakdowns = traffic ? [
+  breakdown('Top pages', traffic.topPages),
+  breakdown('Top referrers', traffic.topReferrers),
+  breakdown('Countries', traffic.countries),
+  breakdown('Devices', traffic.devices),
+  breakdown('Browsers', traffic.browsers),
+] : [];
 
 const max = Math.max(1, ...series.map((p) => p.views));
 const barW = 8, gap = 3, h = 44;
@@ -81,6 +93,39 @@ const q = (d: number) => `?days=${d}${id ? `&id=${id}` : ''}`;
             <tr><td>{c.city}, {c.state}</td><td style="text-align:right">{c.views.toLocaleString('en-US')}</td></tr>
           ))}
         </tbody></table></div>
+      )}
+
+      <hr style="margin:28px 0;border:none;border-top:1px solid #e5e7eb" />
+      <h2 style="margin:0 0 2px">Traffic <span class="small" style="font-weight:400">· Cloudflare Web Analytics</span></h2>
+      {traffic ? (
+        <>
+          <div class="stats" style="margin-top:8px">
+            <div class="stat"><b>{traffic.visits.toLocaleString('en-US')}</b><span>Visits</span></div>
+            <div class="stat"><b>{traffic.pageViews.toLocaleString('en-US')}</b><span>Page views</span></div>
+          </div>
+          <div class="grid" style="margin-top:16px">
+            {breakdowns.map((b) => (
+              <div class="card">
+                <h3 style="margin:0 0 8px">{b.title}</h3>
+                {b.rows.length === 0 ? <p class="small" style="margin:0">No data yet.</p> : (
+                  <table style="width:100%"><tbody>
+                    {b.rows.slice(0, 8).map((r) => (
+                      <tr><td style="padding:3px 8px 3px 0;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{r.label}</td><td style="text-align:right;padding:3px 0"><strong>{r.count.toLocaleString('en-US')}</strong></td></tr>
+                    ))}
+                  </tbody></table>
+                )}
+              </div>
+            ))}
+          </div>
+          <p class="small" style="margin-top:12px">Aggregate and sampled by Cloudflare, so these won't exactly match the first-party per-listing numbers above. Referrers marked "Direct / none" arrived with no referring site.</p>
+        </>
+      ) : trafficReady ? (
+        <p class="small">Couldn't load Cloudflare traffic just now — the API token may be wrong or missing Account Analytics read access. Try again shortly.</p>
+      ) : (
+        <div class="notice">
+          <p style="margin:0 0 6px"><strong>Connect Cloudflare Web Analytics to show traffic here.</strong></p>
+          <p class="small" style="margin:0">Create a Cloudflare API token scoped <em>Account · Account Analytics · Read</em>, then set it as the Worker secret <code>CF_ANALYTICS_TOKEN</code>. The account and site tag are already configured.</p>
+        </div>
       )}
     </>
   )}

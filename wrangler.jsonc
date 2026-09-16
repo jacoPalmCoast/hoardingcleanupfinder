@@ -20,7 +20,9 @@
     "FEATURED_MONTHLY_USD": "49",
     "FEATURED_ANNUAL_USD": "399",
     "TURNSTILE_SITE_KEY": "0x4AAAAAAEz-zMBix5CVEIyu",
-    "INDEXNOW_KEY": "4f2a9c1e7b3d8e6a5c0f1b2d3e4a5c6b"
+    "INDEXNOW_KEY": "4f2a9c1e7b3d8e6a5c0f1b2d3e4a5c6b",
+    "CF_ACCOUNT_ID": "646dd853d6d5536029dbc6769d611a65",
+    "CF_RUM_SITE_TAG": "64a818a2f3b24b3ca57437d7a583e054"
   },
   "d1_databases": [
     { "binding": "DB", "database_name": "hcf-db", "database_id": "086a07e7-896f-44d2-9335-85d0ed5725d9", "migrations_dir": "migrations" }
