@@ -2,7 +2,7 @@
 import Admin from '../../../layouts/Admin.astro';
 import { getListingById, listingStats, isLive } from '../../../lib/db';
 import { companyContacts, companyTimeline, STAGES, STAGE_LABEL } from '../../../lib/crm';
-import { hunterEnabled, listingPeople } from '../../../lib/enrich';
+import { hunterEnabled, listingPeople, listingSocials } from '../../../lib/enrich';
 import { env } from '../../../lib/env';
 import { now, tsToDate, formatPhone } from '../../../lib/util';
 
@@ -28,6 +28,7 @@ const candidates = (await env.DB.prepare(
 ).bind(id).all<{ id: number; email: string; source: string; confidence: number; mx_ok: number | null; status: string }>()).results;
 const hunter = hunterEnabled();
 const people = await listingPeople(id);
+const socials = await listingSocials(id);
 const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) ?? '';
 ---
 <Admin title={l.name}>
@@ -106,6 +107,15 @@ const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 
         )}
         <p class="small" style="margin:10px 0 0">Phone: {l.phone ? formatPhone(l.phone) : '—'}<br/>Website: {l.website ? <a href={l.website} rel="nofollow noopener" target="_blank">link</a> : '—'}</p>
       </div>
+
+      {socials.length > 0 && (
+        <div class="card" style="margin-top:14px">
+          <h3 style="margin:0 0 8px">Online profiles</h3>
+          <ul style="list-style:none;padding:0;margin:0">
+            {socials.map((sc) => <li style="margin-bottom:4px"><a href={sc.url} rel="nofollow noopener" target="_blank">{sc.platform}</a></li>)}
+          </ul>
+        </div>
+      )}
 
       <div class="card" style="margin-top:14px">
         <h3 style="margin:0 0 8px">People</h3>

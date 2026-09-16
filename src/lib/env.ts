@@ -3,6 +3,7 @@ import { env as cfEnv } from 'cloudflare:workers';
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  AI?: { run: (model: string, input: unknown) => Promise<unknown> };  // Workers AI (LLM extraction)
   SITE_URL: string;
   SITE_NAME: string;
   FROM_EMAIL: string;

@@ -4,6 +4,7 @@
 // own site is crawled; no SMTP probing. Bounces are backstopped by the Resend webhook suppression.
 import { env } from './env';
 import { now } from './util';
+import { getSetting } from './settings';
 
 const ROLE = new Set(['info', 'contact', 'office', 'hello', 'admin', 'sales', 'support', 'team', 'inquiries', 'inquiry', 'help', 'service', 'services', 'mail', 'booking', 'bookings', 'estimate', 'estimates', 'quote', 'quotes', 'scheduling', 'dispatch', 'care']);
 const FREE = new Set(['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com', 'live.com', 'msn.com', 'comcast.net', 'me.com', 'att.net', 'verizon.net', 'sbcglobal.net', 'ymail.com', 'protonmail.com', 'gmx.com']);
@@ -111,27 +112,29 @@ export async function crawlListing(listing: { id: number; website: string | null
   const pages: string[] = [];
   const home = await fetchText(base) ?? await fetchText(`https://www.${host}`);
   if (home) pages.push(home);
-  // People (and often more emails) live on about/team pages — fetch a couple.
-  for (const path of ['/about', '/about-us', '/team', '/our-team', '/staff', '/leadership']) {
-    if (pages.length >= 4) break;
+  // Intelligently follow the site's OWN links to people/contact pages (discovered from the homepage),
+  // then a few common fallbacks. This finds team/about/staff pages we'd otherwise miss.
+  const paths = home ? discoverInternalLinks(home, host) : [];
+  for (const p of ['/about', '/about-us', '/team', '/our-team', '/staff', '/leadership', '/contact', '/contact-us']) if (!paths.includes(p)) paths.push(p);
+  for (const path of paths) {
+    if (pages.length >= 6) break;
     const html = await fetchText(base + path);
     if (html) pages.push(html);
   }
   for (const html of pages) extractEmails(html).forEach((e) => emails.add(e));
-  if (emails.size === 0) {
-    for (const path of ['/contact', '/contact-us', '/contact.html']) {
-      const html = await fetchText(base + path);
-      if (html) { pages.push(html); extractEmails(html).forEach((e) => emails.add(e)); if (emails.size > 0) break; }
-    }
-  }
   let found = 0;
   const homeHtml = pages[0] ?? '';
   for (const e of emails) { const c = classify(e); if (c) { await upsertCandidate(listing.id, c, homeHtml.includes('mailto:' + e) ? 'mailto' : 'website', host); found++; } }
 
-  // People: schema.org Person data + team/about heuristics across the fetched pages.
+  // People: schema.org Person data + team/about heuristics across all fetched pages.
   const people = new Map<string, ExtractedPerson>();
   for (const html of pages) for (const p of extractPeople(html)) mergePerson(people, p);
   for (const p of people.values()) await upsertPerson(listing.id, p.name, p.role, null, p.conf >= 80 ? 'schema' : 'team_page', p.conf);
+
+  // Discover + store the business's social / profile links found anywhere on the site.
+  const socials = new Map<string, string>();
+  for (const html of pages) for (const sc of extractSocial(html)) socials.set(sc.url, sc.platform);
+  await storeSocial(listing.id, [...socials.entries()].map(([url, platform]) => ({ platform, url })));
 
   // Provider fallback for the hard cases: only when the site published nothing AND a key is set —
   // bounded to one domain-search call per listing, so it targets Hunter spend where it adds most.
@@ -279,6 +282,104 @@ export async function promotePerson(listingId: number): Promise<void> {
     env.DB.prepare(`UPDATE people SET is_primary = 0 WHERE listing_id = ?1`).bind(listingId),
     env.DB.prepare(`UPDATE people SET is_primary = 1 WHERE id = ?1`).bind(best.id),
   ]);
+}
+
+// ---- Intelligent link discovery + social/profile links ----
+const PEOPLE_HINT = /(about|team|staff|leadership|management|meet|our-story|our-team|people|founder|owner|bio|company|contact|who-we-are|crew|family)/i;
+// Follow the homepage's own internal links, prioritizing likely people/contact pages.
+export function discoverInternalLinks(html: string, host: string): string[] {
+  const scored: { path: string; score: number }[] = [];
+  const seen = new Set<string>();
+  for (const m of html.matchAll(/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const href = m[1].trim();
+    if (!href || /^(mailto:|tel:|javascript:|#)/i.test(href)) continue;
+    let path: string | null = null;
+    try {
+      const u = new URL(href, `https://${host}`);
+      if (u.hostname.replace(/^www\./, '') !== host) continue;
+      path = u.pathname;
+    } catch { if (href.startsWith('/')) path = href.split(/[?#]/)[0]; else continue; }
+    if (!path || path === '/' || path.length > 60) continue;
+    const key = path.toLowerCase();
+    if (seen.has(key)) continue; seen.add(key);
+    const anchor = stripTags(m[2]).toLowerCase();
+    let score = 0;
+    if (PEOPLE_HINT.test(path)) score += 2;
+    if (PEOPLE_HINT.test(anchor)) score += 1;
+    if (/team|staff|about|meet|leadership|owner|founder/i.test(key)) score += 2;
+    if (score > 0) scored.push({ path, score });
+  }
+  return scored.sort((a, b) => b.score - a.score).slice(0, 8).map((x) => x.path);
+}
+
+const SOCIAL: [RegExp, string][] = [
+  [/facebook\.com/i, 'facebook'], [/instagram\.com/i, 'instagram'], [/linkedin\.com/i, 'linkedin'],
+  [/(?:twitter\.com|\bx\.com)/i, 'x'], [/yelp\.com/i, 'yelp'], [/(?:youtube\.com|youtu\.be)/i, 'youtube'],
+  [/tiktok\.com/i, 'tiktok'], [/bbb\.org/i, 'bbb'],
+];
+export function extractSocial(html: string): { platform: string; url: string }[] {
+  const out = new Map<string, string>();
+  for (const m of html.matchAll(/href\s*=\s*["'](https?:\/\/[^"']+)["']/gi)) {
+    const url = m[1];
+    for (const [re, plat] of SOCIAL) {
+      if (!re.test(url)) continue;
+      if (/\/(share|sharer|intent|dialog)\b/i.test(url) || url.includes('u=') || url.includes('share.php') || url.includes('/plugins/')) break;
+      const clean = url.split(/[?#]/)[0].replace(/\/+$/, '');
+      if (clean.length < 130 && !out.has(clean)) out.set(clean, plat);
+      break;
+    }
+  }
+  return [...out.entries()].map(([url, platform]) => ({ platform, url })).slice(0, 12);
+}
+async function storeSocial(listingId: number, links: { platform: string; url: string }[]): Promise<void> {
+  for (const l of links.slice(0, 12)) {
+    await env.DB.prepare(`INSERT OR IGNORE INTO social_links(listing_id, platform, url) VALUES (?1,?2,?3)`).bind(listingId, l.platform, l.url).run();
+  }
+}
+export async function listingSocials(listingId: number): Promise<{ platform: string; url: string }[]> {
+  return (await env.DB.prepare(`SELECT platform, url FROM social_links WHERE listing_id = ?1 ORDER BY platform LIMIT 12`).bind(listingId).all<{ platform: string; url: string }>()).results;
+}
+
+// ---- AI extraction agent (Workers AI) — reads page text like an analyst to pull names/emails ----
+export async function aiEnabled(): Promise<boolean> { return !!env.AI && (await getSetting('enrich_ai')) === 'on'; }
+async function aiExtract(text: string): Promise<{ people: { name: string; role?: string }[]; emails: string[] }> {
+  if (!env.AI) return { people: [], emails: [] };
+  const prompt = `You are extracting contact data from a cleanup company's website text. Extract the real PEOPLE (person name + their role/title if stated, e.g. Owner, President) and any EMAIL addresses for this business. Do NOT include company names as people. Respond with ONLY compact JSON, no prose: {"people":[{"name":"First Last","role":"Owner"}],"emails":["x@y.com"]}\n\nTEXT:\n${text.slice(0, 6000)}`;
+  try {
+    const res = (await env.AI.run('@cf/meta/llama-3.1-8b-instruct', { messages: [{ role: 'user', content: prompt }], max_tokens: 400 })) as { response?: string };
+    const jsonStr = (res.response ?? '').match(/\{[\s\S]*\}/)?.[0];
+    if (!jsonStr) return { people: [], emails: [] };
+    const parsed = JSON.parse(jsonStr) as { people?: { name?: string; role?: string }[]; emails?: string[] };
+    return { people: Array.isArray(parsed.people) ? parsed.people.map((p) => ({ name: String(p.name ?? ''), role: p.role ? String(p.role) : undefined })) : [], emails: Array.isArray(parsed.emails) ? parsed.emails.map(String) : [] };
+  } catch { return { people: [], emails: [] }; }
+}
+// Bounded, gated pass: for already-crawled listings that still have NO named contact, re-read the
+// homepage + about page with the LLM to find owner names/emails the pattern rules missed.
+export async function aiEnrichBatch(limit = 20): Promise<{ processed: number; found: number }> {
+  if (!(await aiEnabled())) return { processed: 0, found: 0 };
+  const rows = (await env.DB.prepare(
+    `SELECT l.id, l.website FROM listings l JOIN enrichment_state es ON es.listing_id = l.id
+     WHERE l.status = 'active' AND l.website IS NOT NULL AND l.website != '' AND es.status = 'done' AND es.ai_done = 0
+       AND NOT EXISTS (SELECT 1 FROM people p WHERE p.listing_id = l.id AND p.source IN ('schema','team_page','hunter','smart'))
+     ORDER BY l.id LIMIT ?1`,
+  ).bind(limit).all<{ id: number; website: string }>()).results;
+  let found = 0;
+  for (const r of rows) {
+    await env.DB.prepare(`UPDATE enrichment_state SET ai_done = 1 WHERE listing_id = ?1`).bind(r.id).run(); // mark attempted (don't retry)
+    const host = hostOfUrl(r.website); if (!host) continue;
+    const base = `https://${host}`;
+    const texts: string[] = [];
+    const home = await fetchText(base) ?? await fetchText(`https://www.${host}`);
+    if (home) texts.push(stripTags(home));
+    const about = (await fetchText(`${base}/about`)) ?? (await fetchText(`${base}/about-us`)) ?? (await fetchText(`${base}/team`));
+    if (about) texts.push(stripTags(about));
+    if (texts.length === 0) continue;
+    const ex = await aiExtract(texts.join('\n').slice(0, 8000));
+    for (const p of ex.people) { const name = p.name.trim(); if (looksLikeName(name)) { await upsertPerson(r.id, name, p.role ? (normRole(p.role) ?? p.role.slice(0, 40)) : null, null, 'smart', 70); found++; } }
+    for (const e of ex.emails) { const c = classify(e); if (c) { await upsertCandidate(r.id, c, 'website', host); } }
+    await promoteBest(r.id); await promotePerson(r.id);
+  }
+  return { processed: rows.length, found };
 }
 
 // Process a batch of listings that have a website and haven't been crawled yet.

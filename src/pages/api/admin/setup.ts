@@ -10,5 +10,7 @@ export const POST: APIRoute = async ({ request }) => {
   for (const key of SETTING_KEYS) {
     if (form.has(key)) await setSetting(key, clean(form.get(key), 400));
   }
+  // Deep AI enrichment toggle (checkbox present in the same form).
+  if (form.has('_settings_form')) await setSetting('enrich_ai', form.get('enrich_ai') ? 'on' : 'off');
   return redirect('/admin/setup?saved=1');
 };

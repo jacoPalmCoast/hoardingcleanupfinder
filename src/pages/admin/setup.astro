@@ -5,6 +5,7 @@ import { env } from '../../lib/env';
 
 const s = await getSettings();
 const addr = await mailingAddress();
+const aiOn = (await getSettings(['enrich_ai']))['enrich_ai'] === 'on';
 const saved = Astro.url.searchParams.get('saved');
 
 // Readiness checklist. Booleans only — never the secret values.
@@ -52,6 +53,7 @@ const fields = [
     <div>
       <h2 style="margin:0 0 10px">Business details</h2>
       <form action="/api/admin/setup" method="post" style="max-width:520px">
+        <input type="hidden" name="_settings_form" value="1" />
         {fields.map((f) => (
           <div style="margin-bottom:12px">
             <label for={f.key}>{f.label}</label>
@@ -59,6 +61,12 @@ const fields = [
             {f.hint && <div class="small" style="color:#666;margin-top:2px">{f.hint}</div>}
           </div>
         ))}
+        <div style="margin:14px 0;padding:12px;border:1px solid #eee;border-radius:8px">
+          <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
+            <input type="checkbox" name="enrich_ai" value="on" checked={aiOn} style="margin-top:3px" />
+            <span><strong>Deep enrichment agent</strong><br/><span class="small" style="color:#666">When on, the daily job reads each remaining company's page text with an on-platform language model to pull owner names and emails the pattern rules miss (≈25/day). Uses Cloudflare Workers AI — has a usage cost. Leave off to rely on the free crawler + validation.</span></span>
+          </label>
+        </div>
         <button class="btn" type="submit" style="margin-top:4px">Save</button>
       </form>
     </div>

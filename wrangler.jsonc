@@ -6,6 +6,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": "./dist", "binding": "ASSETS" },
   "observability": { "enabled": true },
+  // Workers AI — powers the optional LLM extraction pass (reads page text to find names/emails).
+  "ai": { "binding": "AI" },
   // Native Cloudflare Cron Trigger — runs the daily job via the scheduled() handler in
   // src/worker.ts, inside the Worker runtime (no public request, no edge/WAF). 13:00 UTC daily.
   "triggers": { "crons": ["0 13 * * *"] },
