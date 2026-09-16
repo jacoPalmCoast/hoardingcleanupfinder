@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { requireAdmin } from '../../../lib/adminGuard';
 import { clean, redirect, escapeHtml } from '../../../lib/util';
 import { sendEmail, emailShell } from '../../../lib/services';
-import { getTicket, addTicketMessage, setTicketStatus } from '../../../lib/tickets';
+import { getTicket, addTicketMessage, setTicketStatus, approveTicket, rejectTicket } from '../../../lib/tickets';
 import { addActivity } from '../../../lib/crm';
 
 export const POST: APIRoute = async ({ request }) => {
@@ -19,12 +19,23 @@ export const POST: APIRoute = async ({ request }) => {
     await setTicketStatus(id, status);
     return redirect(back);
   }
+  if (action === 'approve') {
+    await approveTicket(id);
+    return redirect(back);
+  }
+  if (action === 'reject') {
+    // Deletes a held (pending) ticket + its attachments. rejectTicket only acts on 'pending'.
+    const ok = await rejectTicket(id);
+    return redirect(ok ? '/admin/crm/tickets?status=pending' : back);
+  }
   if (action === 'reply') {
     const body = clean(form.get('body'), 4000);
     if (!body) return redirect(back);
     const t = await getTicket(id);
     if (!t) return redirect('/admin/crm/tickets');
-    const ok = await sendEmail(t.ticket.from_email, `Re: ${t.ticket.subject}`, emailShell('Hoarding Cleanup Finder', `<p>${escapeHtml(body).replace(/\n/g, '<br>')}</p>`), { type: 'support_reply', listingId: t.ticket.listing_id ?? undefined });
+    // Carry the thread token in the subject so the customer's reply lands back on this ticket.
+    const tag = t.ticket.ref_token ? ` [HCF-${t.ticket.ref_token}]` : '';
+    const ok = await sendEmail(t.ticket.from_email, `Re: ${t.ticket.subject}${tag}`, emailShell('Hoarding Cleanup Finder', `<p>${escapeHtml(body).replace(/\n/g, '<br>')}</p>`), { type: 'support_reply', listingId: t.ticket.listing_id ?? undefined });
     await addTicketMessage(id, 'out', body);
     if (t.ticket.listing_id) await addActivity(t.ticket.listing_id, 'email_out', `Support reply: ${body.slice(0, 200)}`);
     return redirect(`${back}?msg=${ok ? 'sent' : 'send-failed'}`);

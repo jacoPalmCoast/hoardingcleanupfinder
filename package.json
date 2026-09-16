@@ -17,6 +17,7 @@
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.1",
     "astro": "^7.3.2",
+    "postal-mime": "^3.0.0",
     "stripe": "^22.6.2",
     "wrangler": "^4.131.1"
   },

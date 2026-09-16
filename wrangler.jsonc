@@ -28,5 +28,10 @@
   },
   "d1_databases": [
     { "binding": "DB", "database_name": "hcf-db", "database_id": "086a07e7-896f-44d2-9335-85d0ed5725d9", "migrations_dir": "migrations" }
+  ],
+  // Private bucket for customer email attachments (inbound support email). Never public — files are
+  // served only through the admin-authed /api/admin/attachment route.
+  "r2_buckets": [
+    { "binding": "ATTACH", "bucket_name": "hcf-attachments" }
   ]
 }

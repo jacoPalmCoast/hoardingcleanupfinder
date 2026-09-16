@@ -1,17 +1,18 @@
 ---
 import Admin from '../../../layouts/Admin.astro';
-import { listTickets } from '../../../lib/tickets';
+import { listTickets, pendingTicketCount } from '../../../lib/tickets';
 import { tsToDate } from '../../../lib/util';
 
 const statusParam = (Astro.url.searchParams.get('status') ?? 'open').toLowerCase();
-const status = statusParam === 'closed' ? 'closed' : statusParam === 'all' ? null : 'open';
-const rows = await listTickets(status);
+const status = statusParam === 'closed' ? 'closed' : statusParam === 'pending' ? 'pending' : statusParam === 'all' ? null : 'open';
+const [rows, pendingCount] = await Promise.all([listTickets(status), pendingTicketCount()]);
 const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
 const tab = (key: string, label: string) => ({ key, label });
-const tabs = [tab('open', 'Open'), tab('closed', 'Closed'), tab('all', 'All')];
+const tabs = [tab('open', 'Open'), tab('pending', pendingCount > 0 ? `Review (${pendingCount})` : 'Review'), tab('closed', 'Closed'), tab('all', 'All')];
 ---
 <Admin title="Support inbox">
   <nav class="small" style="margin:-6px 0 12px"><a href="/admin/crm">← Pipeline</a> · Show: {tabs.map((x) => (statusParam === x.key ? <strong style="margin-right:8px">{x.label}</strong> : <a href={`/admin/crm/tickets?status=${x.key}`} style="margin-right:8px">{x.label}</a>))}</nav>
+  {statusParam === 'pending' && rows.length > 0 && <p class="small" style="margin:-4px 0 12px;color:#666">These emails are from senders that don't match a known listing. Open each to approve or reject.</p>}
   {rows.length === 0 ? <p>No {status ?? ''} tickets.</p> : (
     <div class="table-wrap"><table><thead><tr><th>Updated</th><th>Subject</th><th>From</th><th>Company</th><th>Status</th></tr></thead><tbody>
       {rows.map((r) => (

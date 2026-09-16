@@ -7,23 +7,47 @@ const id = Number(Astro.params.id);
 if (!Number.isInteger(id)) return new Response(null, { status: 404 });
 const data = await getTicket(id);
 if (!data) return new Response(null, { status: 404 });
-const { ticket, messages } = data;
+const { ticket, messages, attachments } = data;
 const msg = Astro.url.searchParams.get('msg');
 const when = (ts: number) => tsToDate(ts)?.toLocaleString('en-US') ?? '';
+const isImg = (ct: string) => /^image\//i.test(ct);
+const kb = (n: number) => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+const attachOf = (messageId: number) => attachments.filter((a) => a.message_id === messageId);
+const pending = ticket.status === 'pending';
 ---
 <Admin title={ticket.subject}>
   <p class="small" style="margin:-6px 0 10px"><a href="/admin/crm/tickets">← Support inbox</a>{ticket.listing_id ? <> · <a href={`/admin/crm/${ticket.listing_id}`}>{ticket.company}</a></> : null}</p>
   {msg === 'sent' && <div class="notice" role="status">Reply sent.</div>}
   {msg === 'send-failed' && <div class="notice error" role="alert">The reply was saved but the email didn't send (check email settings).</div>}
-  <p class="small" style="margin:0 0 16px">From {ticket.from_email} · {ticket.status}</p>
+  <p class="small" style="margin:0 0 16px">From {ticket.from_email} · {ticket.status}{ticket.source === 'email' ? ' · via email' : ''}</p>
+
+  {pending && (
+    <div class="notice warn" role="alert" style="max-width:680px">
+      <strong>Held for review.</strong> This email is from an address that doesn't match a known listing. Approve it to move it into your open inbox, or reject to delete it.
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <form action="/api/admin/ticket" method="post" style="display:inline"><input type="hidden" name="ticket_id" value={id} /><input type="hidden" name="action" value="approve" /><button class="btn small" type="submit">Approve</button></form>
+        <form action="/api/admin/ticket" method="post" style="display:inline"><input type="hidden" name="ticket_id" value={id} /><input type="hidden" name="action" value="reject" /><button class="btn small secondary" type="submit">Reject &amp; delete</button></form>
+      </div>
+    </div>
+  )}
 
   <div style="max-width:680px">
-    {messages.map((m) => (
+    {messages.map((m) => {
+      const files = attachOf(m.id);
+      return (
       <div class="card" style={`margin-bottom:10px${m.direction === 'out' ? ';border-left:3px solid #0f6d6a' : ''}`}>
         <div class="small" style="color:#666;margin-bottom:4px">{m.direction === 'out' ? 'You' : ticket.from_email} · {when(m.created_at)}</div>
         <div style="white-space:pre-wrap">{m.body}</div>
+        {files.length > 0 && (
+          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px">
+            {files.map((f) => (isImg(f.content_type)
+              ? <a href={`/api/admin/attachment?id=${f.id}`} target="_blank" rel="noopener" title={f.filename}><img src={`/api/admin/attachment?id=${f.id}`} alt={f.filename} loading="lazy" style="max-width:150px;max-height:150px;border:1px solid #e5e5e5;border-radius:6px;object-fit:cover" /></a>
+              : <a class="btn small secondary" href={`/api/admin/attachment?id=${f.id}`} target="_blank" rel="noopener">{f.filename} · {kb(f.size)}</a>
+            ))}
+          </div>
+        )}
       </div>
-    ))}
+    );})}
 
     <form action="/api/admin/ticket" method="post" style="margin-top:14px">
       <input type="hidden" name="ticket_id" value={id} />

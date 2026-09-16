@@ -7,6 +7,7 @@
 import { handle } from '@astrojs/cloudflare/handler';
 import type { Env } from './lib/env';
 import { runDailyJobs } from './lib/cron';
+import { ingestEmail } from './lib/inbound';
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
@@ -14,5 +15,10 @@ export default {
   },
   async scheduled(_event, _env, ctx): Promise<void> {
     ctx.waitUntil(runDailyJobs());
+  },
+  // Inbound support email (Cloudflare Email Routing → this Worker). ingestEmail never throws, so a
+  // bad message is accepted and dropped rather than bounced back to the customer.
+  async email(message, _env, _ctx): Promise<void> {
+    await ingestEmail(message as unknown as import('./lib/inbound').EmailMessage);
   },
 } satisfies ExportedHandler<Env>;
