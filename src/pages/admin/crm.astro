@@ -1,0 +1,46 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { pipelineCounts, pipelineList, STAGES, STAGE_LABEL } from '../../lib/crm';
+import { tsToDate } from '../../lib/util';
+
+const stageParam = (Astro.url.searchParams.get('stage') ?? '').toLowerCase();
+const stage = STAGES.includes(stageParam as never) ? stageParam : '';
+const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 60);
+
+const counts = await pipelineCounts();
+const rows = await pipelineList(stage || null, q, 150);
+const total = STAGES.reduce((a, s) => a + (counts[s] ?? 0), 0);
+const when = (ts: number | null) => (ts ? tsToDate(ts)?.toLocaleDateString('en-US') ?? '' : '');
+const overdue = (ts: number | null) => ts != null && ts < Math.floor(Date.now() / 1000);
+---
+<Admin title="CRM">
+  <div class="stats">
+    <a class="stat" href="/admin/crm" style="text-decoration:none;color:inherit;{stage === '' ? 'outline:2px solid #0f6d6a' : ''}"><b>{total.toLocaleString('en-US')}</b><span>All companies</span></a>
+    {STAGES.map((s) => (
+      <a class="stat" href={`/admin/crm?stage=${s}`} style={`text-decoration:none;color:inherit;${stage === s ? 'outline:2px solid #0f6d6a' : ''}`}><b>{(counts[s] ?? 0).toLocaleString('en-US')}</b><span>{STAGE_LABEL[s]}</span></a>
+    ))}
+  </div>
+
+  <form method="get" style="margin:14px 0;display:flex;gap:8px;max-width:520px">
+    {stage && <input type="hidden" name="stage" value={stage} />}
+    <input type="search" name="q" value={q} placeholder="Search company or city" style="flex:1" />
+    <button class="btn small" type="submit">Search</button>
+    {(q || stage) && <a class="btn small secondary" href="/admin/crm">Clear</a>}
+  </form>
+
+  <p class="small">{rows.length} shown{stage ? ` in ${STAGE_LABEL[stage as never]}` : ''}{q ? ` matching “${q}”` : ''}. Follow-ups due first. <a href="/admin/crm/tasks">Open tasks →</a> · <a href="/admin/crm/tickets">Support inbox →</a> · <a href="/admin/crm/outreach">Outreach →</a></p>
+
+  {rows.length === 0 ? <p>No companies match.</p> : (
+    <div class="table-wrap"><table><thead><tr><th>Company</th><th>City</th><th>Stage</th><th>Next follow-up</th><th>Last activity</th></tr></thead><tbody>
+      {rows.map((r) => (
+        <tr>
+          <td><a href={`/admin/crm/${r.id}`}>{r.name}</a></td>
+          <td style="white-space:nowrap">{r.city}, {r.state}</td>
+          <td>{STAGE_LABEL[r.stage as never] ?? r.stage}</td>
+          <td style="white-space:nowrap;{overdue(r.next_follow_up) ? 'color:#b00;font-weight:600' : ''}">{r.next_follow_up ? when(r.next_follow_up) : '—'}</td>
+          <td style="white-space:nowrap">{r.last_activity ? when(r.last_activity) : '—'}</td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  )}
+</Admin>

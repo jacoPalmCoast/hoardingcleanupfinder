@@ -1,0 +1,38 @@
+---
+import Admin from '../../../layouts/Admin.astro';
+import { openTasks } from '../../../lib/crm';
+import { now, tsToDate } from '../../../lib/util';
+
+const tasks = await openTasks(300);
+const t = now();
+const when = (ts: number | null) => (ts ? tsToDate(ts)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) ?? '' : 'No date');
+const overdue = tasks.filter((x) => x.due_at != null && x.due_at < t);
+const soon = tasks.filter((x) => x.due_at != null && x.due_at >= t);
+const undated = tasks.filter((x) => x.due_at == null);
+const groups = [['Overdue', overdue], ['Upcoming', soon], ['No date', undated]] as const;
+---
+<Admin title="Follow-up tasks">
+  <p class="small" style="margin:-6px 0 12px"><a href="/admin/crm">← Pipeline</a></p>
+  {tasks.length === 0 ? <p>No open tasks. Add follow-ups from any company record.</p> : groups.map(([label, list]) => (
+    list.length > 0 && (
+      <section style="margin-bottom:20px">
+        <h2 style={`margin:0 0 8px${label === 'Overdue' ? ';color:#b00' : ''}`}>{label} ({list.length})</h2>
+        <div class="table-wrap"><table><thead><tr><th>Due</th><th>Task</th><th>Company</th><th></th></tr></thead><tbody>
+          {list.map((x) => (
+            <tr>
+              <td style={`white-space:nowrap${x.due_at != null && x.due_at < t ? ';color:#b00;font-weight:600' : ''}`}>{when(x.due_at)}</td>
+              <td>{x.body}</td>
+              <td style="white-space:nowrap"><a href={`/admin/crm/${x.listing_id}`}>{x.name}</a></td>
+              <td>
+                <form action="/api/admin/crm" method="post" style="display:inline">
+                  <input type="hidden" name="action" value="complete_task" /><input type="hidden" name="activity_id" value={x.id} /><input type="hidden" name="back" value="/admin/crm/tasks" />
+                  <button class="btn small secondary" type="submit">Done</button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody></table></div>
+      </section>
+    )
+  ))}
+</Admin>

@@ -1,0 +1,105 @@
+---
+import Admin from '../../../layouts/Admin.astro';
+import { getListingById, listingStats, isLive } from '../../../lib/db';
+import { companyContacts, companyTimeline, STAGES, STAGE_LABEL } from '../../../lib/crm';
+import { env } from '../../../lib/env';
+import { now, tsToDate, formatPhone } from '../../../lib/util';
+
+const id = Number(Astro.params.id);
+if (!Number.isInteger(id)) return new Response(null, { status: 404 });
+const l = await getListingById(id);
+if (!l) return new Response(null, { status: 404 });
+
+const cr = await env.DB.prepare(`SELECT stage, next_follow_up FROM crm_records WHERE listing_id = ?1`).bind(id).first<{ stage: string | null; next_follow_up: number | null }>();
+const t = now();
+const derived = isLive(l) ? 'featured'
+  : (l.subscription_status === 'canceled' || (l.stripe_customer_id && l.featured_until && l.featured_until <= t)) ? 'lapsed'
+  : l.is_claimed === 1 ? 'claimed' : 'prospect';
+const stage = cr?.stage || derived;
+
+const [contacts, timeline, s] = await Promise.all([
+  companyContacts(id, l.email),
+  companyTimeline(id),
+  listingStats(id, 30),
+]);
+const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) ?? '';
+---
+<Admin title={l.name}>
+  <p class="small" style="margin:-6px 0 10px"><a href="/admin/crm">← Pipeline</a> · <a href={`/company/${l.slug}`}>View public page</a> · <a href={`/admin/analytics?id=${id}`}>Full analytics</a></p>
+  <p class="small" style="margin:0 0 16px">{l.city}, {l.state} · {l.is_claimed === 1 ? 'Claimed' : 'Unclaimed'}{l.subscription_status ? ` · ${l.subscription_status}` : ''}{l.featured_until ? ` · featured until ${when(l.featured_until)}` : ''}</p>
+
+  <div class="two" style="gap:24px">
+    <div>
+      <div class="stats">
+        <div class="stat"><b>{(s.unique_views || s.views).toLocaleString('en-US')}</b><span>Visitors 30d</span></div>
+        <div class="stat"><b>{s.calls.toLocaleString('en-US')}</b><span>Call taps</span></div>
+        <div class="stat"><b>{s.website.toLocaleString('en-US')}</b><span>Website</span></div>
+        <div class="stat"><b>{s.leads.toLocaleString('en-US')}</b><span>Leads</span></div>
+      </div>
+
+      <h2 style="margin:20px 0 8px">Activity</h2>
+      <form action="/api/admin/crm" method="post" style="margin-bottom:8px">
+        <input type="hidden" name="listing_id" value={id} />
+        <input type="hidden" name="action" value="note" />
+        <textarea name="body" rows="2" required maxlength="2000" placeholder="Add a note…" style="width:100%"></textarea>
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+          <button class="btn small" type="submit">Save note</button>
+          <button class="btn small secondary" type="submit" formaction="/api/admin/crm" name="action" value="call">Log as call</button>
+        </div>
+      </form>
+      <form action="/api/admin/crm" method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+        <input type="hidden" name="listing_id" value={id} />
+        <input type="hidden" name="action" value="task" />
+        <input type="text" name="body" required maxlength="500" placeholder="Follow-up task…" style="flex:1;min-width:200px" />
+        <input type="date" name="due" aria-label="Due date" />
+        <button class="btn small secondary" type="submit">Add task</button>
+      </form>
+
+      {timeline.length === 0 ? <p class="small">No activity yet.</p> : (
+        <ul style="list-style:none;padding:0;margin:0">
+          {timeline.map((it) => (
+            <li style="padding:8px 0;border-bottom:1px solid #eee">
+              <div style="display:flex;justify-content:space-between;gap:10px">
+                <strong style={it.kind === 'task' && !it.done && it.due_at && it.due_at < t ? 'color:#b00' : ''}>{it.title}{it.kind === 'task' && it.due_at ? ` · due ${when(it.due_at)}` : ''}</strong>
+                <span class="small" style="white-space:nowrap;color:#666">{when(it.ts)}</span>
+              </div>
+              {it.detail && <div class="small" style="margin-top:2px">{it.detail}</div>}
+              {it.kind === 'task' && !it.done && (
+                <form action="/api/admin/crm" method="post" style="display:inline">
+                  <input type="hidden" name="action" value="complete_task" /><input type="hidden" name="activity_id" value={it.activityId} /><input type="hidden" name="back" value={`/admin/crm/${id}`} />
+                  <button class="linkbtn small" type="submit">Mark done</button>
+                </form>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+
+    <aside>
+      <div class="card">
+        <h3 style="margin:0 0 8px">Stage</h3>
+        <form action="/api/admin/crm" method="post">
+          <input type="hidden" name="listing_id" value={id} />
+          <input type="hidden" name="action" value="stage" />
+          <select name="stage" style="width:100%">
+            {STAGES.map((st) => <option value={st} selected={stage === st}>{STAGE_LABEL[st]}</option>)}
+            <option value="" selected={!cr?.stage}>Automatic ({STAGE_LABEL[derived as never]})</option>
+          </select>
+          <button class="btn small" type="submit" style="margin-top:8px;width:100%">Update stage</button>
+        </form>
+        {cr?.stage && <p class="small" style="margin:6px 0 0">Manually set. "Automatic" follows claim/billing status.</p>}
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h3 style="margin:0 0 8px">Contacts</h3>
+        {contacts.length === 0 ? <p class="small" style="margin:0">No email on file.</p> : (
+          <ul style="list-style:none;padding:0;margin:0">
+            {contacts.map((c) => <li style="margin-bottom:6px"><a href={`mailto:${c.email}`}>{c.email}</a><br/><span class="small">{c.role}</span></li>)}
+          </ul>
+        )}
+        <p class="small" style="margin:10px 0 0">Phone: {l.phone ? formatPhone(l.phone) : '—'}<br/>Website: {l.website ? <a href={l.website} rel="nofollow noopener" target="_blank">link</a> : '—'}</p>
+      </div>
+    </aside>
+  </div>
+</Admin>

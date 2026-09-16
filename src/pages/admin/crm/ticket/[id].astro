@@ -1,0 +1,42 @@
+---
+import Admin from '../../../../layouts/Admin.astro';
+import { getTicket } from '../../../../lib/tickets';
+import { tsToDate } from '../../../../lib/util';
+
+const id = Number(Astro.params.id);
+if (!Number.isInteger(id)) return new Response(null, { status: 404 });
+const data = await getTicket(id);
+if (!data) return new Response(null, { status: 404 });
+const { ticket, messages } = data;
+const msg = Astro.url.searchParams.get('msg');
+const when = (ts: number) => tsToDate(ts)?.toLocaleString('en-US') ?? '';
+---
+<Admin title={ticket.subject}>
+  <p class="small" style="margin:-6px 0 10px"><a href="/admin/crm/tickets">← Support inbox</a>{ticket.listing_id ? <> · <a href={`/admin/crm/${ticket.listing_id}`}>{ticket.company}</a></> : null}</p>
+  {msg === 'sent' && <div class="notice" role="status">Reply sent.</div>}
+  {msg === 'send-failed' && <div class="notice error" role="alert">The reply was saved but the email didn't send (check email settings).</div>}
+  <p class="small" style="margin:0 0 16px">From {ticket.from_email} · {ticket.status}</p>
+
+  <div style="max-width:680px">
+    {messages.map((m) => (
+      <div class="card" style={`margin-bottom:10px${m.direction === 'out' ? ';border-left:3px solid #0f6d6a' : ''}`}>
+        <div class="small" style="color:#666;margin-bottom:4px">{m.direction === 'out' ? 'You' : ticket.from_email} · {when(m.created_at)}</div>
+        <div style="white-space:pre-wrap">{m.body}</div>
+      </div>
+    ))}
+
+    <form action="/api/admin/ticket" method="post" style="margin-top:14px">
+      <input type="hidden" name="ticket_id" value={id} />
+      <input type="hidden" name="action" value="reply" />
+      <label for="body">Reply (emails {ticket.from_email})</label>
+      <textarea id="body" name="body" rows="5" required maxlength="4000" style="width:100%"></textarea>
+      <button class="btn" type="submit" style="margin-top:8px">Send reply</button>
+    </form>
+    <form action="/api/admin/ticket" method="post" style="margin-top:8px">
+      <input type="hidden" name="ticket_id" value={id} />
+      <input type="hidden" name="action" value="status" />
+      <input type="hidden" name="status" value={ticket.status === 'closed' ? 'open' : 'closed'} />
+      <button class="btn secondary" type="submit">{ticket.status === 'closed' ? 'Reopen ticket' : 'Close ticket'}</button>
+    </form>
+  </div>
+</Admin>

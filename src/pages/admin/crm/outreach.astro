@@ -1,0 +1,54 @@
+---
+import Admin from '../../../layouts/Admin.astro';
+import { listCampaigns, previewCount, SEGMENTS } from '../../../lib/outreach';
+import { env } from '../../../lib/env';
+import { tsToDate } from '../../../lib/util';
+
+const campaigns = await listCampaigns();
+const counts = Object.fromEntries(await Promise.all(SEGMENTS.map(async (s) => [s.key, await previewCount(s.key)] as const)));
+const ready = !!env.MAILING_ADDRESS;
+const msg = Astro.url.searchParams.get('msg');
+const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US') ?? '';
+---
+<Admin title="Outreach">
+  <p class="small" style="margin:-6px 0 12px"><a href="/admin/crm">← Pipeline</a></p>
+  {msg === 'invalid' && <div class="notice error" role="alert">Fill in a name, subject, body and a valid segment.</div>}
+  {!ready && (
+    <div class="notice warn">
+      <p style="margin:0"><strong>Sending is off until marketing is set up.</strong> Campaigns save and queue, but nothing sends until <code>MAILING_ADDRESS</code> is set and your Resend domain is verified (so mail sends from your own domain with a valid unsubscribe footer). Until then this is a safe place to draft.</p>
+    </div>
+  )}
+
+  <h2 style="margin:18px 0 8px">New campaign</h2>
+  <form action="/api/admin/outreach" method="post" style="max-width:640px">
+    <input type="hidden" name="action" value="create" />
+    <label for="name">Campaign name <span class="small">(internal)</span></label>
+    <input id="name" name="name" type="text" required maxlength="120" />
+    <label for="segment">Who it goes to</label>
+    <select id="segment" name="segment">
+      {SEGMENTS.map((s) => <option value={s.key}>{s.label} — {counts[s.key].toLocaleString('en-US')} with an email</option>)}
+    </select>
+    <label for="subject">Subject</label>
+    <input id="subject" name="subject" type="text" required maxlength="150" />
+    <label for="body">Message</label>
+    <textarea id="body" name="body" rows="8" required maxlength="6000" placeholder="Hi {{name}}, your company in {{city}} is listed free on Hoarding Cleanup Finder…"></textarea>
+    <p class="small">Merge fields: <code>{'{{name}}'}</code> <code>{'{{city}}'}</code> <code>{'{{state}}'}</code> <code>{'{{claim_url}}'}</code> <code>{'{{featured_url}}'}</code>. Basic HTML is fine. An unsubscribe line and your mailing address are added automatically.</p>
+    <button class="btn" type="submit" style="margin-top:8px">Create campaign</button>
+  </form>
+
+  <h2 style="margin:24px 0 8px">Campaigns</h2>
+  {campaigns.length === 0 ? <p class="small">None yet.</p> : (
+    <div class="table-wrap"><table><thead><tr><th>Name</th><th>Segment</th><th>Status</th><th style="text-align:right">Queued</th><th style="text-align:right">Sent</th><th>Created</th></tr></thead><tbody>
+      {campaigns.map((c) => (
+        <tr>
+          <td><a href={`/admin/crm/outreach/${c.id}`}>{c.name}</a></td>
+          <td>{c.segment}</td>
+          <td>{c.status}</td>
+          <td style="text-align:right">{c.queued.toLocaleString('en-US')}</td>
+          <td style="text-align:right">{c.sent.toLocaleString('en-US')}</td>
+          <td style="white-space:nowrap">{when(c.created_at)}</td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  )}
+</Admin>

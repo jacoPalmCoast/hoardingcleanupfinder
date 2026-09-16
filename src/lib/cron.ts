@@ -2,6 +2,7 @@ import { env } from './env';
 import { now, escapeHtml } from './util';
 import { sendEmail, emailShell } from './services';
 import { rollupEvents, pruneEvents, statsForDayRange, type ListingStats } from './db';
+import { renderTemplate } from './outreach';
 
 // Daily job entry point. Invoked by the scheduler (GitHub Actions or cron-worker) via
 // POST /api/cron/run, and by the standalone worker's scheduled() handler.
@@ -157,6 +158,39 @@ function monthlyReportBody(name: string, slug: string, label: string, s: Listing
     <p class="small">"People who viewed" counts unique visitors; phone taps count how many people tapped your number on a phone or clicked to call, not connected calls. <a href="${env.SITE_URL}/account">See more in your account</a>.</p>`;
 }
 
+// 6) Outreach — drain a throttled batch of queued campaign sends. INERT until MAILING_ADDRESS is
+// set (marketing can't legally go out without the CAN-SPAM footer), and every send is suppression-
+// checked inside sendEmail (marketing stream). Capped per run to warm the sending domain.
+const OUTREACH_CAP = 40;
+interface SendRow { send_id: number; email: string; listing_id: number; campaign_id: number; subject: string; body: string; name: string; city: string; state: string; slug: string }
+async function outreach(): Promise<number> {
+  if (!env.MAILING_ADDRESS) return 0; // gate: no marketing sends without a physical address on file
+  const rows = (await env.DB.prepare(
+    `SELECT s.id AS send_id, s.email, s.listing_id, c.id AS campaign_id, c.subject, c.body,
+        l.name, l.city, l.state, l.slug
+     FROM outreach_sends s
+     JOIN outreach_campaigns c ON c.id = s.campaign_id AND c.status = 'sending'
+     JOIN listings l ON l.id = s.listing_id
+     WHERE s.status = 'queued' ORDER BY s.id LIMIT ?1`,
+  ).bind(OUTREACH_CAP).all<SendRow>()).results;
+  let n = 0;
+  const campaigns = new Set<number>();
+  for (const r of rows) {
+    campaigns.add(r.campaign_id);
+    const html = emailShell(r.subject, renderTemplate(r.body, r));
+    let ok = false;
+    try { ok = await sendEmail(r.email, r.subject, html, { stream: 'marketing', type: `outreach_${r.campaign_id}`, listingId: r.listing_id }); } catch { ok = false; }
+    await env.DB.prepare(`UPDATE outreach_sends SET status = ?2, sent_at = unixepoch() WHERE id = ?1`).bind(r.send_id, ok ? 'sent' : 'failed').run();
+    if (ok) n++;
+  }
+  // Mark any drained campaign done.
+  for (const cid of campaigns) {
+    const left = await env.DB.prepare(`SELECT COUNT(*) AS n FROM outreach_sends WHERE campaign_id = ?1 AND status = 'queued'`).bind(cid).first<{ n: number }>();
+    if ((left?.n ?? 0) === 0) await env.DB.prepare(`UPDATE outreach_campaigns SET status = 'done' WHERE id = ?1 AND status = 'sending'`).bind(cid).run();
+  }
+  return n;
+}
+
 export interface CronResult { ran: string[]; ts: number }
 
 export async function runDailyJobs(): Promise<CronResult> {
@@ -169,6 +203,7 @@ export async function runDailyJobs(): Promise<CronResult> {
     ['winback', winback],
     ['claim_followup', claimFollowup],
     ['monthly_report', monthlyReports],
+    ['outreach', outreach],
   ];
   for (const [name, fn] of jobs) {
     try { ran.push(`${name}:${await fn()}`); } catch (e) { console.error('cron ' + name, (e as Error)?.message); ran.push(`${name}:err`); }

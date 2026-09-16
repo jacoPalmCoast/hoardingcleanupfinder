@@ -1,0 +1,46 @@
+---
+import Admin from '../../../../layouts/Admin.astro';
+import { getCampaign, campaignStats, previewCount, isSegment, SEGMENTS } from '../../../../lib/outreach';
+import { env } from '../../../../lib/env';
+
+const id = Number(Astro.params.id);
+if (!Number.isInteger(id)) return new Response(null, { status: 404 });
+const c = await getCampaign(id);
+if (!c) return new Response(null, { status: 404 });
+const stats = await campaignStats(id);
+const audience = isSegment(c.segment) ? await previewCount(c.segment) : 0;
+const segLabel = SEGMENTS.find((s) => s.key === c.segment)?.label ?? c.segment;
+const ready = !!env.MAILING_ADDRESS;
+const total = stats.queued + stats.sent + stats.failed + stats.suppressed;
+---
+<Admin title={c.name}>
+  <p class="small" style="margin:-6px 0 10px"><a href="/admin/crm/outreach">← Outreach</a></p>
+  <p class="small" style="margin:0 0 14px">{segLabel} · status <strong>{c.status}</strong> · {audience.toLocaleString('en-US')} in audience with an email</p>
+
+  <div class="stats">
+    <div class="stat"><b>{stats.queued.toLocaleString('en-US')}</b><span>Queued</span></div>
+    <div class="stat"><b>{stats.sent.toLocaleString('en-US')}</b><span>Sent</span></div>
+    <div class="stat"><b>{stats.failed.toLocaleString('en-US')}</b><span>Failed</span></div>
+    <div class="stat"><b>{total.toLocaleString('en-US')}</b><span>Total recipients</span></div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap">
+    {total === 0 ? (
+      <form action="/api/admin/outreach" method="post"><input type="hidden" name="action" value="queue" /><input type="hidden" name="campaign_id" value={id} /><button class="btn" type="submit">Queue {audience.toLocaleString('en-US')} recipients</button></form>
+    ) : c.status === 'sending' ? (
+      <form action="/api/admin/outreach" method="post"><input type="hidden" name="action" value="pause" /><input type="hidden" name="campaign_id" value={id} /><button class="btn secondary" type="submit">Pause sending</button></form>
+    ) : c.status === 'paused' ? (
+      <form action="/api/admin/outreach" method="post"><input type="hidden" name="action" value="resume" /><input type="hidden" name="campaign_id" value={id} /><button class="btn" type="submit">Resume sending</button></form>
+    ) : null}
+  </div>
+
+  {!ready && stats.queued > 0 && <div class="notice warn"><p style="margin:0">Recipients are queued but held — nothing sends until <code>MAILING_ADDRESS</code> is set and the Resend domain is verified. Once it is, the daily job sends up to 40/day automatically.</p></div>}
+  {ready && c.status === 'sending' && stats.queued > 0 && <p class="small">Sending up to 40/day on the daily job. Suppressed/unsubscribed addresses are skipped automatically.</p>}
+
+  <h2 style="margin:22px 0 6px">Message</h2>
+  <div class="card" style="max-width:640px">
+    <p style="margin:0 0 6px"><strong>Subject:</strong> {c.subject}</p>
+    <div style="white-space:pre-wrap">{c.body}</div>
+  </div>
+  <p class="small" style="margin-top:8px">Preview shows the raw template; merge fields fill in per recipient at send time.</p>
+</Admin>
