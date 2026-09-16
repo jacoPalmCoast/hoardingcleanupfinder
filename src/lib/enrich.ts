@@ -577,8 +577,17 @@ export async function opencorpEnrich(listingId: number, name: string, state: str
 }
 // Bounded pass: run the records provider over active listings that still have NO named contact
 // (owner-name gap), independent of whether they have a website. Cheap-ish: 2 API calls per listing.
+let recordsTableReady = false;
+async function ensureRecordsTable(): Promise<void> {
+  if (recordsTableReady) return;
+  // Self-provision so the feature works the moment OPENCORPORATES_TOKEN is added, even if the
+  // 0016 migration hasn't been applied to this database yet (idempotent — matches the migration).
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS records_state (listing_id INTEGER PRIMARY KEY, found INTEGER NOT NULL DEFAULT 0, last_run INTEGER NOT NULL DEFAULT (unixepoch()))`).run();
+  recordsTableReady = true;
+}
 export async function opencorpBatch(limit = 20): Promise<{ processed: number; found: number }> {
   if (!opencorpEnabled()) return { processed: 0, found: 0 };
+  await ensureRecordsTable();
   const rows = (await env.DB.prepare(
     `SELECT l.id, l.name, l.state FROM listings l
      WHERE l.status = 'active' AND l.name IS NOT NULL AND l.name != ''
