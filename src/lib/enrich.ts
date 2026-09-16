@@ -191,7 +191,7 @@ const ROLE_PATTERNS: [RegExp, string][] = [
 function normRole(text: string): string | null { for (const [re, label] of ROLE_PATTERNS) if (re.test(text)) return label; return null; }
 const ROLE_ALT = 'owner\\s*\\/\\s*operator|owner-operator|co-?owner|owner|co-?founder|founder|president|ceo|principal|proprietor|general manager|operations manager|office manager|managing director|director|vice president|manager';
 // Words that disqualify a "Name" match (company/section words, not people).
-const NAME_STOP = /\b(LLC|Inc|Co|Corp|Company|Services?|Cleanup|Cleaning|Restoration|Hoarding|Biohazard|Junk|Removal|Estate|Estates|Trauma|Crime|Scene|Group|Team|Solutions?|Property|Properties|Management|Realty|Construction|Contracting|Enterprises?|Industries|Systems?|Professional|Pros?|Experts?|Specialists?|Emergency|Response|Home|House|Family|America|American|National|Local|Best|Top|Quality|Care|About|Contact|Menu|Privacy|Terms|Copyright|Reserved|Rights|Google|Facebook|Reviews?|Service|Areas?|Free|Call|Today|Learn|More|Read|View|Click|Us)\b/i;
+const NAME_STOP = /\b(LLC|Inc|Co|Corp|Company|Services?|Cleanup|Cleaning|Restoration|Hoarding|Biohazard|Junk|Removal|Estate|Estates|Trauma|Crime|Scene|Group|Team|Solutions?|Property|Properties|Management|Realty|Construction|Contracting|Enterprises?|Industries|Systems?|Professional|Pros?|Experts?|Emergency|Response|Home|House|Family|America|American|National|Local|Best|Top|Quality|Care|About|Contact|Menu|Privacy|Terms|Copyright|Reserved|Rights|Google|Facebook|Reviews?|Service|Areas?|Free|Call|Today|Learn|More|Read|View|Click|Us|Owner|Operator|President|Ceo|Founder|Manager|Director|Executive|Operations|Vice|Principal|Proprietor|Coordinator|Supervisor|Specialist|Specialists|Officer|Chief|Sales|Marketing|Staff|Technician|Estimator|Consultant|Admin|Office)\b/i;
 function looksLikeName(s: string): boolean {
   const parts = s.trim().split(/\s+/);
   if (parts.length < 2 || parts.length > 3) return false;
@@ -230,10 +230,12 @@ export function extractPeople(html: string): ExtractedPerson[] {
   }
   // 2) heuristic "Name, Role" / "Role: Name" over the visible text
   const text = stripTags(html).slice(0, 200000);
-  for (const m of text.matchAll(new RegExp(`([A-Z][a-z'’\\-]+(?:\\s+[A-Z][a-z'’\\-]+){1,2}),?\\s+(?:is\\s+(?:the\\s+|our\\s+)?)?(${ROLE_ALT})\\b`, 'gi'))) {
+  // Name = exactly first + last (optionally a middle initial) so a trailing role word is never
+  // swallowed into the name (e.g. "Jim Cashman, President" -> name "Jim Cashman", role President).
+  for (const m of text.matchAll(new RegExp(`([A-Z][a-z'’\\-]{1,20}\\s+(?:[A-Z]\\.\\s+)?[A-Z][a-z'’\\-]{1,20}),?\\s+(?:is\\s+(?:the\\s+|our\\s+)?)?(${ROLE_ALT})\\b`, 'gi'))) {
     if (looksLikeName(m[1])) mergePerson(out, { name: m[1].trim(), role: normRole(m[2]), conf: 55 });
   }
-  for (const m of text.matchAll(new RegExp(`\\b(${ROLE_ALT})\\s*[:\\-–]\\s*([A-Z][a-z'’\\-]+(?:\\s+[A-Z][a-z'’\\-]+){1,2})`, 'gi'))) {
+  for (const m of text.matchAll(new RegExp(`\\b(${ROLE_ALT})\\s*[:\\-–]\\s*([A-Z][a-z'’\\-]{1,20}\\s+(?:[A-Z]\\.\\s+)?[A-Z][a-z'’\\-]{1,20})`, 'gi'))) {
     if (looksLikeName(m[2])) mergePerson(out, { name: m[2].trim(), role: normRole(m[1]), conf: 50 });
   }
   return [...out.values()].slice(0, 12);
