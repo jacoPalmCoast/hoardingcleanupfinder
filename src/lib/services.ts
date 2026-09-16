@@ -2,6 +2,7 @@ import { env } from './env';
 import { getCookie, now, randomToken, sha256, timingSafeEqual, escapeHtml } from './util';
 import { isSuppressed, logEmail } from './db';
 import { unsubToken } from './mailauth';
+import { mailingAddress } from './settings';
 
 // ---------- Email (Resend) ----------
 export type EmailStream = 'txn' | 'marketing';
@@ -36,14 +37,15 @@ export async function sendEmail(to: string, subject: string, html: string, opts:
     // CAN-SPAM: commercial mail needs a visible opt-out AND a physical postal address IN the body,
     // not only the List-Unsubscribe header. Fail closed if either the address or the signing secret
     // (for a valid unsubscribe link) is missing — better to send nothing than a non-compliant email.
-    if (!env.MAILING_ADDRESS) {
+    const addr = await mailingAddress();
+    if (!addr) {
       try { await logEmail({ to_email: toLc, stream, type: opts.type, subject, status: 'failed', error: 'no_mailing_address', listing_id: opts.listingId, owner_id: opts.ownerId }); } catch {}
       return false;
     }
     try {
       const url = `${env.SITE_URL}/api/unsubscribe?t=${await unsubToken(toLc)}`;
       headers = { 'List-Unsubscribe': `<${url}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click', ...(headers ?? {}) };
-      const footer = `<hr style="border:none;border-top:1px solid #eee;margin:26px 0 12px"><p style="font-size:12px;color:#888;line-height:1.5">You're receiving this because your business is listed on ${escapeHtml(env.SITE_NAME)}. <a href="${url}" style="color:#888">Unsubscribe</a>.<br>${escapeHtml(env.MAILING_ADDRESS)}</p>`;
+      const footer = `<hr style="border:none;border-top:1px solid #eee;margin:26px 0 12px"><p style="font-size:12px;color:#888;line-height:1.5">You're receiving this because your business is listed on ${escapeHtml(env.SITE_NAME)}. <a href="${url}" style="color:#888">Unsubscribe</a>.<br>${escapeHtml(addr)}</p>`;
       outHtml = html.includes('</body>') ? html.replace('</body>', `${footer}</body>`) : html + footer;
     } catch {
       try { await logEmail({ to_email: toLc, stream, type: opts.type, subject, status: 'failed', error: 'no_unsub_token', listing_id: opts.listingId, owner_id: opts.ownerId }); } catch {}

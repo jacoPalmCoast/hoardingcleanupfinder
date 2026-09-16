@@ -1,0 +1,83 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { getSettings, mailingAddress } from '../../lib/settings';
+import { env } from '../../lib/env';
+
+const s = await getSettings();
+const addr = await mailingAddress();
+const saved = Astro.url.searchParams.get('saved');
+
+// Readiness checklist. Booleans only — never the secret values.
+const fromCustom = !!env.FROM_EMAIL && !env.FROM_EMAIL.includes('resend.dev');
+const stripeLive = !!env.STRIPE_SECRET_KEY?.startsWith('sk_live');
+const stripeTest = !!env.STRIPE_SECRET_KEY && !stripeLive;
+type Row = { label: string; ok: boolean; warn?: boolean; note: string };
+const groups: { title: string; rows: Row[] }[] = [
+  { title: 'Business details', rows: [
+    { label: 'Mailing address', ok: !!addr, note: addr || 'Required before any marketing email can send (CAN-SPAM).' },
+    { label: 'Business name', ok: !!(s.business_name || env.SITE_NAME), note: s.business_name || env.SITE_NAME || 'Shown in email footers and legal pages.' },
+    { label: 'Support email', ok: !!(s.support_email || env.ADMIN_EMAIL), note: s.support_email || env.ADMIN_EMAIL || 'Where support and operator notices go.' },
+  ]},
+  { title: 'Email sending', rows: [
+    { label: 'Resend API key', ok: !!env.RESEND_API_KEY, note: env.RESEND_API_KEY ? 'Connected.' : 'Set RESEND_API_KEY (dashboard secret) to send any email.' },
+    { label: 'Sending domain verified', ok: fromCustom, warn: !fromCustom, note: fromCustom ? `Sending from ${env.FROM_EMAIL}.` : 'Still on onboarding@resend.dev — verify your domain in Resend and move FROM_EMAIL to it before real sends.' },
+    { label: 'Delivery tracking (webhook)', ok: !!env.RESEND_WEBHOOK_SECRET, note: env.RESEND_WEBHOOK_SECRET ? 'Bounces/opens tracked + auto-suppressed.' : 'Add a Resend webhook → RESEND_WEBHOOK_SECRET for delivery/bounce tracking.' },
+  ]},
+  { title: 'Payments', rows: [
+    { label: 'Stripe', ok: stripeLive, warn: stripeTest, note: stripeLive ? 'Live keys — collecting real payments.' : stripeTest ? 'TEST mode — switch to live keys + live webhook to charge real cards.' : 'Not configured.' },
+  ]},
+  { title: 'Analytics & enrichment', rows: [
+    { label: 'Cloudflare traffic (admin)', ok: !!env.CF_ANALYTICS_TOKEN, note: env.CF_ANALYTICS_TOKEN ? 'Traffic pulled into Admin → Analytics.' : 'Add CF_ANALYTICS_TOKEN to mirror Cloudflare traffic into admin.' },
+    { label: 'Email verification (Hunter)', ok: !!env.HUNTER_API_KEY, note: env.HUNTER_API_KEY ? 'Provider enrichment + verification on.' : 'Optional: add HUNTER_API_KEY for verified deliverability + more found emails.' },
+  ]},
+  { title: 'Security & automation', rows: [
+    { label: 'Spam protection (Turnstile)', ok: !!env.TURNSTILE_SECRET_KEY, note: env.TURNSTILE_SECRET_KEY ? 'Forms protected.' : 'Set TURNSTILE keys to protect public forms.' },
+    { label: 'Daily job secret', ok: !!env.CRON_SECRET, note: env.CRON_SECRET ? 'Manual trigger secured.' : 'Set CRON_SECRET.' },
+    { label: 'Operator email', ok: !!env.ADMIN_EMAIL, note: env.ADMIN_EMAIL || 'Set ADMIN_EMAIL so lead/report/review notices reach you.' },
+  ]},
+];
+const field = (key: string, label: string, ph: string, hint?: string) => ({ key, label, ph, hint, value: s[key] ?? '' });
+const fields = [
+  field('business_name', 'Business name', 'Hoarding Cleanup Finder', 'Legal/display name for email footers and legal pages.'),
+  field('mailing_address', 'Mailing address', '123 Main St, City, ST 00000', 'Physical postal address — legally required in marketing email footers.'),
+  field('support_email', 'Support email', 'help@yourdomain.com', 'Public contact address (optional; falls back to the operator email).'),
+  field('support_phone', 'Support phone', '(555) 555-5555', 'Optional.'),
+];
+---
+<Admin title="Setup">
+  {saved && <div class="notice" role="status">Saved.</div>}
+  <p class="small" style="margin:-4px 0 16px">Business data you can edit here takes effect immediately. Secrets and API keys live in the Cloudflare dashboard (they're never shown here) — the checklist below tells you what's set.</p>
+
+  <div class="two" style="gap:28px;align-items:flex-start">
+    <div>
+      <h2 style="margin:0 0 10px">Business details</h2>
+      <form action="/api/admin/setup" method="post" style="max-width:520px">
+        {fields.map((f) => (
+          <div style="margin-bottom:12px">
+            <label for={f.key}>{f.label}</label>
+            <input id={f.key} name={f.key} type="text" maxlength="400" value={f.value} placeholder={f.ph} style="width:100%" />
+            {f.hint && <div class="small" style="color:#666;margin-top:2px">{f.hint}</div>}
+          </div>
+        ))}
+        <button class="btn" type="submit" style="margin-top:4px">Save</button>
+      </form>
+    </div>
+
+    <aside style="flex:1;min-width:300px">
+      <h2 style="margin:0 0 10px">Readiness</h2>
+      {groups.map((g) => (
+        <div class="card" style="margin-bottom:12px">
+          <strong>{g.title}</strong>
+          <ul style="list-style:none;padding:0;margin:8px 0 0">
+            {g.rows.map((r) => (
+              <li style="display:flex;gap:8px;padding:5px 0;border-top:1px solid #f0f0f0">
+                <span aria-hidden="true" style={`flex:0 0 auto;font-weight:700;color:${r.ok ? '#0f6d6a' : r.warn ? '#b8860b' : '#b00'}`}>{r.ok ? '✓' : r.warn ? '!' : '✗'}</span>
+                <span><strong>{r.label}</strong><br/><span class="small" style="color:#666">{r.note}</span></span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </aside>
+  </div>
+</Admin>

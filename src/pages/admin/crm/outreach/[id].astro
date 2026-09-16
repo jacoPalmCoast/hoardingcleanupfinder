@@ -1,7 +1,7 @@
 ---
 import Admin from '../../../../layouts/Admin.astro';
 import { getCampaign, campaignStats, previewCount, isSegment, SEGMENTS } from '../../../../lib/outreach';
-import { env } from '../../../../lib/env';
+import { mailingAddress } from '../../../../lib/settings';
 
 const id = Number(Astro.params.id);
 if (!Number.isInteger(id)) return new Response(null, { status: 404 });
@@ -10,7 +10,7 @@ if (!c) return new Response(null, { status: 404 });
 const stats = await campaignStats(id);
 const audience = isSegment(c.segment) ? await previewCount(c.segment) : 0;
 const segLabel = SEGMENTS.find((s) => s.key === c.segment)?.label ?? c.segment;
-const ready = !!env.MAILING_ADDRESS;
+const ready = !!(await mailingAddress());
 const total = stats.queued + stats.sent + stats.failed + stats.suppressed;
 ---
 <Admin title={c.name}>

@@ -4,6 +4,7 @@ import { sendEmail, emailShell } from './services';
 import { rollupEvents, pruneEvents, statsForDayRange, type ListingStats } from './db';
 import { renderTemplate } from './outreach';
 import { runBatch } from './enrich';
+import { mailingAddress } from './settings';
 
 // Daily job entry point. Invoked by the scheduler (GitHub Actions or cron-worker) via
 // POST /api/cron/run, and by the standalone worker's scheduled() handler.
@@ -165,7 +166,7 @@ function monthlyReportBody(name: string, slug: string, label: string, s: Listing
 const OUTREACH_CAP = 40;
 interface SendRow { send_id: number; email: string; listing_id: number; campaign_id: number; subject: string; body: string; name: string; city: string; state: string; slug: string }
 async function outreach(): Promise<number> {
-  if (!env.MAILING_ADDRESS) return 0; // gate: no marketing sends without a physical address on file
+  if (!(await mailingAddress())) return 0; // gate: no marketing sends without a physical address on file
   const rows = (await env.DB.prepare(
     `SELECT s.id AS send_id, s.email, s.listing_id, c.id AS campaign_id, c.subject, c.body,
         l.name, l.city, l.state, l.slug
