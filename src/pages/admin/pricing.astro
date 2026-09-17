@@ -16,7 +16,7 @@ const annualSave = Number(pricing.monthlyUsd) * 12 - Number(pricing.annualUsd);
   <p slot="sub" class="sub">Featured plan price + which Stripe price actually bills · changes take effect immediately, no redeploy</p>
   <Fragment slot="actions">
     <span class={`pill ${stripeConfigured() ? (liveMode ? 'ok' : 'warn') : 'bad'}`}><span class="dot"></span>{stripeConfigured() ? (liveMode ? 'Live mode' : 'Test mode') : 'Stripe not set'}</span>
-    <a class="btn secondary small" href="/admin/specials"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7ZM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z"/></svg>Specials</a>
+    <a class="btn secondary small" href="/admin/offers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7ZM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z"/></svg>Offers</a>
   </Fragment>
 
   {saved && <div class="notice" role="status">Saved. Live immediately for new checkouts.</div>}

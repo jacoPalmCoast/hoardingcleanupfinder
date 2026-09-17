@@ -4,7 +4,8 @@ import { clean, redirect, returnOrigin } from '../../../lib/util';
 import { currentOwner, ownerOwns } from '../../../lib/services';
 import { getListingById, isLive } from '../../../lib/db';
 import { stripe, stripeConfigured } from '../../../lib/stripe';
-import { featuredPricing, activeSpecial } from '../../../lib/settings';
+import { featuredPricing } from '../../../lib/settings';
+import { activeOffer, offerAppliesTo } from '../../../lib/offers';
 
 export const POST: APIRoute = async ({ request }) => {
   const owner = await currentOwner(request);
@@ -27,19 +28,24 @@ export const POST: APIRoute = async ({ request }) => {
   }
   const pricing = await featuredPricing();
   const priceId = plan === 'annual' ? pricing.stripeAnnual : pricing.stripeMonthly;
-  // A running special with a Stripe promotion code auto-applies it; otherwise the customer can enter
-  // any promo code themselves. (Stripe forbids both discounts and allow_promotion_codes together.)
-  const special = await activeSpecial();
-  const discount = special?.promoId
-    ? { discounts: [{ promotion_code: special.promoId }] }
+
+  // The live offer composes Stripe primitives: a free trial + an intro coupon on the base plan.
+  // If it applies to this plan, use its trial + coupon; otherwise let the customer enter any promo
+  // code. (Stripe forbids discounts and allow_promotion_codes together.)
+  const offer = await activeOffer();
+  const applies = offerAppliesTo(offer, plan);
+  const subData: Record<string, unknown> = { metadata: { listing_id: String(l.id) } };
+  if (applies && offer!.trialDays > 0) subData.trial_period_days = offer!.trialDays;
+  const discount = applies && offer!.couponId
+    ? { discounts: [offer!.couponId.startsWith('promo_') ? { promotion_code: offer!.couponId } : { coupon: offer!.couponId }] }
     : { allow_promotion_codes: true };
   const session = await s.checkout.sessions.create({
     mode: 'subscription',
     customer,
     line_items: [{ price: priceId || (plan === 'annual' ? env.STRIPE_PRICE_ANNUAL! : env.STRIPE_PRICE_MONTHLY!), quantity: 1 }],
     client_reference_id: String(l.id),
-    metadata: { listing_id: String(l.id), plan },
-    subscription_data: { metadata: { listing_id: String(l.id) } },
+    metadata: { listing_id: String(l.id), plan, offer: applies ? offer!.id : '' },
+    subscription_data: subData,
     ...discount,
     success_url: `${returnOrigin(request, env.SITE_URL)}/account?msg=featured`,
     cancel_url: `${returnOrigin(request, env.SITE_URL)}/featured/${l.slug}?msg=cancelled`,

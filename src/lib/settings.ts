@@ -44,16 +44,4 @@ export async function featuredPricing(): Promise<FeaturedPricing> {
   };
 }
 
-// A running special/promo. Presentation (banner) lives here; any actual discount is a Stripe
-// promotion code, so the money stays in Stripe. Returns null unless enabled AND inside its window.
-export interface Special { headline: string; subtext: string; promoId: string; startsOn: string; endsOn: string }
-export async function activeSpecial(): Promise<Special | null> {
-  const s = await getSettings(['special_enabled', 'special_headline', 'special_subtext', 'special_promo_id', 'special_starts', 'special_ends']);
-  if (s.special_enabled !== 'on') return null;
-  const headline = (s.special_headline || '').trim();
-  if (!headline) return null;
-  const today = new Date().toISOString().slice(0, 10);
-  if (s.special_starts && today < s.special_starts) return null;
-  if (s.special_ends && today > s.special_ends) return null;
-  return { headline, subtext: (s.special_subtext || '').trim(), promoId: (s.special_promo_id || '').trim(), startsOn: s.special_starts || '', endsOn: s.special_ends || '' };
-}
+// Intro offers (free trial + intro coupon + banner) live in src/lib/offers.ts.

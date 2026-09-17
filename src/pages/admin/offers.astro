@@ -1,0 +1,106 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { getOffers, getOffer, type Offer } from '../../lib/offers';
+
+const offers = await getOffers();
+const editId = Astro.url.searchParams.get('edit') ?? '';
+const editing: Offer | null = editId ? await getOffer(editId) : null;
+const msg = Astro.url.searchParams.get('msg');
+const today = new Date().toISOString().slice(0, 10);
+
+const status = (o: Offer) => {
+  if (!o.active) return { cls: 'muted', label: 'Off' };
+  if (o.startsOn && today < o.startsOn) return { cls: 'info', label: 'Scheduled' };
+  if (o.endsOn && today > o.endsOn) return { cls: 'muted', label: 'Expired' };
+  return { cls: 'ok', label: 'Live' };
+};
+const planLabel = (p: string) => (p === 'monthly' ? 'Monthly only' : p === 'annual' ? 'Annual only' : 'Any plan');
+const e = editing;
+---
+<Admin title="Offers">
+  <p slot="sub" class="sub">Intro offers — free trial + a Stripe coupon + banner copy · one live at a time</p>
+  <Fragment slot="actions">
+    <a class="btn secondary small" href="/admin/pricing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2 2 0 0 1 0 2.8ZM7 7h.01"/></svg>Pricing</a>
+    {editing && <a class="btn secondary small" href="/admin/offers">+ New offer</a>}
+  </Fragment>
+
+  {msg === 'saved' && <div class="notice" role="status">Offer saved.</div>}
+  {msg === 'activated' && <div class="notice" role="status">Offer is now live — it shows on the upgrade page and applies at checkout.</div>}
+  {msg === 'off' && <div class="notice" role="status">Offer turned off.</div>}
+  {msg === 'deleted' && <div class="notice" role="status">Offer deleted.</div>}
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-h"><h3>Your offers</h3><span class="hint">{offers.length}</span></div>
+    {offers.length === 0 ? (
+      <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7"/></svg></div><b>No offers yet</b>Create one below — it stays off until you switch it on.</div>
+    ) : (
+      <div class="table-wrap"><table>
+        <thead><tr><th>Offer</th><th>Applies to</th><th>Structure</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {offers.map((o) => { const st = status(o); return (
+            <tr>
+              <td><span class="co">{o.name}</span>{o.headline && <div class="sub2">"{o.headline}"</div>}</td>
+              <td class="mut">{planLabel(o.plan)}</td>
+              <td class="mut">{[o.trialDays > 0 ? `${o.trialDays}-day trial` : null, o.couponId ? 'coupon' : null].filter(Boolean).join(' + ') || 'no discount'}{o.endsOn ? ` · ends ${o.endsOn}` : ''}</td>
+              <td><span class={`pill ${st.cls}`}><span class="dot"></span>{st.label}</span></td>
+              <td class="actions" style="white-space:nowrap">
+                <a class="linkish" href={`/admin/offers?edit=${o.id}`}>Edit</a>
+                <form action="/api/admin/offers" method="post" style="display:inline;margin-left:8px"><input type="hidden" name="id" value={o.id} /><input type="hidden" name="action" value={o.active ? 'deactivate' : 'activate'} /><button class="linkbtn small" type="submit">{o.active ? 'Turn off' : 'Set live'}</button></form>
+                <form action="/api/admin/offers" method="post" style="display:inline;margin-left:8px" onsubmit="return confirm('Delete this offer?')"><input type="hidden" name="id" value={o.id} /><input type="hidden" name="action" value="delete" /><button class="linkbtn small" type="submit" style="color:var(--a-bad)">Delete</button></form>
+              </td>
+            </tr>
+          );})}
+        </tbody>
+      </table></div>
+    )}
+  </div>
+
+  <div class="two-6-4">
+    <div class="card">
+      <div class="card-h"><h3>{editing ? `Edit: ${editing.name}` : 'New offer'}</h3>{editing && <span class="hint">id {editing.id}</span>}</div>
+      <div class="card-b">
+        <form action="/api/admin/offers" method="post">
+          <input type="hidden" name="action" value="save" />
+          <input type="hidden" name="id" value={e?.id ?? ''} />
+          <div class="field"><label for="name">Offer name <span class="fh" style="display:inline">(internal)</span></label><input id="name" name="name" type="text" maxlength="80" value={e?.name ?? ''} placeholder="Founding advertiser" /></div>
+          <div class="two">
+            <div class="field"><label for="plan">Applies to</label><select id="plan" name="plan"><option value="any" selected={!e || e.plan === 'any'}>Any plan</option><option value="monthly" selected={e?.plan === 'monthly'}>Monthly only</option><option value="annual" selected={e?.plan === 'annual'}>Annual only</option></select></div>
+            <div class="field"><label for="trial">Free trial (days)</label><input id="trial" name="trial_days" type="number" min="0" max="365" value={e?.trialDays ?? 0} /><div class="fh">0 = no trial.</div></div>
+          </div>
+          <div class="field"><label for="coupon">Stripe coupon or promotion-code ID <span class="fh" style="display:inline">(the intro discount)</span></label><input id="coupon" name="coupon_id" type="text" maxlength="60" value={e?.couponId ?? ''} placeholder="e.g. FOUND50 or promo_…" /><div class="fh">Create the discount in Stripe → Coupons; paste the coupon ID (or a <code>promo_…</code> promotion-code id). It auto-applies at checkout. Leave blank for trial-only or full price.</div></div>
+
+          <div class="gh" style="padding:8px 0 4px">What customers see</div>
+          <div class="field"><label for="head">Banner headline</label><input id="head" name="headline" type="text" maxlength="120" value={e?.headline ?? ''} placeholder="30 days free, then 3 months at $15/mo" /></div>
+          <div class="field"><label for="sub">Banner subtext <span class="fh" style="display:inline">(optional)</span></label><input id="sub" name="subtext" type="text" maxlength="200" value={e?.subtext ?? ''} placeholder="No card charged during your trial. Cancel anytime." /></div>
+          <div class="field"><label for="ramp">Price-ramp line <span class="fh" style="display:inline">(shown by the price)</span></label><input id="ramp" name="ramp_text" type="text" maxlength="200" value={e?.rampText ?? ''} placeholder="First 30 days free, then $15/mo for 3 months, then $49/mo" /><div class="fh">Plain-English summary — write it to match the Stripe coupon you set above.</div></div>
+
+          <div class="two">
+            <div class="field"><label for="st">Starts <span class="fh" style="display:inline">(optional)</span></label><input id="st" name="starts" type="date" value={e?.startsOn ?? ''} /></div>
+            <div class="field"><label for="en">Ends <span class="fh" style="display:inline">(optional)</span></label><input id="en" name="ends" type="date" value={e?.endsOn ?? ''} /></div>
+          </div>
+          <label style="display:flex;gap:12px;align-items:flex-start;border:1px solid var(--a-border);border-radius:9px;padding:14px;font-weight:400;margin:6px 0 16px;cursor:pointer">
+            <input type="checkbox" name="active" value="on" checked={e?.active ?? false} style="margin-top:3px;width:auto" />
+            <span><strong style="display:block;font-weight:600;margin-bottom:3px">Make this the live offer</strong><span class="fh" style="margin:0">Switches off any other live offer. Only shows publicly within its date window.</span></span>
+          </label>
+          <button class="btn" type="submit">{editing ? 'Save offer' : 'Create offer'}</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card" style="align-self:start">
+      <div class="card-h"><h3>How to build a ramp</h3></div>
+      <div class="card-b">
+        <p class="sub" style="margin:0 0 12px">Example: <strong>30 days free → $15/mo for 3 months → $49/mo</strong></p>
+        <ol style="margin:0;padding-left:18px;color:var(--a-muted);font-size:13px;line-height:1.75">
+          <li>In Stripe → <strong>Coupons</strong>, create a coupon: <strong>$34 off</strong>, duration <strong>repeating, 3 months</strong> (that turns the $49 plan into $15 for 3 months).</li>
+          <li>Copy the coupon's ID into the field on the left.</li>
+          <li>Set <strong>Free trial = 30</strong> days.</li>
+          <li>Write the ramp line so customers see exactly what happens.</li>
+          <li>Tick <strong>Make this the live offer</strong> and save.</li>
+        </ol>
+        <p class="fh" style="margin:12px 0 0">The trial and coupon are real Stripe mechanics applied at checkout — the ramp line is just the words shown to customers, so keep them in sync. Change the base price on <a href="/admin/pricing">Pricing</a>.</p>
+        <a class="btn secondary small" href="https://dashboard.stripe.com/coupons" target="_blank" rel="noopener" style="margin-top:14px">Open Stripe coupons ↗</a>
+      </div>
+    </div>
+  </div>
+</Admin>
