@@ -22,7 +22,7 @@ const initials = (name: string) => name.replace(/[^a-zA-Z0-9 ]/g, '').split(/\s+
         <tbody>
           {rows.map((r) => (
             <tr>
-              <td><div class="cell-co"><span class="avatar">{initials(r.name)}</span><div><span class="co">{r.name}</span><div class="sub2">{r.city}, {r.state} {r.zip}</div></div></div></td>
+              <td><div class="cell-co"><span class="avatar">{initials(r.name)}</span><div><span class="co">{r.name}</span>{r.source === 'discovery' ? <span class="pill info" style="margin-left:6px;padding:1px 8px">Discovered</span> : r.source === 'self-submit' ? <span class="pill brand" style="margin-left:6px;padding:1px 8px">Submitted</span> : null}<div class="sub2">{r.city}, {r.state} {r.zip}</div></div></div></td>
               <td class="mut">{r.phone}<br/>{r.email}<br/>{r.website && <a href={r.website} rel="nofollow noopener" target="_blank">site</a>}</td>
               <td class="mut">{r.services}</td>
               <td class="mut">{r.description}</td>

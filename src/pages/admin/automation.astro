@@ -1,0 +1,138 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { env } from '../../lib/env';
+import { tsToDate } from '../../lib/util';
+import { discoveryConfig, discoveryKeyReady } from '../../lib/discovery';
+import { coverage, aiEnabled, opencorpEnabled, hunterEnabled } from '../../lib/enrich';
+import { mailingAddress } from '../../lib/settings';
+
+const cfg = await discoveryConfig();
+const keyReady = discoveryKeyReady();
+const cov = await coverage();
+const ai = await aiEnabled();
+const records = opencorpEnabled();
+const hunter = hunterEnabled();
+const marketingReady = !!(await mailingAddress());
+const covPct = cov.total ? Math.round((cov.withEmail / cov.total) * 100) : 0;
+
+const lastCron = await env.DB.prepare(`SELECT ran, ok, created_at FROM cron_runs ORDER BY id DESC LIMIT 1`).first<{ ran: string; ok: number; created_at: number }>().catch(() => null);
+const jobMap: Record<string, string> = {};
+if (lastCron?.ran) for (const part of lastCron.ran.split(/\s+/)) { const i = part.indexOf(':'); if (i > 0) jobMap[part.slice(0, i)] = part.slice(i + 1); }
+const jobResult = (k: string) => jobMap[k];
+
+const p = Astro.url.searchParams;
+const discLastRun = cfg.lastRun ? tsToDate(cfg.lastRun)?.toLocaleString('en-US') ?? '—' : 'never';
+
+// Agent status pill: on/off/ready/blocked.
+type Tone = 'ok' | 'warn' | 'muted' | 'info';
+const pill = (tone: Tone, label: string) => ({ tone, label });
+const discPill = !keyReady ? pill('muted', 'Key needed') : cfg.enabled ? pill('ok', 'On') : pill('warn', 'Off');
+const aiPill = ai ? pill('ok', 'On') : pill('muted', 'Off');
+const recPill = records ? pill('ok', 'On') : pill('muted', 'Key needed');
+const hunterPill = hunter ? pill('ok', 'On') : pill('muted', 'Off');
+const mktPill = marketingReady ? pill('ok', 'Ready') : pill('warn', 'Blocked');
+
+// Read-only system agents (always run nightly; gated by data/config, not a toggle).
+const systemAgents = [
+  { name: 'Website enrichment crawl', desc: `Reads each company's site for a published email + MX check. ${covPct}% have a usable email.`, res: jobResult('enrich'), tone: 'ok' as Tone, label: 'On' },
+  { name: 'Lifecycle emails', desc: 'Renewal, past-due, win-back, claim follow-up and monthly advertiser reports — idempotent, inert until a customer exists.', res: undefined, tone: marketingReady ? 'ok' : 'warn' as Tone, label: marketingReady ? 'On' : 'Setup needed' },
+  { name: 'Outreach sender', desc: 'Sends up to 40 queued campaign emails/day. Held until a mailing address + verified domain are set.', res: jobResult('outreach'), tone: mktPill.tone, label: mktPill.label },
+  { name: 'Analytics rollup + prune', desc: "Aggregates yesterday's events into durable daily counts, then prunes raw rows.", res: jobResult('rollup'), tone: 'ok' as Tone, label: 'On' },
+];
+---
+<Admin title="Automation">
+  <p slot="sub" class="sub">Every background agent in one place · nightly job runs 13:00 UTC{lastCron ? ` · last ran ${tsToDate(lastCron.created_at)?.toLocaleString('en-US') ?? ''}` : ''}</p>
+  <Fragment slot="actions">
+    <span class={`pill ${lastCron ? (lastCron.ok ? 'ok' : 'bad') : 'muted'}`}><span class="dot"></span>{lastCron ? (lastCron.ok ? 'Healthy' : 'Errors') : 'Idle'}</span>
+  </Fragment>
+
+  {p.get('saved') && <div class="notice" role="status">Saved. Changes take effect on the next run.</div>}
+  {p.get('disc_found') && <div class="notice" role="status">Discovery scanned {p.get('disc_scanned')} cit{p.get('disc_scanned') === '1' ? 'y' : 'ies'} with {p.get('disc_calls')} API call{p.get('disc_calls') === '1' ? '' : 's'} and added {p.get('disc_found')} new pending listing{p.get('disc_found') === '1' ? '' : 's'} — review them in <a href="/admin/pending">Pending</a>.</div>}
+  {p.get('disc_skipped') === 'no-key' && <div class="notice warn">Discovery needs the <code>GOOGLE_PLACES_KEY</code> secret before it can run.</div>}
+  {p.get('disc_skipped') === 'cap' && <div class="notice warn">Discovery hit its monthly call cap — raise the cap or wait for the reset.</div>}
+  {p.get('disc_skipped') && !['no-key', 'cap'].includes(p.get('disc_skipped')!) && <div class="notice">Discovery did not run ({p.get('disc_skipped')}).</div>}
+  {p.get('enrich_ran') && <div class="notice" role="status">Crawled {p.get('enrich_ran')}, found {p.get('enrich_found')} email candidate{p.get('enrich_found') === '1' ? '' : 's'}.</div>}
+  {p.get('infer_named') && <div class="notice" role="status">Inferred {p.get('infer_named')} contact name{p.get('infer_named') === '1' ? '' : 's'}.</div>}
+  {p.get('ai_ran') && <div class="notice" role="status">AI pass read {p.get('ai_ran')}, found {p.get('ai_found')} name{p.get('ai_found') === '1' ? '' : 's'}.</div>}
+  {p.get('rec_ran') && <div class="notice" role="status">Records lookup checked {p.get('rec_ran')}, found {p.get('rec_found')} owner name{p.get('rec_found') === '1' ? '' : 's'}.</div>}
+  {(p.get('ai_off') || p.get('rec_off')) && <div class="notice warn">That agent is off — turn it on below (AI) or add its key (records) first.</div>}
+
+  <div class="two-6-4">
+    <div class="stack">
+      <!-- New-listing discovery -->
+      <div class="card">
+        <div class="card-h"><h3>New-listing discovery</h3><span class={`pill ${discPill.tone}`}><span class="dot"></span>{discPill.label}</span></div>
+        <div class="card-b">
+          <p class="sub" style="margin:0 0 14px">Sweeps your metros weekly via Google Places, dedupes by phone, and drops new cleanup businesses into <a href="/admin/pending">Pending</a> for your review. Nothing goes public without approval. Never scrapes — official Places API only.</p>
+          {!keyReady && <div class="notice warn" style="margin-bottom:14px">Add the <code>GOOGLE_PLACES_KEY</code> secret in Cloudflare to enable this agent.</div>}
+          <form action="/api/admin/automation" method="post">
+            <input type="hidden" name="action" value="save" />
+            <label style="display:flex;gap:12px;align-items:flex-start;border:1px solid var(--a-border);border-radius:9px;padding:14px;font-weight:400;margin:0 0 16px;cursor:pointer">
+              <input type="checkbox" name="discovery_enabled" value="on" checked={cfg.enabled} disabled={!keyReady} style="margin-top:3px;width:auto" />
+              <span><strong style="display:block;font-weight:600;margin-bottom:3px">Run weekly discovery</strong><span class="fh" style="margin:0">On the nightly job, once every 7 days, sweep the next batch of cities. Off by default.</span></span>
+            </label>
+            <div class="three">
+              <div class="field" style="margin:0"><label for="cpr">Cities per run</label><input id="cpr" name="discovery_cities_per_run" type="number" min="1" max="50" value={cfg.citiesPerRun} /><div class="fh">Rotates through all metros.</div></div>
+              <div class="field" style="margin:0"><label for="qpc">Queries per city</label><input id="qpc" name="discovery_queries_per_city" type="number" min="1" max="4" value={cfg.queriesPerCity} /><div class="fh">1 API call each (max 4).</div></div>
+              <div class="field" style="margin:0"><label for="cap">Monthly call cap</label><input id="cap" name="discovery_monthly_cap" type="number" min="0" max="100000" value={cfg.monthlyCap} /><div class="fh">{cfg.callsThisMonth} used this month.</div></div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:16px">
+              <button class="btn" type="submit">Save settings</button>
+              <button class="btn secondary" type="submit" formaction="/api/admin/automation" name="action" value="run_discovery" disabled={!keyReady}>Run now</button>
+              <span class="sub" style="margin:0">Last run: {discLastRun}{jobResult('discovery') != null ? ` · nightly found ${jobResult('discovery')}` : ''}</span>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Enrichment agents -->
+      <div class="card">
+        <div class="card-h"><h3>Email &amp; name enrichment</h3><span class="hint">{covPct}% have an email</span></div>
+        <div class="agent-rows">
+          <div class="ar">
+            <div><div class="rt">Website crawl</div><div class="rdd">Finds published emails on company sites (~60/day automatically). {cov.pending.toLocaleString('en-US')} sites left.</div></div>
+            <form action="/api/admin/automation" method="post" class="inline"><input type="hidden" name="action" value="run_enrich" /><input type="hidden" name="n" value="15" /><button class="btn small secondary" type="submit">Run now</button></form>
+          </div>
+          <div class="ar">
+            <div><div class="rt">Infer names from emails</div><div class="rdd">Derives a likely contact name from address patterns (jane@ → Jane).</div></div>
+            <form action="/api/admin/automation" method="post" class="inline"><input type="hidden" name="action" value="run_infer" /><button class="btn small secondary" type="submit">Run now</button></form>
+          </div>
+          <div class="ar">
+            <div><div class="rt">Deep enrichment agent (AI) <span class={`pill ${aiPill.tone}`} style="margin-left:4px">{aiPill.label}</span></div><div class="rdd">Reads page text with Workers AI for owner names the pattern rules miss (~25/day, small cost).</div></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <form action="/api/admin/automation" method="post" class="inline"><input type="hidden" name="action" value="save" /><input type="hidden" name="discovery_enabled" value={cfg.enabled ? 'on' : ''} /><input type="hidden" name="discovery_cities_per_run" value={cfg.citiesPerRun} /><input type="hidden" name="discovery_queries_per_city" value={cfg.queriesPerCity} /><input type="hidden" name="discovery_monthly_cap" value={cfg.monthlyCap} /><input type="hidden" name="enrich_ai" value={ai ? '' : 'on'} /><button class="linkbtn small" type="submit">{ai ? 'Turn off' : 'Turn on'}</button></form>
+              {ai && <form action="/api/admin/automation" method="post" class="inline"><input type="hidden" name="action" value="run_ai" /><button class="btn small secondary" type="submit">Run now</button></form>}
+            </div>
+          </div>
+          <div class="ar">
+            <div><div class="rt">Public records lookup <span class={`pill ${recPill.tone}`} style="margin-left:4px">{recPill.label}</span></div><div class="rdd">Owner/officer names from state filings (OpenCorporates) for companies with no named contact.</div></div>
+            {records
+              ? <form action="/api/admin/automation" method="post" class="inline"><input type="hidden" name="action" value="run_records" /><button class="btn small secondary" type="submit">Run now</button></form>
+              : <a class="linkish" href="/admin/setup">Add key</a>}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- System agents (read-only) -->
+    <div class="card" style="align-self:start">
+      <div class="card-h"><h3>System agents</h3><span class="hint">nightly</span></div>
+      {systemAgents.map((a, i) => (
+        <div class="rd" style={i > 0 ? 'border-top:1px solid var(--a-border)' : ''}>
+          <div><div class="rt">{a.name}</div><div class="rdd">{a.desc}</div>{a.res != null && <div class="fh" style="margin-top:4px">Last run: {a.res === 'err' ? <span style="color:var(--a-bad)">error</span> : a.res}</div>}</div>
+          <span class={`rp pill ${a.tone === 'warn' ? 'warn' : a.tone === 'muted' ? 'muted' : 'ok'}`}>{a.label}</span>
+        </div>
+      ))}
+      <div class="card-b" style="border-top:1px solid var(--a-border)"><p class="fh" style="margin:0">These run every night and gate themselves on your data and setup — no toggle needed. Provider keys (Hunter {hunterPill.label.toLowerCase()}, records {recPill.label.toLowerCase()}) live in <a href="/admin/setup">Setup</a>.</p></div>
+    </div>
+  </div>
+</Admin>
+
+<style>
+  .adm .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 720px) { .adm .three { grid-template-columns: 1fr; } }
+  .adm .agent-rows .ar { display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; padding: 13px 18px; border-top: 1px solid var(--a-border); flex-wrap: wrap; }
+  .adm .agent-rows .ar .rt { font-weight: 600; font-size: 13.5px; color: var(--a-ink); }
+  .adm .agent-rows .ar .rdd { color: var(--a-muted); font-size: 12.5px; margin-top: 2px; max-width: 62ch; }
+  .adm form.inline { display: inline; }
+</style>

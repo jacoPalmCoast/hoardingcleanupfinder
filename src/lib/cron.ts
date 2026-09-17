@@ -4,6 +4,7 @@ import { sendEmail, emailShell } from './services';
 import { rollupEvents, pruneEvents, statsForDayRange, type ListingStats } from './db';
 import { renderTemplate } from './outreach';
 import { runBatch, aiEnrichBatch, opencorpBatch } from './enrich';
+import { runDiscovery } from './discovery';
 import { mailingAddress } from './settings';
 
 // Daily job entry point. Invoked by the scheduler (GitHub Actions or cron-worker) via
@@ -211,6 +212,7 @@ export async function runDailyJobs(): Promise<CronResult> {
     ['enrich', async () => (await runBatch(80)).found],
     ['ai_enrich', async () => (await aiEnrichBatch(25)).found], // no-op unless the AI toggle is on
     ['records', async () => (await opencorpBatch(30)).found],   // no-op unless OPENCORPORATES_TOKEN is set
+    ['discovery', async () => (await runDiscovery()).found],     // no-op unless enabled + GOOGLE_PLACES_KEY; self-gates to weekly
   ];
   for (const [name, fn] of jobs) {
     try { ran.push(`${name}:${await fn()}`); } catch (e) { console.error('cron ' + name, (e as Error)?.message); ran.push(`${name}:err`); }
