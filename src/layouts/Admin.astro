@@ -1,15 +1,146 @@
 ---
-import Base from './Base.astro';
+import '../styles/global.css';
+import '../styles/admin.css';
 import { isAdmin } from '../lib/services';
+import { adminCounts } from '../lib/db';
+import { pendingTicketCount } from '../lib/tickets';
+import { env } from '../lib/env';
+
 interface Props { title: string }
 const { title } = Astro.props;
+
 const ok = await isAdmin(Astro.request);
 if (!ok) return Astro.redirect('/admin/login', 302);
+
+// Sidebar badge counts — one aggregate query + two small counts, per page load.
+const c = (await adminCounts().catch(() => ({} as Record<string, number>))) as Record<string, number>;
+const support = await pendingTicketCount().catch(() => 0);
+const claimsPending = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM claims WHERE status = 'pending'`).first<{ n: number }>().catch(() => null))?.n ?? 0;
+
+const path = (Astro.url.pathname.replace(/\/+$/, '') || '/admin');
+const active = (href: string, exact = false) => (exact ? path === href : path === href || path.startsWith(href + '/'));
+
+const ICONS: Record<string, string> = {
+  brand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01"/></svg>',
+  overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
+  crm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M23 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>',
+  leads: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/></svg>',
+  listings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
+  pending: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  claims: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4M12 3l7 4v5c0 4.4-3 7.3-7 9-4-1.7-7-4.6-7-9V7Z"/></svg>',
+  reviews: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17.3 6.2 20.5l1.1-6.5L2.6 9.4l6.5-.9L12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5Z"/></svg>',
+  reports: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1ZM4 22v-7"/></svg>',
+  billing: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg>',
+  analytics: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 15l3-3 3 3 5-6"/></svg>',
+  email: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2.5"/><path d="m3 6 9 6 9-6"/></svg>',
+  setup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>',
+  signout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+};
+
+type Item = { href: string; label: string; icon: string; count?: number; hot?: boolean; exact?: boolean };
+const groups: { title?: string; items: Item[] }[] = [
+  { items: [{ href: '/admin', label: 'Overview', icon: 'overview', exact: true }] },
+  { title: 'Growth', items: [
+    { href: '/admin/crm', label: 'CRM', icon: 'crm', count: support, hot: support > 0 },
+    { href: '/admin/leads', label: 'Leads', icon: 'leads', count: c.leads_30d, hot: (c.leads_30d ?? 0) > 0 },
+  ]},
+  { title: 'Directory', items: [
+    { href: '/admin/listings', label: 'Listings', icon: 'listings', count: c.active },
+    { href: '/admin/pending', label: 'Pending', icon: 'pending', count: c.pending, hot: (c.pending ?? 0) > 0 },
+    { href: '/admin/claims', label: 'Claims', icon: 'claims', count: claimsPending, hot: claimsPending > 0 },
+    { href: '/admin/reviews', label: 'Reviews', icon: 'reviews', count: c.pending_reviews, hot: (c.pending_reviews ?? 0) > 0 },
+    { href: '/admin/reports', label: 'Reports', icon: 'reports', count: c.open_reports, hot: (c.open_reports ?? 0) > 0 },
+  ]},
+  { title: 'Revenue', items: [{ href: '/admin/billing', label: 'Billing', icon: 'billing' }] },
+  { title: 'Insights', items: [
+    { href: '/admin/analytics', label: 'Analytics', icon: 'analytics' },
+    { href: '/admin/emails', label: 'Email', icon: 'email' },
+  ]},
+];
 ---
-<Base title={`Admin · ${title}`} description="Admin" noindex>
-  <nav class="small" style="margin-bottom:12px" aria-label="Admin">
-    <a href="/admin">Overview</a> · <a href="/admin/crm">CRM</a> · <a href="/admin/analytics">Analytics</a> · <a href="/admin/billing">Billing</a> ·<a href="/admin/pending">Pending</a> · <a href="/admin/claims">Claims</a> · <a href="/admin/leads">Leads</a> · <a href="/admin/reviews">Reviews</a> · <a href="/admin/reports">Reports</a> · <a href="/admin/listings">Listings</a> · <a href="/admin/emails">Email</a> · <a href="/admin/setup">Setup</a> ·<form class="inline" action="/api/admin/logout" method="post"><button type="submit" class="linkbtn">Sign out</button></form>
-  </nav>
-  <h1>{title}</h1>
-  <slot />
-</Base>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{`Admin · ${title} | Hoarding Cleanup Finder`}</title>
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#0f6d6a" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="adm-body">
+    <div class="adm-app" id="admApp">
+      <div class="adm-scrim" id="admScrim"></div>
+
+      <aside class="adm-sidebar">
+        <a class="adm-brand" href="/admin">
+          <span class="mk" set:html={ICONS.brand} />
+          <span><b>Hoarding Cleanup Finder</b><small>Admin</small></span>
+        </a>
+        <nav class="adm-nav" aria-label="Admin">
+          {groups.map((g) => (
+            <>
+              {g.title && <div class="grp">{g.title}</div>}
+              {g.items.map((it) => (
+                <a href={it.href} class={active(it.href, it.exact) ? 'on' : ''} aria-current={active(it.href, it.exact) ? 'page' : undefined}>
+                  <Fragment set:html={ICONS[it.icon]} />
+                  {it.label}
+                  {it.count != null && it.count > 0 && <span class={`ct${it.hot ? ' hot' : ''}`}>{it.count.toLocaleString('en-US')}</span>}
+                </a>
+              ))}
+            </>
+          ))}
+        </nav>
+        <div class="adm-foot">
+          <a href="/admin/setup" class={active('/admin/setup') ? 'on' : ''} style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;font-weight:500;font-size:13.5px;text-decoration:none">
+            <Fragment set:html={ICONS.setup} />Setup
+          </a>
+          <div class="who">
+            <span class="av">JV</span><span>Jaco Van Eeden</span>
+            <form class="inline" action="/api/admin/logout" method="post" style="margin-left:auto;display:flex">
+              <button type="submit" class="linkbtn" title="Sign out" aria-label="Sign out" set:html={ICONS.signout}></button>
+            </form>
+          </div>
+        </div>
+      </aside>
+
+      <div class="adm-main">
+        <div class="adm-topbar">
+          <button class="adm-iconbtn menu" id="admMenu" aria-label="Menu" set:html={ICONS.menu}></button>
+          <div class="adm-crumb">Admin <span style="opacity:.5">/</span> <b>{title}</b></div>
+          <div class="adm-search">
+            <Fragment set:html={ICONS.search} />
+            <input type="search" placeholder="Search companies, cities…" aria-label="Search" />
+          </div>
+          <a class="adm-iconbtn" href="/admin/reviews" title="Attention queue" set:html={ICONS.bell}></a>
+        </div>
+
+        <div class="adm">
+          <div class="adm-content">
+            <div class="page-head">
+              <div><h1>{title}</h1><slot name="sub" /></div>
+              <div class="head-actions"><slot name="actions" /></div>
+            </div>
+            <slot />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script is:inline>
+      (function () {
+        var app = document.getElementById('admApp');
+        var m = document.getElementById('admMenu');
+        var s = document.getElementById('admScrim');
+        if (m) m.addEventListener('click', function () { app.classList.toggle('open'); });
+        if (s) s.addEventListener('click', function () { app.classList.remove('open'); });
+      })();
+    </script>
+  </body>
+</html>

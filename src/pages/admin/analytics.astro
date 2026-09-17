@@ -12,120 +12,121 @@ const listing = id ? await getListingById(id) : null;
 const detail = listing ? await listingStats(listing.id, days) : null;
 const series = listing ? await listingSeries(listing.id, days) : [];
 const overview = listing ? null : await siteOverview(days);
-// Aggregate traffic from Cloudflare Web Analytics (only on the site overview, not per-listing).
 const traffic = listing ? null : await cfTraffic(days);
 const trafficReady = cfConfigured();
-const breakdown = (title: string, rows: CfDimCount[]) => ({ title, rows });
 const breakdowns = traffic ? [
-  breakdown('Top pages', traffic.topPages),
-  breakdown('Top referrers', traffic.topReferrers),
-  breakdown('Countries', traffic.countries),
-  breakdown('Devices', traffic.devices),
-  breakdown('Browsers', traffic.browsers),
-] : [];
+  { title: 'Top pages', rows: traffic.topPages },
+  { title: 'Top referrers', rows: traffic.topReferrers },
+  { title: 'Countries', rows: traffic.countries },
+  { title: 'Devices', rows: traffic.devices },
+  { title: 'Browsers', rows: traffic.browsers },
+] as { title: string; rows: CfDimCount[] }[] : [];
 
 const max = Math.max(1, ...series.map((p) => p.views));
 const barW = 8, gap = 3, h = 44;
 const q = (d: number) => `?days=${d}${id ? `&id=${id}` : ''}`;
+
+const t = overview?.totals;
+const base = t ? Math.max(t.views, t.unique_views, 1) : 1;
+const p = (n: number) => Math.round((n / base) * 100);
+const fw = (n: number) => Math.max(2, Math.round((n / base) * 100));
 ---
 <Admin title="Analytics">
-  <nav class="small" style="margin-bottom:12px">
-    Range: {[7, 30, 90].map((d) => (d === days ? <strong style="margin-right:10px">{d} days</strong> : <a href={`/admin/analytics${q(d)}`} style="margin-right:10px">{d} days</a>))}
-    {listing && <> · <a href={`/admin/analytics?days=${days}`}>← all listings</a></>}
-  </nav>
+  <p slot="sub" class="sub">{listing ? `${listing.name} · last ${days} days` : `Site-wide performance · last ${days} days`}</p>
+  <Fragment slot="actions">
+    {listing && <a class="btn secondary small" href={`/admin/analytics?days=${days}`}>← All listings</a>}
+    <div class="seg">{[7, 30, 90].map((d) => <a class={d === days ? 'on' : ''} href={`/admin/analytics${q(d)}`}>{d} days</a>)}</div>
+  </Fragment>
 
   {listing && detail ? (
     <>
-      <h2 style="margin:0 0 2px"><a href={`/company/${listing.slug}`}>{listing.name}</a></h2>
-      <p class="small" style="margin:0 0 16px">{listing.city}, {listing.state} · last {days} days</p>
-      <div class="stats">
-        <div class="stat"><b>{detail.unique_views.toLocaleString('en-US')}</b><span>Unique visitors</span></div>
-        <div class="stat"><b>{detail.views.toLocaleString('en-US')}</b><span>Page views</span></div>
-        <div class="stat"><b>{detail.impressions.toLocaleString('en-US')}</b><span>Impressions</span></div>
-        <div class="stat"><b>{detail.calls.toLocaleString('en-US')}</b><span>Call taps</span></div>
-        <div class="stat"><b>{detail.website.toLocaleString('en-US')}</b><span>Website clicks</span></div>
-        <div class="stat"><b>{detail.leads.toLocaleString('en-US')}</b><span>Quote requests</span></div>
-        <div class="stat"><b>{detail.reviews.toLocaleString('en-US')}</b><span>Reviews</span></div>
+      <p class="sub" style="margin:-8px 0 16px"><a href={`/company/${listing.slug}`}>View public page →</a> · {listing.city}, {listing.state}</p>
+      <div class="kpis" style="margin-bottom:16px">
+        <div class="kpi"><div class="lab">Unique visitors</div><div class="val tnum">{detail.unique_views.toLocaleString('en-US')}</div><div class="delta flat">{detail.views.toLocaleString('en-US')} page views</div></div>
+        <div class="kpi"><div class="lab">Call taps</div><div class="val tnum">{detail.calls.toLocaleString('en-US')}</div><div class="delta flat">tapped to call</div></div>
+        <div class="kpi"><div class="lab">Website clicks</div><div class="val tnum">{detail.website.toLocaleString('en-US')}</div><div class="delta flat">clicked through</div></div>
+        <div class="kpi"><div class="lab">Quote requests</div><div class="val tnum">{detail.leads.toLocaleString('en-US')}</div><div class="delta flat">{detail.reviews.toLocaleString('en-US')} reviews · {detail.impressions.toLocaleString('en-US')} impressions</div></div>
       </div>
-      <h3 style="margin:20px 0 6px">Daily views</h3>
-      {series.some((p) => p.views > 0) ? (
-        <svg width={series.length * (barW + gap)} height={h + 4} role="img" aria-label="Daily views bar chart">
-          {series.map((p, i) => (
-            <rect x={i * (barW + gap)} y={h - Math.round((p.views / max) * h)} width={barW} height={Math.max(1, Math.round((p.views / max) * h))} fill="#0f6d6a" rx="1"><title>{p.views} views</title></rect>
-          ))}
-        </svg>
-      ) : <p class="small">No views recorded yet in this range.</p>}
-      <p class="small" style="margin-top:16px">Call taps and website clicks count how many people tapped to call or clicked through — not connected calls. Impressions are counts of appearing in search and city lists, updated after the nightly rollup.</p>
+      <div class="card">
+        <div class="card-h"><h3>Daily views</h3><span class="hint">last {days} days</span></div>
+        <div class="card-b">
+          {series.some((pt) => pt.views > 0) ? (
+            <svg width={series.length * (barW + gap)} height={h + 4} role="img" aria-label="Daily views bar chart" style="max-width:100%">
+              {series.map((pt, i) => (
+                <rect x={i * (barW + gap)} y={h - Math.round((pt.views / max) * h)} width={barW} height={Math.max(1, Math.round((pt.views / max) * h))} fill="#0f6d6a" rx="1"><title>{pt.views} views</title></rect>
+              ))}
+            </svg>
+          ) : <p class="sub" style="margin:0">No views recorded yet in this range.</p>}
+        </div>
+      </div>
+      <p class="sub" style="margin-top:14px">Call taps and website clicks count how many people tapped to call or clicked through — not connected calls. Impressions are updated after the nightly rollup.</p>
     </>
-  ) : overview && (
+  ) : overview && t && (
     <>
-      <div class="stats">
-        <div class="stat"><b>{overview.totals.unique_views.toLocaleString('en-US')}</b><span>Unique visitors</span></div>
-        <div class="stat"><b>{overview.totals.views.toLocaleString('en-US')}</b><span>Page views</span></div>
-        <div class="stat"><b>{overview.totals.impressions.toLocaleString('en-US')}</b><span>Impressions</span></div>
-        <div class="stat"><b>{overview.totals.calls.toLocaleString('en-US')}</b><span>Call taps</span></div>
-        <div class="stat"><b>{overview.totals.website.toLocaleString('en-US')}</b><span>Website clicks</span></div>
-        <div class="stat"><b>{overview.totals.leads.toLocaleString('en-US')}</b><span>Quote requests</span></div>
-        <div class="stat"><b>{overview.totals.reviews.toLocaleString('en-US')}</b><span>Reviews</span></div>
+      <div class="kpis" style="margin-bottom:16px">
+        <div class="kpi"><div class="lab">Unique visitors</div><div class="val tnum">{t.unique_views.toLocaleString('en-US')}</div><div class="delta flat">{t.views.toLocaleString('en-US')} page views</div></div>
+        <div class="kpi"><div class="lab">Website clicks</div><div class="val tnum">{t.website.toLocaleString('en-US')}</div><div class={`delta ${t.website > 0 ? 'up' : 'flat'}`}>{p(t.website)}% of visitors</div></div>
+        <div class="kpi"><div class="lab">Call taps</div><div class="val tnum">{t.calls.toLocaleString('en-US')}</div><div class="delta flat">{p(t.calls)}% of visitors</div></div>
+        <div class="kpi"><div class="lab">Quote requests</div><div class="val tnum">{t.leads.toLocaleString('en-US')}</div><div class="delta flat">{t.leads > 0 ? `${t.leads} lead${t.leads === 1 ? '' : 's'} generated` : 'no leads yet'}</div></div>
       </div>
-      <p class="small">Site-wide, last {days} days. Impressions, top lists and per-listing history build up after the first nightly rollup. For full traffic sources and devices, use Cloudflare Web Analytics.</p>
 
-      <h3 style="margin:22px 0 6px">Top listings by views</h3>
-      {overview.topListings.length === 0 ? <p class="small">No view data yet.</p> : (
-        <div class="table-wrap"><table><thead><tr><th>Company</th><th>City</th><th style="text-align:right">Views</th><th style="text-align:right">Call taps</th><th style="text-align:right">Website</th><th></th></tr></thead><tbody>
-          {overview.topListings.map((r) => (
-            <tr>
-              <td>{r.name}</td>
-              <td style="white-space:nowrap">{r.city}, {r.state}</td>
-              <td style="text-align:right">{r.views.toLocaleString('en-US')}</td>
-              <td style="text-align:right">{r.calls.toLocaleString('en-US')}</td>
-              <td style="text-align:right">{r.website.toLocaleString('en-US')}</td>
-              <td><a href={`/admin/analytics?days=${days}&id=${r.id}`}>Details</a></td>
-            </tr>
-          ))}
-        </tbody></table></div>
-      )}
-
-      <h3 style="margin:22px 0 6px">Top cities by views</h3>
-      {overview.topCities.length === 0 ? <p class="small">No view data yet.</p> : (
-        <div class="table-wrap"><table><thead><tr><th>City</th><th style="text-align:right">Views</th></tr></thead><tbody>
-          {overview.topCities.map((c) => (
-            <tr><td>{c.city}, {c.state}</td><td style="text-align:right">{c.views.toLocaleString('en-US')}</td></tr>
-          ))}
-        </tbody></table></div>
-      )}
-
-      <hr style="margin:28px 0;border:none;border-top:1px solid #e5e7eb" />
-      <h2 style="margin:0 0 2px">Traffic <span class="small" style="font-weight:400">· Cloudflare Web Analytics</span></h2>
-      {traffic ? (
-        <>
-          <div class="stats" style="margin-top:8px">
-            <div class="stat"><b>{traffic.visits.toLocaleString('en-US')}</b><span>Visits</span></div>
-            <div class="stat"><b>{traffic.pageViews.toLocaleString('en-US')}</b><span>Page views</span></div>
+      <div class="two-6-4">
+        <div class="card">
+          <div class="card-h"><h3>What visitors did</h3><span class="hint">last {days} days · from {t.views.toLocaleString('en-US')} views</span></div>
+          <div class="card-b">
+            <div class="funnel">
+              <div class="frow"><span class="fl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"/><circle cx="12" cy="12" r="3"/></svg>Viewed a page</span><div class="track"><i style="width:100%;background:var(--a-brand)"></i></div><span class="fv tnum">{t.views.toLocaleString('en-US')} <small>100%</small></span></div>
+              <div class="frow"><span class="fl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>Clicked website</span><div class="track"><i style={`width:${fw(t.website)}%;background:var(--a-info)`}></i></div><span class="fv tnum">{t.website.toLocaleString('en-US')} <small>{p(t.website)}%</small></span></div>
+              <div class="frow"><span class="fl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.4-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z"/></svg>Tapped to call</span><div class="track"><i style={`width:${fw(t.calls)}%;background:var(--a-ok)`}></i></div><span class="fv tnum">{t.calls.toLocaleString('en-US')} <small>{p(t.calls)}%</small></span></div>
+              <div class="frow"><span class="fl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M9 15l2 2 4-4"/></svg>Requested a quote</span><div class="track"><i style={`width:${fw(t.leads)}%;background:var(--a-warn)`}></i></div><span class="fv tnum">{t.leads.toLocaleString('en-US')} <small>{p(t.leads)}%</small></span></div>
+            </div>
+            <div class="sub" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--a-border)">Impressions ({t.impressions.toLocaleString('en-US')}) and day-over-day trends build up after the first nightly rollup.</div>
           </div>
-          <div class="grid" style="margin-top:16px">
+        </div>
+
+        <div class="stack">
+          <div class="card">
+            <div class="card-h"><h3>Traffic</h3><span class="hint">Cloudflare</span></div>
+            {traffic ? (
+              <div class="card-b" style="display:flex;gap:26px">
+                <div><div class="val tnum" style="font-size:26px;font-weight:600">{traffic.visits.toLocaleString('en-US')}</div><div class="sub" style="margin-top:2px">visits</div></div>
+                <div><div class="val tnum" style="font-size:26px;font-weight:600">{traffic.pageViews.toLocaleString('en-US')}</div><div class="sub" style="margin-top:2px">page views</div></div>
+              </div>
+            ) : trafficReady ? (
+              <div class="card-b"><p class="sub" style="margin:0">Couldn't load Cloudflare traffic just now — check the API token has Account Analytics read access.</p></div>
+            ) : (
+              <div class="card-b"><p class="sub" style="margin:0">Add <code>CF_ANALYTICS_TOKEN</code> (Account · Account Analytics · Read) to show traffic sources here.</p></div>
+            )}
+          </div>
+          <div class="card">
+            <div class="card-h"><h3>Top listings</h3></div>
+            {overview.topListings.length === 0 ? (
+              <div class="empty" style="padding:26px 20px"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 15l3-3 3 3 5-6"/></svg></div><b>No view data yet</b>Builds after the first nightly rollup.</div>
+            ) : (
+              <div class="table-wrap"><table><thead><tr><th>Company</th><th style="text-align:right">Views</th><th></th></tr></thead><tbody>
+                {overview.topListings.slice(0, 6).map((r) => <tr><td class="co" style="font-weight:600">{r.name}</td><td class="tnum" style="text-align:right">{r.views.toLocaleString('en-US')}</td><td class="actions"><a class="linkish" href={`/admin/analytics?days=${days}&id=${r.id}`}>Details</a></td></tr>)}
+              </tbody></table></div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {traffic && (
+        <>
+          <h2>Traffic breakdown</h2>
+          <div class="grid">
             {breakdowns.map((b) => (
               <div class="card">
-                <h3 style="margin:0 0 8px">{b.title}</h3>
-                {b.rows.length === 0 ? <p class="small" style="margin:0">No data yet.</p> : (
-                  <table style="width:100%"><tbody>
-                    {b.rows.slice(0, 8).map((r) => (
-                      <tr><td style="padding:3px 8px 3px 0;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{r.label}</td><td style="text-align:right;padding:3px 0"><strong>{r.count.toLocaleString('en-US')}</strong></td></tr>
-                    ))}
-                  </tbody></table>
+                <div class="card-h"><h3>{b.title}</h3></div>
+                {b.rows.length === 0 ? <div class="card-b"><p class="sub" style="margin:0">No data yet.</p></div> : (
+                  <div class="card-b" style="padding:8px 18px"><table><tbody>
+                    {b.rows.slice(0, 8).map((r) => <tr><td style="max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:none;padding:6px 8px 6px 0">{r.label}</td><td class="tnum" style="text-align:right;border:none;padding:6px 0"><strong>{r.count.toLocaleString('en-US')}</strong></td></tr>)}
+                  </tbody></table></div>
                 )}
               </div>
             ))}
           </div>
-          <p class="small" style="margin-top:12px">Aggregate and sampled by Cloudflare, so these won't exactly match the first-party per-listing numbers above. Referrers marked "Direct / none" arrived with no referring site.</p>
         </>
-      ) : trafficReady ? (
-        <p class="small">Couldn't load Cloudflare traffic just now — the API token may be wrong or missing Account Analytics read access. Try again shortly.</p>
-      ) : (
-        <div class="notice">
-          <p style="margin:0 0 6px"><strong>Connect Cloudflare Web Analytics to show traffic here.</strong></p>
-          <p class="small" style="margin:0">Create a Cloudflare API token scoped <em>Account · Account Analytics · Read</em>, then set it as the Worker secret <code>CF_ANALYTICS_TOKEN</code>. The account and site tag are already configured.</p>
-        </div>
       )}
     </>
   )}

@@ -1,33 +1,99 @@
 ---
 import Admin from '../../layouts/Admin.astro';
 import { adminCounts } from '../../lib/db';
+import { pendingTicketCount } from '../../lib/tickets';
 import { env } from '../../lib/env';
 import { tsToDate } from '../../lib/util';
+
 const c = await adminCounts();
-const recent = (await env.DB.prepare(`SELECT id, name, city, state, is_featured, featured_until, created_at FROM listings WHERE is_featured = 1 ORDER BY featured_until DESC LIMIT 20`).all<any>()).results;
+const support = await pendingTicketCount().catch(() => 0);
+const claimsPending = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM claims WHERE status = 'pending'`).first<{ n: number }>().catch(() => null))?.n ?? 0;
+const statesRow = await env.DB.prepare(`SELECT COUNT(DISTINCT state) AS n FROM listings WHERE status = 'active'`).first<{ n: number }>().catch(() => null);
+const states = statesRow?.n ?? 0;
+const recent = (await env.DB.prepare(`SELECT id, name, city, state, featured_until FROM listings WHERE is_featured = 1 ORDER BY featured_until DESC LIMIT 12`).all<any>()).results;
 const lastCron = await env.DB.prepare(`SELECT ran, ok, created_at FROM cron_runs ORDER BY id DESC LIMIT 1`).first<{ ran: string; ok: number; created_at: number }>().catch(() => null);
+
+const pct = c.active ? Math.round((c.verified / c.active) * 100) : 0;
+const when = (ts: number | null) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) ?? '—';
+const attPill = (n: number, none: string, some: string) =>
+  n > 0 ? { cls: 'warn', text: `${n.toLocaleString('en-US')} ${some}` } : { cls: 'muted', text: none };
+const rv = attPill(c.pending_reviews, 'All clear', c.pending_reviews === 1 ? 'waiting' : 'waiting');
+const sp = attPill(support, 'None', 'in review');
+const cl = attPill(claimsPending, 'None', 'to review');
+const pn = attPill(c.pending + c.open_reports, 'All clear', 'to check');
 ---
 <Admin title="Overview">
-  <p class="small" style="margin:-6px 0 12px">
+  <p slot="sub" class="sub">
     {lastCron
-      ? <>Daily automation last ran <strong style={lastCron.ok ? '' : 'color:#b00'}>{lastCron.ok ? 'OK' : 'with errors'}</strong> — {tsToDate(lastCron.created_at)?.toLocaleString('en-US') ?? ''} · <span style="color:#666">{lastCron.ran}</span></>
-      : <span style="color:#666">Daily automation hasn't run yet (first scheduled run 13:00 UTC).</span>}
+      ? <>Daily automation last ran {lastCron.ok ? 'cleanly' : 'with errors'} · {tsToDate(lastCron.created_at)?.toLocaleString('en-US') ?? ''}</>
+      : <>Directory health at a glance · daily automation runs 13:00 UTC</>}
   </p>
-  <div class="stats">
-    <div class="stat"><b>{c.active}</b><span>Active listings</span></div>
-    <div class="stat"><b>{c.pending}</b><span>Pending review</span></div>
-    <div class="stat"><b>{c.claimed}</b><span>Claimed</span></div>
-    <div class="stat"><b>{c.verified}</b><span>Verified</span></div>
-    <div class="stat"><b>{c.featured}</b><span>Featured (paid)</span></div>
-    <div class="stat"><b>{c.leads_30d}</b><span>Leads, 30 days</span></div>
-    <div class="stat"><b>{c.open_reports}</b><span>Open reports</span></div>
-    <div class="stat"><b>{c.pending_reviews}</b><span><a href="/admin/reviews">Reviews to moderate</a></span></div>
-    <div class="stat"><b>{c.cities}</b><span>Cities</span></div>
+  <Fragment slot="actions">
+    <span class={`pill ${lastCron ? (lastCron.ok ? 'ok' : 'bad') : 'muted'}`}>
+      <span class="dot"></span>{lastCron ? (lastCron.ok ? 'Automation healthy' : 'Automation errors') : 'Automation idle'}
+    </span>
+  </Fragment>
+
+  <div class="kpis" style="margin-bottom:16px">
+    <div class="kpi">
+      <div class="lab">Active listings</div>
+      <div class="val tnum">{c.active.toLocaleString('en-US')}</div>
+      <div class="delta flat">across {c.cities.toLocaleString('en-US')} cities</div>
+    </div>
+    <div class="kpi">
+      <div class="lab">Verified</div>
+      <div class="val tnum">{c.verified.toLocaleString('en-US')}</div>
+      <div class="delta flat">{pct}% of listings</div>
+    </div>
+    <div class="kpi">
+      <div class="lab">Leads · 30 days</div>
+      <div class="val tnum">{c.leads_30d.toLocaleString('en-US')}</div>
+      <div class={`delta ${c.leads_30d > 0 ? 'up' : 'flat'}`}>quote requests</div>
+    </div>
+    <div class="kpi feature">
+      <div class="lab">Featured (paid)</div>
+      <div class="val tnum">{c.featured.toLocaleString('en-US')} <small>· ${c.featured === 0 ? '0' : ''} MRR</small></div>
+      <div class="delta">{c.featured === 0 ? 'No paying advertisers yet' : 'active advertisers'}</div>
+    </div>
   </div>
-  <h2>Featured listings</h2>
-  {recent.length === 0 ? <p>None yet.</p> : (
-    <div class="table-wrap"><table><thead><tr><th>Company</th><th>City</th><th>Featured until</th></tr></thead><tbody>
-      {recent.map((r: any) => <tr><td><a href={`/admin/listings?id=${r.id}`}>{r.name}</a></td><td>{r.city}, {r.state}</td><td>{tsToDate(r.featured_until)?.toLocaleDateString('en-US') ?? '—'}</td></tr>)}
-    </tbody></table></div>
-  )}
+
+  <div class="two-6-4">
+    <div class="card">
+      <div class="card-h"><h3>Needs your attention</h3><span class="hint">action queues</span></div>
+      <div class="att">
+        <a href="/admin/reviews"><span class="ico ico-q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17.3 6.2 20.5l1.1-6.5L2.6 9.4l6.5-.9L12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5Z"/></svg></span><div><div class="t">Reviews to moderate</div><div class="d">Approve or reject new company reviews</div></div><span class={`pill ${rv.cls}`} style="margin-left:auto">{rv.text}</span></a>
+        <a href="/admin/crm/tickets"><span class="ico ico-b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2.5"/><path d="m3 6 9 6 9-6"/></svg></span><div><div class="t">Support inbox</div><div class="d">Customer emails routed into tickets</div></div><span class={`pill ${sp.cls}`} style="margin-left:auto">{sp.text}</span></a>
+        <a href="/admin/claims"><span class="ico ico-g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4M12 3l7 4v5c0 4.4-3 7.3-7 9-4-1.7-7-4.6-7-9V7Z"/></svg></span><div><div class="t">Claims awaiting review</div><div class="d">Owners claiming their listing</div></div><span class={`pill ${cl.cls}`} style="margin-left:auto">{cl.text}</span></a>
+        <a href="/admin/pending"><span class="ico ico-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1ZM4 22v-7"/></svg></span><div><div class="t">Pending listings &amp; open reports</div><div class="d">New submissions and flagged content</div></div><span class={`pill ${pn.cls}`} style="margin-left:auto">{pn.text}</span></a>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <div class="card-h"><h3>Coverage</h3></div>
+        <div class="card-b" style="display:flex;gap:22px;align-items:center">
+          <div><div class="val tnum" style="font-size:30px;font-weight:600">{c.cities.toLocaleString('en-US')}</div><div class="sub" style="margin-top:2px">cities live</div></div>
+          <div style="height:40px;width:1px;background:var(--a-border)"></div>
+          <div><div class="val tnum" style="font-size:30px;font-weight:600">{states}</div><div class="sub" style="margin-top:2px">states</div></div>
+          <div style="height:40px;width:1px;background:var(--a-border)"></div>
+          <div><div class="val tnum" style="font-size:30px;font-weight:600">{c.active.toLocaleString('en-US')}</div><div class="sub" style="margin-top:2px">listings</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h3>Featured listings</h3>{recent.length > 0 && <span class="hint">{recent.length}</span>}</div>
+        {recent.length === 0 ? (
+          <div class="empty">
+            <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17.3 6.2 20.5l1.1-6.5L2.6 9.4l6.5-.9L12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5Z"/></svg></div>
+            <b>No featured advertisers yet</b>
+            Once a company upgrades, they'll show here.
+          </div>
+        ) : (
+          <div class="table-wrap"><table><thead><tr><th>Company</th><th>City</th><th>Featured until</th></tr></thead><tbody>
+            {recent.map((r: any) => <tr><td><a href={`/admin/listings?id=${r.id}`}>{r.name}</a></td><td class="mut">{r.city}, {r.state}</td><td class="mut">{when(r.featured_until)}</td></tr>)}
+          </tbody></table></div>
+        )}
+      </div>
+    </div>
+  </div>
 </Admin>

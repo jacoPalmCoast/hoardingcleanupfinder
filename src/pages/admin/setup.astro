@@ -8,86 +8,124 @@ const addr = await mailingAddress();
 const aiOn = (await getSettings(['enrich_ai']))['enrich_ai'] === 'on';
 const saved = Astro.url.searchParams.get('saved');
 
-// Readiness checklist. Booleans only — never the secret values.
 const fromCustom = !!env.FROM_EMAIL && !env.FROM_EMAIL.includes('resend.dev');
 const stripeLive = !!env.STRIPE_SECRET_KEY?.startsWith('sk_live');
 const stripeTest = !!env.STRIPE_SECRET_KEY && !stripeLive;
 type Row = { label: string; ok: boolean; warn?: boolean; note: string };
 const groups: { title: string; rows: Row[] }[] = [
   { title: 'Business details', rows: [
-    { label: 'Mailing address', ok: !!addr, note: addr || 'Required before any marketing email can send (CAN-SPAM).' },
+    { label: 'Mailing address', ok: !!addr, warn: !addr, note: addr || 'Required before any marketing email can send (CAN-SPAM).' },
     { label: 'Business name', ok: !!(s.business_name || env.SITE_NAME), note: s.business_name || env.SITE_NAME || 'Shown in email footers and legal pages.' },
     { label: 'Support email', ok: !!(s.support_email || env.ADMIN_EMAIL), note: s.support_email || env.ADMIN_EMAIL || 'Where support and operator notices go.' },
   ]},
   { title: 'Email sending', rows: [
-    { label: 'Resend API key', ok: !!env.RESEND_API_KEY, note: env.RESEND_API_KEY ? 'Connected.' : 'Set RESEND_API_KEY (dashboard secret) to send any email.' },
-    { label: 'Sending domain verified', ok: fromCustom, warn: !fromCustom, note: fromCustom ? `Sending from ${env.FROM_EMAIL}.` : 'Still on onboarding@resend.dev — verify your domain in Resend and move FROM_EMAIL to it before real sends.' },
-    { label: 'Delivery tracking (webhook)', ok: !!env.RESEND_WEBHOOK_SECRET, note: env.RESEND_WEBHOOK_SECRET ? 'Bounces/opens tracked + auto-suppressed.' : 'Add a Resend webhook → RESEND_WEBHOOK_SECRET for delivery/bounce tracking.' },
+    { label: 'Resend API key', ok: !!env.RESEND_API_KEY, warn: !env.RESEND_API_KEY, note: env.RESEND_API_KEY ? 'Connected.' : 'Set RESEND_API_KEY to send any email.' },
+    { label: 'Sending domain verified', ok: fromCustom, warn: !fromCustom, note: fromCustom ? `Sending from ${env.FROM_EMAIL}.` : 'Still on onboarding@resend.dev — verify your domain in Resend and move FROM_EMAIL to it.' },
+    { label: 'Delivery tracking (webhook)', ok: !!env.RESEND_WEBHOOK_SECRET, note: env.RESEND_WEBHOOK_SECRET ? 'Bounces/opens tracked + auto-suppressed.' : 'Optional — add a Resend webhook for delivery/bounce tracking.' },
   ]},
   { title: 'Payments', rows: [
     { label: 'Stripe', ok: stripeLive, warn: stripeTest, note: stripeLive ? 'Live keys — collecting real payments.' : stripeTest ? 'TEST mode — switch to live keys + live webhook to charge real cards.' : 'Not configured.' },
   ]},
   { title: 'Analytics & enrichment', rows: [
-    { label: 'Cloudflare traffic (admin)', ok: !!env.CF_ANALYTICS_TOKEN, note: env.CF_ANALYTICS_TOKEN ? 'Traffic pulled into Admin → Analytics.' : 'Add CF_ANALYTICS_TOKEN to mirror Cloudflare traffic into admin.' },
-    { label: 'Email verification (Hunter)', ok: !!env.HUNTER_API_KEY, note: env.HUNTER_API_KEY ? 'Provider enrichment + verification on.' : 'Optional: add HUNTER_API_KEY for verified deliverability + more found emails.' },
-    { label: 'Owner names from records (OpenCorporates)', ok: !!env.OPENCORPORATES_TOKEN, note: env.OPENCORPORATES_TOKEN ? 'Registered owner/officer names pulled from state filings for companies with no named contact.' : 'Optional: add OPENCORPORATES_TOKEN to pull registered owner/officer names from state business filings.' },
-    { label: 'Business details (Google Places)', ok: !!env.GOOGLE_PLACES_KEY, note: env.GOOGLE_PLACES_KEY ? 'Connected.' : 'Optional: add GOOGLE_PLACES_KEY for extra verified business details (hours, phone, address) by place.' },
+    { label: 'Cloudflare traffic', ok: !!env.CF_ANALYTICS_TOKEN, note: env.CF_ANALYTICS_TOKEN ? 'Traffic pulled into Analytics.' : 'Add CF_ANALYTICS_TOKEN to mirror Cloudflare traffic.' },
+    { label: 'Email verification (Hunter)', ok: !!env.HUNTER_API_KEY, note: env.HUNTER_API_KEY ? 'Provider enrichment + verification on.' : 'Optional — verified deliverability + more found emails.' },
+    { label: 'Owner names from records', ok: !!env.OPENCORPORATES_TOKEN, note: env.OPENCORPORATES_TOKEN ? 'Owner/officer names from state filings.' : 'Optional — add OPENCORPORATES_TOKEN for registered owner names.' },
+    { label: 'Business details (Google Places)', ok: !!env.GOOGLE_PLACES_KEY, note: env.GOOGLE_PLACES_KEY ? 'Connected.' : 'Optional — extra business details by place.' },
   ]},
   { title: 'Security & automation', rows: [
-    { label: 'Spam protection (Turnstile)', ok: !!env.TURNSTILE_SECRET_KEY, note: env.TURNSTILE_SECRET_KEY ? 'Forms protected.' : 'Set TURNSTILE keys to protect public forms.' },
+    { label: 'Spam protection (Turnstile)', ok: !!env.TURNSTILE_SECRET_KEY, warn: !env.TURNSTILE_SECRET_KEY, note: env.TURNSTILE_SECRET_KEY ? 'Forms protected.' : 'Set TURNSTILE keys to protect public forms.' },
     { label: 'Daily job secret', ok: !!env.CRON_SECRET, note: env.CRON_SECRET ? 'Manual trigger secured.' : 'Set CRON_SECRET.' },
-    { label: 'Operator email', ok: !!env.ADMIN_EMAIL, note: env.ADMIN_EMAIL || 'Set ADMIN_EMAIL so lead/report/review notices reach you.' },
+    { label: 'Operator email', ok: !!env.ADMIN_EMAIL, note: env.ADMIN_EMAIL || 'Set ADMIN_EMAIL so notices reach you.' },
   ]},
 ];
-const field = (key: string, label: string, ph: string, hint?: string) => ({ key, label, ph, hint, value: s[key] ?? '' });
+const statusOf = (r: Row) => (r.ok ? 'ok' : r.warn ? 'warn' : 'off');
+const allRows = groups.flatMap((g) => g.rows);
+const okCount = allRows.filter((r) => r.ok).length;
+const warnCount = allRows.filter((r) => !r.ok && r.warn).length;
+const offCount = allRows.filter((r) => !r.ok && !r.warn).length;
+const totalChecks = allRows.length;
+const pctReady = Math.round((okCount / totalChecks) * 100);
+const dash = `${pctReady} ${100 - pctReady}`;
+const headline = warnCount > 0 ? 'A few items need attention' : 'Everything critical is set';
+const summary = warnCount > 0
+  ? `${okCount} of ${totalChecks} checks pass. ${warnCount} item${warnCount === 1 ? '' : 's'} block real revenue or sending — clear ${warnCount === 1 ? 'it' : 'them'} below.`
+  : `${okCount} of ${totalChecks} checks pass. The remaining ${offCount} are optional integrations you can turn on any time.`;
+
+const STICK = { ok: { pill: 'ok', label: 'Ready' }, warn: { pill: 'warn', label: 'Action' }, off: { pill: 'muted', label: 'Off' } } as const;
 const fields = [
-  field('business_name', 'Business name', 'Hoarding Cleanup Finder', 'Legal/display name for email footers and legal pages.'),
-  field('mailing_address', 'Mailing address', '123 Main St, City, ST 00000', 'Physical postal address — legally required in marketing email footers.'),
-  field('support_email', 'Support email', 'help@yourdomain.com', 'Public contact address (optional; falls back to the operator email).'),
-  field('support_phone', 'Support phone', '(555) 555-5555', 'Optional.'),
+  { key: 'business_name', label: 'Business name', ph: 'Hoarding Cleanup Finder', hint: 'Legal / display name for email footers and legal pages.' },
+  { key: 'mailing_address', label: 'Mailing address', ph: '123 Main St, City, ST 00000', hint: 'Physical postal address — legally required in marketing email footers.' },
+  { key: 'support_email', label: 'Support email', ph: 'help@yourdomain.com', hint: 'Public contact address (optional; falls back to the operator email).' },
+  { key: 'support_phone', label: 'Support phone', ph: '(555) 555-5555', hint: 'Optional.' },
 ];
+const okIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+const warnIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/></svg>';
+const offIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>';
+const ICON = { ok: okIcon, warn: warnIcon, off: offIcon } as const;
 ---
 <Admin title="Setup">
-  {saved && <div class="notice" role="status">Saved.</div>}
-  <p class="small" style="margin:-4px 0 16px">Business data you can edit here takes effect immediately. Secrets and API keys live in the Cloudflare dashboard (they're never shown here) — the checklist below tells you what's set.</p>
+  <p slot="sub" class="sub">Business data saves instantly · secrets live in Cloudflare and are never shown here</p>
 
-  <div class="two" style="gap:28px;align-items:flex-start">
-    <div>
-      <h2 style="margin:0 0 10px">Business details</h2>
-      <form action="/api/admin/setup" method="post" style="max-width:520px">
-        <input type="hidden" name="_settings_form" value="1" />
-        {fields.map((f) => (
-          <div style="margin-bottom:12px">
-            <label for={f.key}>{f.label}</label>
-            <input id={f.key} name={f.key} type="text" maxlength="400" value={f.value} placeholder={f.ph} style="width:100%" />
-            {f.hint && <div class="small" style="color:#666;margin-top:2px">{f.hint}</div>}
-          </div>
-        ))}
-        <div style="margin:14px 0;padding:12px;border:1px solid #eee;border-radius:8px">
-          <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
-            <input type="checkbox" name="enrich_ai" value="on" checked={aiOn} style="margin-top:3px" />
-            <span><strong>Deep enrichment agent</strong><br/><span class="small" style="color:#666">When on, the daily job reads each remaining company's page text with an on-platform language model to pull owner names and emails the pattern rules miss (≈25/day). Uses Cloudflare Workers AI — has a usage cost. Leave off to rely on the free crawler + validation.</span></span>
+  {saved && <div class="notice">Saved.</div>}
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-b" style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:16px">
+        <svg class="ring" viewBox="0 0 36 36" aria-label={`${okCount} of ${totalChecks} ready`}>
+          <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--a-border)" stroke-width="3.4"/>
+          <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--a-brand)" stroke-width="3.4" stroke-linecap="round" stroke-dasharray={dash} transform="rotate(-90 18 18)"/>
+          <text x="18" y="18" text-anchor="middle" class="rv tnum">{okCount}</text>
+          <text x="18" y="24" text-anchor="middle" class="rl">of {totalChecks}</text>
+        </svg>
+        <div><div style="font-weight:600;font-size:15px">{headline}</div><div class="sub" style="margin-top:2px;max-width:52ch">{summary}</div></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-left:auto">
+        <span class="pill ok">{okCount} ready</span>
+        {warnCount > 0 && <span class="pill warn">{warnCount} attention</span>}
+        {offCount > 0 && <span class="pill muted">{offCount} optional off</span>}
+      </div>
+    </div>
+  </div>
+
+  <div class="two-6-4">
+    <div class="card">
+      <div class="card-h"><h3>Business details</h3><span class="hint">saves instantly</span></div>
+      <div class="card-b">
+        <form action="/api/admin/setup" method="post">
+          <input type="hidden" name="_settings_form" value="1" />
+          {fields.map((f) => (
+            <div class="field">
+              <label for={f.key}>{f.label}</label>
+              <input id={f.key} name={f.key} type="text" maxlength="400" value={s[f.key] ?? ''} placeholder={f.ph} />
+              <div class="fh">{f.hint}</div>
+            </div>
+          ))}
+          <label style="display:flex;gap:12px;align-items:flex-start;border:1px solid var(--a-border);border-radius:9px;padding:14px;font-weight:400;margin:4px 0 0;cursor:pointer">
+            <input type="checkbox" name="enrich_ai" value="on" checked={aiOn} style="margin-top:3px;width:auto" />
+            <span><strong style="display:block;font-weight:600;margin-bottom:3px">Deep enrichment agent</strong><span class="fh" style="margin:0">When on, the daily job reads each remaining company's page for owner names the pattern rules miss (~25/day). Uses Cloudflare Workers AI — small usage cost. Leave off to rely on the free crawler.</span></span>
           </label>
-        </div>
-        <button class="btn" type="submit" style="margin-top:4px">Save</button>
-      </form>
+          <button class="btn" type="submit" style="margin-top:16px">Save changes</button>
+        </form>
+      </div>
     </div>
 
-    <aside style="flex:1;min-width:300px">
-      <h2 style="margin:0 0 10px">Readiness</h2>
-      {groups.map((g) => (
-        <div class="card" style="margin-bottom:12px">
-          <strong>{g.title}</strong>
-          <ul style="list-style:none;padding:0;margin:8px 0 0">
-            {g.rows.map((r) => (
-              <li style="display:flex;gap:8px;padding:5px 0;border-top:1px solid #f0f0f0">
-                <span aria-hidden="true" style={`flex:0 0 auto;font-weight:700;color:${r.ok ? '#0f6d6a' : r.warn ? '#b8860b' : '#b00'}`}>{r.ok ? '✓' : r.warn ? '!' : '✗'}</span>
-                <span><strong>{r.label}</strong><br/><span class="small" style="color:#666">{r.note}</span></span>
-              </li>
-            ))}
-          </ul>
+    <div class="card" style="align-self:start">
+      <div class="card-h"><h3>Readiness</h3><span class="hint">{pctReady}%</span></div>
+      {groups.map((g, gi) => (
+        <div class="rd-grp" style={gi > 0 ? 'border-top:1px solid var(--a-border)' : ''}>
+          <div class="gh">{g.title}</div>
+          {g.rows.map((r) => {
+            const st = statusOf(r);
+            return (
+              <div class="rd">
+                <span class={`st st-${st}`} set:html={ICON[st]}></span>
+                <div><div class="rt">{r.label}</div><div class="rdd">{r.note}</div></div>
+                <span class={`rp pill ${STICK[st].pill}`}>{STICK[st].label}</span>
+              </div>
+            );
+          })}
         </div>
       ))}
-    </aside>
+    </div>
   </div>
 </Admin>
