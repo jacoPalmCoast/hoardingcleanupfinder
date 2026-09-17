@@ -88,7 +88,7 @@ const fw = (n: number) => Math.max(2, Math.round((n / base) * 100));
           <div class="card">
             <div class="card-h"><h3>Traffic</h3><span class="hint">Cloudflare</span></div>
             {traffic ? (
-              <div class="card-b" style="display:flex;gap:26px">
+              <div class="card-b" style="display:flex;gap:16px 26px;flex-wrap:wrap">
                 <div><div class="val tnum" style="font-size:26px;font-weight:600">{traffic.visits.toLocaleString('en-US')}</div><div class="sub" style="margin-top:2px">visits</div></div>
                 <div><div class="val tnum" style="font-size:26px;font-weight:600">{traffic.pageViews.toLocaleString('en-US')}</div><div class="sub" style="margin-top:2px">page views</div></div>
               </div>
