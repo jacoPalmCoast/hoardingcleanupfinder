@@ -108,7 +108,7 @@ body.adm-body{margin:0;background:var(--a-canvas);color:var(--a-ink);
 /* ---------------- cards ---------------- */
 .adm .card{background:var(--a-surface);border:1px solid var(--a-border);border-radius:var(--a-r);box-shadow:var(--a-shadow);padding:0}
 .adm .card.pad{padding:18px}
-.adm .card-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 18px;border-bottom:1px solid var(--a-border)}
+.adm .card-h{display:flex;align-items:center;justify-content:space-between;gap:12px 14px;padding:15px 18px;border-bottom:1px solid var(--a-border);flex-wrap:wrap}
 .adm .card-h h3{font-size:14.5px}
 .adm .card-h .hint{color:var(--a-faint);font-size:12px;font-weight:500}
 .adm .card-b{padding:18px}
@@ -164,8 +164,9 @@ body.adm-body{margin:0;background:var(--a-canvas);color:var(--a-ink);
 .adm a.stat:hover{border-color:var(--a-border-2)}
 
 /* ---------------- segmented control ---------------- */
-.adm .seg{display:inline-flex;background:var(--a-surface-2);border:1px solid var(--a-border);border-radius:var(--a-r-sm);padding:3px;gap:2px}
-.adm .seg a,.adm .seg button{border:none;background:transparent;color:var(--a-muted);font-weight:600;font-size:12.5px;padding:6px 12px;border-radius:6px;cursor:pointer;text-decoration:none;line-height:1.3}
+.adm .seg{display:inline-flex;background:var(--a-surface-2);border:1px solid var(--a-border);border-radius:var(--a-r-sm);padding:3px;gap:2px;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.adm .seg::-webkit-scrollbar{display:none}
+.adm .seg a,.adm .seg button{border:none;background:transparent;color:var(--a-muted);font-weight:600;font-size:12.5px;padding:6px 12px;border-radius:6px;cursor:pointer;text-decoration:none;line-height:1.3;white-space:nowrap;flex:0 0 auto}
 .adm .seg a.on,.adm .seg button.on,.adm .seg strong{background:var(--a-surface);color:var(--a-ink);box-shadow:var(--a-shadow);border-radius:6px;padding:6px 12px;font-weight:600}
 
 /* ---------------- pipeline ---------------- */
@@ -250,15 +251,24 @@ body.adm-body{margin:0;background:var(--a-canvas);color:var(--a-ink);
 @media (max-width:960px){
   .adm .kpis{grid-template-columns:repeat(2,1fr)}
   .adm .two,.adm .two-6-4{grid-template-columns:1fr}
-  .adm .pipe{grid-template-columns:repeat(2,1fr)}
+  .adm .pipe{grid-template-columns:repeat(3,1fr)}
 }
 @media (max-width:720px){
   .adm-sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);transition:transform .2s;box-shadow:var(--a-shadow-md)}
   .adm-app.open .adm-sidebar{transform:none}
   .adm-app.open .adm-scrim{display:block}
   .adm-scrim{display:none;position:fixed;inset:0;background:rgba(10,20,19,.4);z-index:35}
+  .adm-topbar{padding:11px 16px;gap:10px}
   .adm-topbar .menu{display:grid}
-  .adm-search{display:none}
-  .adm-content{padding:18px}
-  .adm .frow{grid-template-columns:104px 1fr auto}
+  .adm-topbar .adm-search{display:none}   /* topbar search only — in-page search forms stay */
+  .adm-content{padding:16px}
+  /* a search form inside a card header goes full width above the filters */
+  .adm .card-h .adm-search{order:-1;width:100%;flex:1 1 100%;margin:0}
+  .adm .card-h .seg{width:100%}
+  .adm .frow{grid-template-columns:96px 1fr auto}
+}
+@media (max-width:560px){
+  .adm .kpis{grid-template-columns:1fr}
+  .adm .pipe{grid-template-columns:repeat(2,1fr)}
+  .adm .page-head h1{font-size:23px}
 }

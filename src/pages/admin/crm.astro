@@ -53,7 +53,7 @@ const initials = (name: string) => name.replace(/[^a-zA-Z0-9 ]/g, '').split(/\s+
 
   <div class="card">
     <div class="card-h">
-      <form method="get" class="adm-search" style="width:min(340px,60%);margin:0">
+      <form method="get" class="adm-search" style="flex:1 1 260px;min-width:0;max-width:440px;margin:0">
         {stage && <input type="hidden" name="stage" value={stage} />}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>
         <input type="search" name="q" value={q} placeholder="Search company or city" />
