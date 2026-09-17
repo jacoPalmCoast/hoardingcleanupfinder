@@ -17,11 +17,12 @@ import { trackEvent, waitCtx } from '../../lib/events';
 import { env } from '../../lib/env';
 
 const l = await getListingBySlug(Astro.params.slug ?? '');
-if (!l || l.status !== 'active') return new Response(null, { status: 404 });
+if (!l) return new Response(null, { status: 404 });
 
 // Owner preview: signed-in owner of this listing can see it rendered as a full
-// featured profile before paying, via ?preview=1. Gated to the owner so nobody
-// else can surface unpaid featured content, and never counted as a real view.
+// featured profile before paying, via ?preview=1 — including while the listing is
+// still 'pending' admin review. Gated to the owner so nobody else can surface unpaid
+// featured content or an unapproved listing, and never counted as a real view.
 const liveFeatured = isLive(l);
 const wantPreview = Astro.url.searchParams.get('preview') === '1';
 let previewing = false;
@@ -29,6 +30,8 @@ if (wantPreview && !liveFeatured) {
   const owner = await currentOwner(Astro.request);
   previewing = !!owner && (await ownerOwns(owner.id, l.id));
 }
+// The public only ever sees active listings; the owner can preview their own pending one.
+if (l.status !== 'active' && !previewing) return new Response(null, { status: 404 });
 // A preview response carries owner-gated content and must never be cached or shared.
 if (previewing) Astro.response.headers.set('cache-control', 'private, no-store');
 // Count this page view (real visitors only; bots are filtered inside trackEvent).

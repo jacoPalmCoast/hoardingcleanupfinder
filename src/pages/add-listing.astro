@@ -5,13 +5,32 @@ import { STATES } from '../data/states';
 import { env } from '../lib/env';
 const siteKey = env.TURNSTILE_SITE_KEY ?? '';
 const msg = Astro.url.searchParams.get('msg');
+const step = Astro.url.searchParams.get('step');
+const email = Astro.url.searchParams.get('email') ?? '';
+const slug = Astro.url.searchParams.get('slug') ?? '';
 ---
 <Base title="Add your cleanup company (free)" description="Add a hoarding, biohazard or estate cleanup company to the directory. Free, reviewed within one business day.">
+  {step === 'code' ? (
+    <>
+      <h1>Confirm your email</h1>
+      <p class="lede">Your listing is saved and in review. Enter the 6-digit code we just emailed to <strong>{email}</strong> to manage and preview it now.</p>
+      {msg === 'wrong-code' && <div class="notice error" role="alert">Wrong or expired code. Check the email, or <a href="/add-listing">start over</a>.</div>}
+      <form action="/api/listing/confirm" method="post" style="max-width:420px">
+        <input type="hidden" name="email" value={email} />
+        <input type="hidden" name="slug" value={slug} />
+        <label for="code">6-digit code</label>
+        <input id="code" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code" />
+        <button class="btn" type="submit" style="margin-top:12px">Confirm &amp; manage listing</button>
+      </form>
+      <p class="small" style="margin-top:16px">Didn't get it? Check spam, or you can also <a href="/account">sign in later</a> — your listing is safe in review either way.</p>
+    </>
+  ) : (
+    <>
   <h1>Add your company</h1>
   <p class="lede">Listings are free. We review every submission within one business day and check the phone number and website before it goes live.</p>
-  {msg === 'submitted' && <div class="notice" role="status">Thanks. Your listing is in review. We will email you when it is live.</div>}
   {msg === 'invalid' && <div class="notice error" role="alert">Something was missing or invalid. Check the fields and try again.</div>}
   {msg === 'captcha' && <div class="notice error" role="alert">The spam check did not pass. Reload the page and try again.</div>}
+  {msg === 'rate-limited' && <div class="notice error" role="alert">Too many submissions from this connection. Try again in a little while.</div>}
   {msg === 'duplicate' && <div class="notice warn" role="alert">A listing with that phone number already exists. Search for it and use "Claim this listing" instead.</div>}
   <form action="/api/listing/submit" method="post" style="max-width:600px">
     <label for="name">Company name</label>
@@ -43,4 +62,6 @@ const msg = Astro.url.searchParams.get('msg');
     <button class="btn" type="submit" style="margin-top:12px">Submit for review</button>
   </form>
   {siteKey && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
+    </>
+  )}
 </Base>

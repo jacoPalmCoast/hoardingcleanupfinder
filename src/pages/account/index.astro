@@ -49,6 +49,7 @@ const email = Astro.url.searchParams.get('email') ?? '';
     <>
       <h1>Your listings</h1>
       <div class="small">Signed in as {owner.email}. <form class="inline" action="/api/account/logout" method="post"><button type="submit" class="linkbtn">Sign out</button></form></div>
+      {msg === 'welcome' && <div class="notice" role="status"><strong>You're all set.</strong> Your listing is in review — we'll email you when it goes live, usually within one business day. In the meantime you can edit it, fill in your featured content, and preview the full profile below.</div>}
       {msg === 'claimed' && <div class="notice" role="status">Listing claimed. You can edit it below.</div>}
       {msg === 'claim-review' && <div class="notice" role="status">Code confirmed. Because the email is not on the company's website domain, a person will review the claim within one business day and email you.</div>}
       {msg === 'saved' && <div class="notice" role="status">Saved.</div>}
@@ -56,10 +57,12 @@ const email = Astro.url.searchParams.get('email') ?? '';
       {pending.length > 0 && <div class="notice warn">Awaiting review: {pending.map((p) => p.name).join(', ')}</div>}
       {listings.length === 0 && pending.length === 0 && <p>No listings are attached to this email yet.</p>}
       <div class="grid">
-        {listings.map((l) => (
+        {listings.map((l) => {
+          const pending = l.status === 'pending';
+          return (
           <div class="card">
-            <div class="badges">{isLive(l) ? <span class="badge featured">Featured until {(tsToDate(l.featured_until)?.toLocaleDateString('en-US')) ?? '—'}</span> : <span class="badge">Free listing</span>}</div>
-            <h3><a href={`/company/${l.slug}`}>{l.name}</a></h3>
+            <div class="badges">{pending ? <span class="badge" style="background:var(--warn-soft,#fbf1de);color:var(--warn,#a9740d)">In review</span> : isLive(l) ? <span class="badge featured">Featured until {(tsToDate(l.featured_until)?.toLocaleDateString('en-US')) ?? '—'}</span> : <span class="badge">Free listing</span>}</div>
+            <h3>{pending ? l.name : <a href={`/company/${l.slug}`}>{l.name}</a>}</h3>
             <div class="meta">{l.city}, {l.state}</div>
             {(isLive(l) || l.subscription_status) && (
               <p class="small" style="margin:8px 0 0">
@@ -75,11 +78,20 @@ const email = Astro.url.searchParams.get('email') ?? '';
             )}
             <div class="actions">
               <a class="btn small" href={`/account/edit/${l.id}`}>Edit listing</a>
-              <a class="btn small secondary" href={`/account/performance/${l.id}`}>Performance</a>
-              {isLive(l) || l.stripe_customer_id ? <form action="/api/stripe/portal" method="post" style="display:inline"><button type="submit" class="btn small secondary">Manage billing</button></form> : <><a class="btn small secondary" href={`/company/${l.slug}?preview=1`}>Preview featured</a><a class="btn small" href={`/featured/${l.slug}`}>Get featured</a></>}
+              {pending ? (
+                <>
+                  <a class="btn small secondary" href={`/company/${l.slug}?preview=1`}>Preview featured</a>
+                  <span class="small" style="align-self:center;color:var(--muted)">Featured unlocks once it's approved.</span>
+                </>
+              ) : (
+                <>
+                  <a class="btn small secondary" href={`/account/performance/${l.id}`}>Performance</a>
+                  {isLive(l) || l.stripe_customer_id ? <form action="/api/stripe/portal" method="post" style="display:inline"><button type="submit" class="btn small secondary">Manage billing</button></form> : <><a class="btn small secondary" href={`/company/${l.slug}?preview=1`}>Preview featured</a><a class="btn small" href={`/featured/${l.slug}`}>Get featured</a></>}
+                </>
+              )}
             </div>
           </div>
-        ))}
+        );})}
       </div>
     </>
   )}
