@@ -7,28 +7,45 @@ const routed = (v: string | null): number[] => { try { const a = JSON.parse(v ||
 const ids = [...new Set(rows.flatMap((r: any) => routed(r.routed_to)))] as number[];
 const names: Record<number, string> = {};
 if (ids.length) for (const row of (await env.DB.prepare(`SELECT id, name FROM listings WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all<any>()).results) names[row.id] = row.name;
+const STATUS_PILL: Record<string, string> = { new: 'brand', contacted: 'info', sold: 'ok', closed: 'muted', spam: 'bad' };
+const when = (ts: number) => tsToDate(ts)?.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) ?? '—';
 ---
 <Admin title="Leads">
-  {rows.length === 0 ? <p>No leads yet.</p> : (
-    <div class="table-wrap"><table><thead><tr><th>When</th><th>Contact</th><th>Where</th><th>Service</th><th>Routed to</th><th>Message</th><th>Status</th></tr></thead><tbody>
-      {rows.map((r: any) => (
-        <tr>
-          <td>{tsToDate(r.created_at)?.toLocaleString('en-US') ?? '—'}</td>
-          <td>{r.name}<br/>{r.email}<br/>{r.phone}</td>
-          <td>{r.zip} {r.city} {r.state}</td>
-          <td>{r.service}</td>
-          <td>{routed(r.routed_to).map((id: number) => names[id] ?? id).join(', ') || '—'}</td>
-          <td>{r.message}</td>
-          <td class="actions">
-            <form action="/api/admin/lead" method="post"><input type="hidden" name="id" value={r.id} />
-              <select name="status" aria-label="Lead status">
-                {['new', 'contacted', 'sold', 'closed', 'spam'].map((s) => <option value={s} selected={s === r.status}>{s}</option>)}
-              </select>
-              <button class="btn small secondary" type="submit" style="margin-top:6px">Save</button>
-            </form>
-          </td>
-        </tr>
-      ))}
-    </tbody></table></div>
+  <p slot="sub" class="sub">{rows.length.toLocaleString('en-US')} quote request{rows.length === 1 ? '' : 's'} · newest first</p>
+
+  {rows.length === 0 ? (
+    <div class="card"><div class="empty">
+      <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M9 15l2 2 4-4"/></svg></div>
+      <b>No leads yet</b>
+      Quote requests submitted on company pages will collect here.
+    </div></div>
+  ) : (
+    <div class="card">
+      <div class="card-h"><h3>Quote requests</h3><span class="hint">{rows.length}</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>Contact</th><th>Where</th><th>Service</th><th>Routed to</th><th>Message</th><th>Status</th></tr></thead>
+        <tbody>
+          {rows.map((r: any) => (
+            <tr>
+              <td class="mut" style="white-space:nowrap">{when(r.created_at)}</td>
+              <td><span class="co">{r.name}</span><div class="sub2">{r.email}<br/>{r.phone}</div></td>
+              <td class="mut">{r.zip} {r.city} {r.state}</td>
+              <td class="mut">{r.service}</td>
+              <td class="mut">{routed(r.routed_to).map((id: number) => names[id] ?? id).join(', ') || '—'}</td>
+              <td style="max-width:300px">{r.message}</td>
+              <td>
+                <form action="/api/admin/lead" method="post"><input type="hidden" name="id" value={r.id} />
+                  <span class={`pill ${STATUS_PILL[r.status] ?? 'muted'}`} style="margin-bottom:6px">{r.status}</span>
+                  <select name="status" aria-label="Lead status">
+                    {['new', 'contacted', 'sold', 'closed', 'spam'].map((s) => <option value={s} selected={s === r.status}>{s}</option>)}
+                  </select>
+                  <button class="btn small secondary" type="submit" style="margin-top:6px">Save</button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    </div>
   )}
 </Admin>

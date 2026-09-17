@@ -24,9 +24,19 @@ const cands = (await env.DB.prepare(
    WHERE ec.status != 'rejected'
    ORDER BY (ec.status = 'primary') DESC, ec.created_at DESC LIMIT 120`,
 ).all<{ id: number; listing_id: number; email: string; source: string; confidence: number; mx_ok: number | null; is_role: number; is_free: number; status: string; name: string }>()).results;
+const providers = [
+  { label: 'Provider verification', on: hunter, note: hunter ? 'Hunter.io is connected. Use "Find via provider" on a company to pull more addresses, and "Verify" to confirm deliverability with a real score.' : 'For maximum reach and verified deliverability, add a Hunter.io API key as the Worker secret HUNTER_API_KEY. Website crawling + MX validation work without it.' },
+  { label: 'Deep enrichment agent', on: ai, note: ai ? 'The daily job re-reads sites without a named contact using an on-platform language model to find owner names. Toggle in Setup.' : 'Turn on in Setup to have the agent read page text and extract owner names the pattern rules miss (~25/day, has a usage cost).' },
+  { label: 'Public records lookup', on: records, note: records ? 'For companies with no named contact, the daily job looks up the business in state filings (OpenCorporates) and stores the registered owner/officer names. Links to Yelp, BBB, Chamber, TrustPilot and other directories are captured from each site, but those platforms themselves are never scraped.' : 'Add an OpenCorporates API token as the Worker secret OPENCORPORATES_TOKEN in Setup to pull registered owner/officer names from state business filings for companies whose website lists no contact. Directory/review links (Yelp, BBB, Chamber, TrustPilot) are already captured from each site.' },
+];
 ---
 <Admin title="Email enrichment">
-  <p class="small" style="margin:-6px 0 12px"><a href="/admin/crm">← Pipeline</a> · <a href="/admin/crm/outreach">Outreach →</a></p>
+  <p slot="sub" class="sub">{pct}% of companies have a usable email · the daily job crawls up to 60/day automatically</p>
+  <Fragment slot="actions">
+    <a class="btn secondary small" href="/admin/crm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Pipeline</a>
+    <a class="btn secondary small" href="/admin/crm/outreach"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2 15 22l-4-9-9-4Z"/></svg>Outreach</a>
+  </Fragment>
+
   {ran && <div class="notice" role="status">Crawled {ran} listings, found {found} candidate{found === '1' ? '' : 's'}. Run again to continue the backlog.</div>}
   {named && <div class="notice" role="status">Inferred {named} contact name{named === '1' ? '' : 's'} from email addresses.</div>}
   {airan && <div class="notice" role="status">AI pass read {airan} listing{airan === '1' ? '' : 's'}, found {aifound} name{aifound === '1' ? '' : 's'}.</div>}
@@ -42,65 +52,60 @@ const cands = (await env.DB.prepare(
     <div class="stat"><b>{cov.pending.toLocaleString('en-US')}</b><span>Sites left to crawl</span></div>
   </div>
 
-  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin:16px 0">
-    <form action="/api/admin/enrich" method="post" style="display:flex;gap:8px;align-items:center">
-      <input type="hidden" name="action" value="run_batch" />
-      <label for="n" class="small">Crawl next</label>
-      <input id="n" name="n" type="number" value="12" min="1" max="40" style="width:70px" />
-      <button class="btn small" type="submit">Run now</button>
-    </form>
-    <form action="/api/admin/enrich" method="post" style="display:inline">
-      <input type="hidden" name="action" value="infer_names" />
-      <button class="btn small secondary" type="submit">Infer names from emails</button>
-    </form>
-    {ai && (
-      <form action="/api/admin/enrich" method="post" style="display:inline">
-        <input type="hidden" name="action" value="ai_batch" />
-        <input type="hidden" name="n" value="15" />
-        <button class="btn small secondary" type="submit">Run AI name pass</button>
-      </form>
-    )}
-    {records && (
-      <form action="/api/admin/enrich" method="post" style="display:inline">
-        <input type="hidden" name="action" value="records_batch" />
-        <input type="hidden" name="n" value="20" />
-        <button class="btn small secondary" type="submit">Run records lookup</button>
-      </form>
-    )}
-    <p class="small" style="margin:0;max-width:520px">Reads each company's own website (homepage + contact page) for a published email, validates the domain has mail (MX), and falls back to role addresses (info@, contact@) on valid domains. The daily job also crawls up to 60/day automatically, so the backlog clears on its own.</p>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-h"><h3>Run enrichment</h3></div>
+    <div class="card-b">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <form action="/api/admin/enrich" method="post" style="display:flex;gap:8px;align-items:center">
+          <input type="hidden" name="action" value="run_batch" />
+          <label for="n" style="margin:0;white-space:nowrap">Crawl next</label>
+          <input id="n" name="n" type="number" value="12" min="1" max="40" style="width:74px" />
+          <button class="btn small" type="submit">Run now</button>
+        </form>
+        <form action="/api/admin/enrich" method="post" style="display:inline"><input type="hidden" name="action" value="infer_names" /><button class="btn small secondary" type="submit">Infer names from emails</button></form>
+        {ai && <form action="/api/admin/enrich" method="post" style="display:inline"><input type="hidden" name="action" value="ai_batch" /><input type="hidden" name="n" value="15" /><button class="btn small secondary" type="submit">Run AI name pass</button></form>}
+        {records && <form action="/api/admin/enrich" method="post" style="display:inline"><input type="hidden" name="action" value="records_batch" /><input type="hidden" name="n" value="20" /><button class="btn small secondary" type="submit">Run records lookup</button></form>}
+      </div>
+      <p class="fh" style="margin-top:12px;max-width:640px">Reads each company's own website (homepage + contact page) for a published email, validates the domain has mail (MX), and falls back to role addresses (info@, contact@) on valid domains. The daily job also crawls up to 60/day automatically, so the backlog clears on its own.</p>
+    </div>
   </div>
 
   <div class="card" style="margin-bottom:16px">
-    <strong>Provider verification {hunter ? '· on' : '· off'}</strong>
-    <p class="small" style="margin:6px 0 0">{hunter
-      ? 'Hunter.io is connected. Use “Find via provider” on a company to pull more addresses, and “Verify” to confirm deliverability with a real score.'
-      : 'For maximum reach and verified deliverability, add a Hunter.io API key as the Worker secret HUNTER_API_KEY. Website crawling + MX validation work without it.'}</p>
-    <p class="small" style="margin:8px 0 0"><strong>Deep enrichment agent {ai ? '· on' : '· off'}.</strong> {ai
-      ? 'The daily job re-reads sites without a named contact using an on-platform language model to find owner names. Toggle in Setup.'
-      : 'Turn on in Setup to have the agent read page text and extract owner names the pattern rules miss (~25/day, has a usage cost).'}</p>
-    <p class="small" style="margin:8px 0 0"><strong>Public records lookup {records ? '· on' : '· off'}.</strong> {records
-      ? 'For companies with no named contact, the daily job looks up the business in state filings (OpenCorporates) and stores the registered owner/officer names. Links to Yelp, BBB, Chamber, TrustPilot and other directories are captured from each site, but those platforms themselves are never scraped.'
-      : 'Add an OpenCorporates API token as the Worker secret OPENCORPORATES_TOKEN in Setup to pull registered owner/officer names from state business filings for companies whose website lists no contact. Directory/review links (Yelp, BBB, Chamber, TrustPilot) are already captured from each site.'}</p>
+    <div class="card-h"><h3>Providers &amp; agents</h3></div>
+    {providers.map((p, i) => (
+      <div class="rd" style={i > 0 ? 'border-top:1px solid var(--a-border)' : ''}>
+        <span class={`st ${p.on ? 'st-ok' : 'st-off'}`} set:html={p.on ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>'}></span>
+        <div><div class="rt">{p.label}</div><div class="rdd">{p.note}</div></div>
+        <span class={`rp pill ${p.on ? 'ok' : 'muted'}`}>{p.on ? 'On' : 'Off'}</span>
+      </div>
+    ))}
   </div>
 
-  <h2 style="margin:6px 0 8px">Candidates ({cands.length})</h2>
-  {cands.length === 0 ? <p class="small">None yet — run a crawl.</p> : (
-    <div class="table-wrap"><table><thead><tr><th>Email</th><th>Company</th><th>Source</th><th>Conf.</th><th>MX</th><th>Status</th><th></th></tr></thead><tbody>
-      {cands.map((c) => (
-        <tr>
-          <td>{c.email} {c.is_role ? <span class="small">(role)</span> : null}{c.is_free ? <span class="small">(free)</span> : null}</td>
-          <td style="white-space:nowrap"><a href={`/admin/crm/${c.listing_id}`}>{c.name}</a></td>
-          <td>{c.source}</td>
-          <td style="text-align:right">{c.confidence}</td>
-          <td>{c.mx_ok == null ? '—' : c.mx_ok ? '✓' : '✗'}</td>
-          <td><strong style={c.status === 'primary' ? 'color:#0f6d6a' : ''}>{c.status}</strong></td>
-          <td class="actions" style="white-space:nowrap">
-            {c.status !== 'primary' && <form action="/api/admin/enrich" method="post" style="display:inline"><input type="hidden" name="action" value="set_primary" /><input type="hidden" name="candidate_id" value={c.id} /><button class="linkbtn small" type="submit">Use</button></form>}
-            {hunter && <form action="/api/admin/enrich" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="action" value="hunter_verify" /><input type="hidden" name="candidate_id" value={c.id} /><button class="linkbtn small" type="submit">Verify</button></form>}
-            <form action="/api/admin/enrich" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="action" value="reject" /><input type="hidden" name="candidate_id" value={c.id} /><button class="linkbtn small" type="submit">Reject</button></form>
-          </td>
-        </tr>
-      ))}
-    </tbody></table></div>
-  )}
+  <div class="card">
+    <div class="card-h"><h3>Candidates</h3><span class="hint">{cands.length}</span></div>
+    {cands.length === 0 ? (
+      <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2.5"/><path d="m3 6 9 6 9-6"/></svg></div><b>No candidates yet</b>Run a crawl to start finding email addresses.</div>
+    ) : (
+      <div class="table-wrap"><table>
+        <thead><tr><th>Email</th><th>Company</th><th>Source</th><th style="text-align:right">Conf.</th><th>MX</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {cands.map((c) => (
+            <tr>
+              <td>{c.email} {c.is_role ? <span class="mut">(role)</span> : null}{c.is_free ? <span class="mut">(free)</span> : null}</td>
+              <td style="white-space:nowrap"><a class="linkish" href={`/admin/crm/${c.listing_id}`}>{c.name}</a></td>
+              <td class="mut">{c.source}</td>
+              <td class="tnum" style="text-align:right">{c.confidence}</td>
+              <td>{c.mx_ok == null ? <span class="mut">—</span> : c.mx_ok ? <span class="pill ok" style="padding:1px 8px">✓</span> : <span class="pill bad" style="padding:1px 8px">✗</span>}</td>
+              <td><span class={`pill ${c.status === 'primary' ? 'ok' : 'muted'}`}>{c.status}</span></td>
+              <td class="actions" style="white-space:nowrap">
+                {c.status !== 'primary' && <form action="/api/admin/enrich" method="post" style="display:inline"><input type="hidden" name="action" value="set_primary" /><input type="hidden" name="candidate_id" value={c.id} /><button class="linkbtn small" type="submit">Use</button></form>}
+                {hunter && <form action="/api/admin/enrich" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="action" value="hunter_verify" /><input type="hidden" name="candidate_id" value={c.id} /><button class="linkbtn small" type="submit">Verify</button></form>}
+                <form action="/api/admin/enrich" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="action" value="reject" /><input type="hidden" name="candidate_id" value={c.id} /><button class="linkbtn small" type="submit">Reject</button></form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    )}
+  </div>
 </Admin>

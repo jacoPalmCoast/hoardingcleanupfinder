@@ -3,21 +3,36 @@ import Admin from '../../layouts/Admin.astro';
 import { env } from '../../lib/env';
 import { hostOf } from '../../lib/util';
 const rows = (await env.DB.prepare(`SELECT c.id, c.email, c.verified_at, l.id AS listing_id, l.name, l.slug, l.city, l.state, l.website FROM claims c JOIN listings l ON l.id = c.listing_id WHERE c.status = 'review' ORDER BY c.verified_at DESC`).all<any>()).results;
+const initials = (name: string) => name.replace(/[^a-zA-Z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '–';
 ---
 <Admin title="Claims awaiting review">
-  {rows.length === 0 ? <p>None.</p> : (
-    <div class="table-wrap"><table><thead><tr><th>Listing</th><th>Website</th><th>Claimant email</th><th></th></tr></thead><tbody>
-      {rows.map((r: any) => (
-        <tr>
-          <td><a href={`/company/${r.slug}`}>{r.name}</a><br/>{r.city}, {r.state}</td>
-          <td>{r.website ? <a href={r.website} rel="nofollow noopener" target="_blank">{hostOf(r.website)}</a> : '—'}</td>
-          <td>{r.email}</td>
-          <td class="actions">
-            <form action="/api/admin/claim" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="approve" /><button class="btn small">Approve</button></form>
-            <form action="/api/admin/claim" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="reject" /><button class="btn small danger">Reject</button></form>
-          </td>
-        </tr>
-      ))}
-    </tbody></table></div>
+  <p slot="sub" class="sub">{rows.length.toLocaleString('en-US')} owner{rows.length === 1 ? '' : 's'} verified their email and are waiting for approval</p>
+
+  {rows.length === 0 ? (
+    <div class="card"><div class="empty">
+      <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4M12 3l7 4v5c0 4.4-3 7.3-7 9-4-1.7-7-4.6-7-9V7Z"/></svg></div>
+      <b>No claims to review</b>
+      When an owner claims their listing and verifies their email, it lands here for approval.
+    </div></div>
+  ) : (
+    <div class="card">
+      <div class="card-h"><h3>Awaiting review</h3><span class="hint">{rows.length}</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Listing</th><th>Website</th><th>Claimant email</th><th></th></tr></thead>
+        <tbody>
+          {rows.map((r: any) => (
+            <tr>
+              <td><div class="cell-co"><span class="avatar">{initials(r.name)}</span><div><a class="co" href={`/company/${r.slug}`}>{r.name}</a><div class="sub2">{r.city}, {r.state}</div></div></div></td>
+              <td>{r.website ? <a href={r.website} rel="nofollow noopener" target="_blank">{hostOf(r.website)}</a> : <span class="mut">—</span>}</td>
+              <td>{r.email}</td>
+              <td class="actions">
+                <form action="/api/admin/claim" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="approve" /><button class="btn small">Approve</button></form>
+                <form action="/api/admin/claim" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="reject" /><button class="btn small danger">Reject</button></form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    </div>
   )}
 </Admin>

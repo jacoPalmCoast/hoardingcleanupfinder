@@ -9,30 +9,42 @@ const when = (ts: number | null) => (ts ? tsToDate(ts)?.toLocaleDateString('en-U
 const overdue = tasks.filter((x) => x.due_at != null && x.due_at < t);
 const soon = tasks.filter((x) => x.due_at != null && x.due_at >= t);
 const undated = tasks.filter((x) => x.due_at == null);
-const groups = [['Overdue', overdue], ['Upcoming', soon], ['No date', undated]] as const;
+const groups = [['Overdue', overdue, 'bad'], ['Upcoming', soon, 'info'], ['No date', undated, 'muted']] as const;
+const initials = (name: string) => name.replace(/[^a-zA-Z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '–';
 ---
 <Admin title="Follow-up tasks">
-  <p class="small" style="margin:-6px 0 12px"><a href="/admin/crm">← Pipeline</a></p>
-  {tasks.length === 0 ? <p>No open tasks. Add follow-ups from any company record.</p> : groups.map(([label, list]) => (
+  <p slot="sub" class="sub">{tasks.length.toLocaleString('en-US')} open task{tasks.length === 1 ? '' : 's'}{overdue.length > 0 ? ` · ${overdue.length} overdue` : ''}</p>
+  <Fragment slot="actions"><a class="btn secondary small" href="/admin/crm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Pipeline</a></Fragment>
+
+  {tasks.length === 0 ? (
+    <div class="card"><div class="empty">
+      <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg></div>
+      <b>No open tasks</b>
+      Add follow-ups from any company record and they'll queue up here.
+    </div></div>
+  ) : groups.map(([label, list, tone]) => (
     list.length > 0 && (
-      <section style="margin-bottom:20px">
-        <h2 style={`margin:0 0 8px${label === 'Overdue' ? ';color:#b00' : ''}`}>{label} ({list.length})</h2>
-        <div class="table-wrap"><table><thead><tr><th>Due</th><th>Task</th><th>Company</th><th></th></tr></thead><tbody>
-          {list.map((x) => (
-            <tr>
-              <td style={`white-space:nowrap${x.due_at != null && x.due_at < t ? ';color:#b00;font-weight:600' : ''}`}>{when(x.due_at)}</td>
-              <td>{x.body}</td>
-              <td style="white-space:nowrap"><a href={`/admin/crm/${x.listing_id}`}>{x.name}</a></td>
-              <td>
-                <form action="/api/admin/crm" method="post" style="display:inline">
-                  <input type="hidden" name="action" value="complete_task" /><input type="hidden" name="activity_id" value={x.id} /><input type="hidden" name="back" value="/admin/crm/tasks" />
-                  <button class="btn small secondary" type="submit">Done</button>
-                </form>
-              </td>
-            </tr>
-          ))}
-        </tbody></table></div>
-      </section>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-h"><h3>{label}</h3><span class={`pill ${tone}`}>{list.length}</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Due</th><th>Task</th><th>Company</th><th></th></tr></thead>
+          <tbody>
+            {list.map((x) => (
+              <tr>
+                <td style="white-space:nowrap">{x.due_at != null && x.due_at < t ? <span class="pill bad" style="padding:2px 8px">{when(x.due_at)}</span> : <span class="mut">{when(x.due_at)}</span>}</td>
+                <td>{x.body}</td>
+                <td style="white-space:nowrap"><div class="cell-co"><span class="avatar">{initials(x.name)}</span><a class="co" href={`/admin/crm/${x.listing_id}`}>{x.name}</a></div></td>
+                <td class="actions">
+                  <form action="/api/admin/crm" method="post" style="display:inline">
+                    <input type="hidden" name="action" value="complete_task" /><input type="hidden" name="activity_id" value={x.id} /><input type="hidden" name="back" value="/admin/crm/tasks" />
+                    <button class="btn small secondary" type="submit">Done</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+      </div>
     )
   ))}
 </Admin>

@@ -7,23 +7,42 @@ const statusParam = (Astro.url.searchParams.get('status') ?? 'open').toLowerCase
 const status = statusParam === 'closed' ? 'closed' : statusParam === 'pending' ? 'pending' : statusParam === 'all' ? null : 'open';
 const [rows, pendingCount] = await Promise.all([listTickets(status), pendingTicketCount()]);
 const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
-const tab = (key: string, label: string) => ({ key, label });
-const tabs = [tab('open', 'Open'), tab('pending', pendingCount > 0 ? `Review (${pendingCount})` : 'Review'), tab('closed', 'Closed'), tab('all', 'All')];
+const tabs = [
+  { key: 'open', label: 'Open' },
+  { key: 'pending', label: pendingCount > 0 ? `Review (${pendingCount})` : 'Review' },
+  { key: 'closed', label: 'Closed' },
+  { key: 'all', label: 'All' },
+];
+const STATUS_PILL: Record<string, string> = { open: 'info', pending: 'warn', closed: 'muted' };
 ---
 <Admin title="Support inbox">
-  <nav class="small" style="margin:-6px 0 12px"><a href="/admin/crm">← Pipeline</a> · Show: {tabs.map((x) => (statusParam === x.key ? <strong style="margin-right:8px">{x.label}</strong> : <a href={`/admin/crm/tickets?status=${x.key}`} style="margin-right:8px">{x.label}</a>))}</nav>
-  {statusParam === 'pending' && rows.length > 0 && <p class="small" style="margin:-4px 0 12px;color:#666">These emails are from senders that don't match a known listing. Open each to approve or reject.</p>}
-  {rows.length === 0 ? <p>No {status ?? ''} tickets.</p> : (
-    <div class="table-wrap"><table><thead><tr><th>Updated</th><th>Subject</th><th>From</th><th>Company</th><th>Status</th></tr></thead><tbody>
-      {rows.map((r) => (
-        <tr>
-          <td style="white-space:nowrap">{when(r.updated_at)}</td>
-          <td><a href={`/admin/crm/ticket/${r.id}`}>{r.subject}</a> <span class="small">({r.msgs})</span></td>
-          <td>{r.from_email}</td>
-          <td style="white-space:nowrap">{r.listing_id ? <a href={`/admin/crm/${r.listing_id}`}>{r.company}</a> : '—'}</td>
-          <td>{r.status}</td>
-        </tr>
-      ))}
-    </tbody></table></div>
-  )}
+  <p slot="sub" class="sub">Customer emails routed into tickets{pendingCount > 0 ? ` · ${pendingCount} held for review` : ''}</p>
+  <Fragment slot="actions"><a class="btn secondary small" href="/admin/crm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Pipeline</a></Fragment>
+
+  <div class="card">
+    <div class="card-h">
+      <div class="seg">
+        {tabs.map((x) => <a class={statusParam === x.key ? 'on' : ''} href={`/admin/crm/tickets?status=${x.key}`}>{x.label}</a>)}
+      </div>
+    </div>
+    {statusParam === 'pending' && rows.length > 0 && <div class="card-b" style="padding-top:0"><p class="sub" style="margin:0">These emails are from senders that don't match a known listing. Open each to approve or reject.</p></div>}
+    {rows.length === 0 ? (
+      <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2.5"/><path d="m3 6 9 6 9-6"/></svg></div><b>No {status ?? ''} tickets</b>Customer emails land here as they arrive.</div>
+    ) : (
+      <div class="table-wrap"><table>
+        <thead><tr><th>Updated</th><th>Subject</th><th>From</th><th>Company</th><th>Status</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr>
+              <td class="mut" style="white-space:nowrap">{when(r.updated_at)}</td>
+              <td><a class="co" href={`/admin/crm/ticket/${r.id}`}>{r.subject}</a> <span class="mut">({r.msgs})</span></td>
+              <td class="mut">{r.from_email}</td>
+              <td style="white-space:nowrap">{r.listing_id ? <a class="linkish" href={`/admin/crm/${r.listing_id}`}>{r.company}</a> : <span class="mut">—</span>}</td>
+              <td><span class={`pill ${STATUS_PILL[r.status] ?? 'muted'}`}><span class="dot"></span>{r.status}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    )}
+  </div>
 </Admin>

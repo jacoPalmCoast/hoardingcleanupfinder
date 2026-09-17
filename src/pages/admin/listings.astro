@@ -26,96 +26,160 @@ const msg = Astro.url.searchParams.get('msg');
 const a = one ? parseAttrs(one.attrs) : null;
 const faq = one ? parseFaq(one.custom_faq) : [];
 const when = (t: unknown) => { const d = tsToDate(t); return d ? d.toLocaleString('en-US', { timeZone: 'America/New_York' }) : '—'; };
+const STATUS_PILL: Record<string, string> = { active: 'ok', pending: 'warn', removed: 'muted' };
+const ckLabel = 'font-weight:400;margin:0;display:flex;align-items:center;gap:8px';
+const ckGrid = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px 14px;margin-top:8px';
 ---
 <Admin title="Listings">
+  <p slot="sub" class="sub">Search, edit and manage owner access for any company in the directory</p>
+
   {msg === 'saved' && <div class="notice" role="status">Saved.</div>}
   {msg === 'owner-removed' && <div class="notice" role="status">Owner access removed.</div>}
   {msg === 'owner-added' && <div class="notice" role="status">Owner added.</div>}
   {msg === 'invalid' && <div class="notice error" role="alert">Invalid input.</div>}
-  <form method="get" class="search"><input type="search" name="q" value={q} placeholder="Name, phone, city or owner email" /><button class="btn">Find</button></form>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-b">
+      <form method="get" class="adm-search" style="width:100%;max-width:520px;margin:0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>
+        <input type="search" name="q" value={q} placeholder="Search name, phone, city or owner email" />
+      </form>
+    </div>
+  </div>
+
   {one && a && (
     <>
-      <p class="small"><a href={`/company/${one.slug}`} target="_blank">View public page</a> · #{one.id} · {one.status} · {leadCount} lead{leadCount === 1 ? '' : 's'} · created {when(one.created_at)} · updated {when(one.updated_at)}</p>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-b" style="display:flex;align-items:center;gap:12px 18px;flex-wrap:wrap">
+          <span class={`pill ${STATUS_PILL[one.status] ?? 'muted'}`}>{one.status}</span>
+          <span class="mut">#{one.id} · {leadCount} lead{leadCount === 1 ? '' : 's'}</span>
+          <span class="mut">Created {when(one.created_at)} · updated {when(one.updated_at)}</span>
+          <a class="linkish" href={`/company/${one.slug}`} target="_blank" style="margin-left:auto">View public page →</a>
+        </div>
+      </div>
 
-      <section>
-        <h2>Owners</h2>
-        {owners.length === 0 ? <p class="small">Unclaimed.</p> : (
-          <div class="table-wrap"><table><thead><tr><th>Email</th><th></th></tr></thead><tbody>
-            {owners.map((o) => (
-              <tr><td>{o.email}</td><td class="actions">
-                <form action="/api/admin/owner" method="post" style="display:inline"><input type="hidden" name="listing_id" value={one!.id} /><input type="hidden" name="owner_id" value={o.id} /><input type="hidden" name="action" value="remove" /><button class="btn small danger">Remove access</button></form>
-              </td></tr>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-h"><h3>Owners</h3></div>
+        <div class="card-b">
+          {owners.length === 0 ? <p class="sub" style="margin:0 0 12px">Unclaimed.</p> : (
+            <div class="table-wrap" style="margin-bottom:12px"><table>
+              <thead><tr><th>Email</th><th></th></tr></thead>
+              <tbody>
+                {owners.map((o) => (
+                  <tr><td>{o.email}</td><td class="actions">
+                    <form action="/api/admin/owner" method="post" style="display:inline"><input type="hidden" name="listing_id" value={one!.id} /><input type="hidden" name="owner_id" value={o.id} /><input type="hidden" name="action" value="remove" /><button class="btn small danger">Remove access</button></form>
+                  </td></tr>
+                ))}
+              </tbody>
+            </table></div>
+          )}
+          <form action="/api/admin/owner" method="post" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+            <input type="hidden" name="listing_id" value={one.id} /><input type="hidden" name="action" value="add" />
+            <label style="margin:0;flex:1;min-width:240px">Add or transfer to email<input name="email" type="email" required placeholder="owner@company.com" style="margin-top:6px" /></label>
+            <button class="btn small">Add owner</button>
+          </form>
+          <p class="fh" style="margin-top:10px">Use this when a customer changes their email: add the new address, then remove the old one. The new owner signs in with the usual email code.</p>
+          {claims.length > 0 && <p class="sub2" style="margin-top:8px">Claims: {claims.map((c) => `${c.email} (${c.status}, ${when(c.created_at)})`).join(' · ')}</p>}
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-h"><h3>Edit listing</h3></div>
+        <div class="card-b">
+          <form action="/api/admin/listing" method="post" style="max-width:660px">
+            <input type="hidden" name="id" value={one.id} /><input type="hidden" name="action" value="save" />
+            <div class="field"><label>Name<input name="name" value={one.name} required style="margin-top:6px" /></label></div>
+            <div class="field"><label>Phone<input name="phone" value={one.phone ?? ''} style="margin-top:6px" /></label></div>
+            <div class="field"><label>Website<input name="website" value={one.website ?? ''} style="margin-top:6px" /></label></div>
+            <div class="field"><label>Email<input name="email" value={one.email ?? ''} style="margin-top:6px" /></label></div>
+            <div class="field"><label>Address<input name="address" value={one.address ?? ''} style="margin-top:6px" /></label></div>
+            <div class="field"><label>City<input name="city" value={one.city} required style="margin-top:6px" /></label></div>
+            <div class="field"><label>State<input name="state" value={one.state} maxlength="2" required style="margin-top:6px" /></label></div>
+            <div class="field"><label>ZIP<input name="zip" value={one.zip ?? ''} style="margin-top:6px" /></label></div>
+
+            <div class="gh" style="padding:0;margin:8px 0 0">Services</div>
+            <div style={ckGrid}>
+              {SERVICES.map((sv) => <label style={ckLabel}><input type="checkbox" name="services" value={sv.slug} checked={parseServices(one!.services).includes(sv.slug)} style="width:auto" />{sv.name}</label>)}
+            </div>
+
+            <div class="field" style="margin-top:16px"><label>Description<textarea name="description" style="margin-top:6px">{one.description ?? ''}</textarea></label></div>
+            <label style={`${ckLabel};margin:4px 0 12px`}><input type="checkbox" name="is_verified" checked={one.is_verified === 1} style="width:auto" />Verified</label>
+            <div class="field"><label>Status<select name="status" style="margin-top:6px">{['active', 'pending', 'removed'].map((sv) => <option value={sv} selected={sv === one!.status}>{sv}</option>)}</select></label></div>
+
+            <div class="gh" style="padding:0;margin:8px 0 0">Attributes</div>
+            <div style={ckGrid}>
+              <label style={ckLabel}><input type="checkbox" name="hours24" checked={a.hours24} style="width:auto" />24 hours</label>
+              <label style={ckLabel}><input type="checkbox" name="free_estimate" checked={a.free_estimate} style="width:auto" />Free estimates</label>
+              <label style={ckLabel}><input type="checkbox" name="discreet" checked={a.discreet} style="width:auto" />Unmarked vehicles</label>
+              <label style={ckLabel}><input type="checkbox" name="insurance_billing" checked={a.insurance_billing} style="width:auto" />Bills insurance</label>
+              <label style={ckLabel}><input type="checkbox" name="financing" checked={a.financing} style="width:auto" />Financing</label>
+            </div>
+
+            <div class="gh" style="padding:0;margin:16px 0 0">Certifications</div>
+            <div style={ckGrid}>
+              {CERTIFICATIONS.map((c) => <label style={ckLabel}><input type="checkbox" name="certifications" value={c.slug} checked={a!.certifications.includes(c.slug)} style="width:auto" />{c.name}</label>)}
+            </div>
+            <div class="field" style="margin-top:16px"><label>License no.<input name="license_no" value={a.license_no} maxlength="40" style="margin-top:6px" /></label></div>
+
+            <div class="gh" style="padding:0;margin:8px 0 0">Languages</div>
+            <div style={ckGrid}>
+              {LANGUAGES.map((lang) => <label style={ckLabel}><input type="checkbox" name="languages" value={lang} checked={a!.languages.includes(lang)} style="width:auto" />{lang}</label>)}
+            </div>
+
+            <div class="field" style="margin-top:16px"><label>Service area (one city per line)<textarea name="service_area" style="min-height:80px;margin-top:6px">{a.service_area.join('\n')}</textarea></label></div>
+            <div class="field"><label>Long about (featured only, shown while featured)<textarea name="long_about" maxlength="2500" style="min-height:120px;margin-top:6px">{one.long_about ?? ''}</textarea></label></div>
+            {Array.from({ length: CUSTOM_FAQ_LIMIT }).map((_, i) => (
+              <div><div class="field"><label>FAQ {i + 1} question<input name={`faq_q${i}`} maxlength="160" value={faq[i]?.q ?? ''} style="margin-top:6px" /></label></div><div class="field"><label>Answer<textarea name={`faq_a${i}`} maxlength="600" style="min-height:60px;margin-top:6px">{faq[i]?.a ?? ''}</textarea></label></div></div>
             ))}
-          </tbody></table></div>
-        )}
-        <form action="/api/admin/owner" method="post" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:8px">
-          <input type="hidden" name="listing_id" value={one.id} /><input type="hidden" name="action" value="add" />
-          <label style="margin:0;flex:1;min-width:240px">Add or transfer to email<input name="email" type="email" required placeholder="owner@company.com" /></label>
-          <button class="btn small">Add owner</button>
-        </form>
-        <p class="hint">Use this when a customer changes their email: add the new address, then remove the old one. The new owner signs in with the usual email code.</p>
-        {claims.length > 0 && <p class="small">Claims: {claims.map((c) => `${c.email} (${c.status}, ${when(c.created_at)})`).join(' · ')}</p>}
-      </section>
 
-      <form action="/api/admin/listing" method="post" style="max-width:640px">
-        <h2>Listing</h2>
-        <input type="hidden" name="id" value={one.id} /><input type="hidden" name="action" value="save" />
-        <label>Name<input name="name" value={one.name} required /></label>
-        <label>Phone<input name="phone" value={one.phone ?? ''} /></label>
-        <label>Website<input name="website" value={one.website ?? ''} /></label>
-        <label>Email<input name="email" value={one.email ?? ''} /></label>
-        <label>Address<input name="address" value={one.address ?? ''} /></label>
-        <label>City<input name="city" value={one.city} required /></label>
-        <label>State<input name="state" value={one.state} maxlength="2" required /></label>
-        <label>ZIP<input name="zip" value={one.zip ?? ''} /></label>
-        <fieldset style="border:0;padding:0;margin:14px 0 0"><legend style="font-weight:600;font-size:.92rem">Services</legend>
-          {SERVICES.map((s) => <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="services" value={s.slug} checked={parseServices(one!.services).includes(s.slug)} style="width:auto;margin-right:8px" />{s.name}</label>)}
-        </fieldset>
-        <label>Description<textarea name="description">{one.description ?? ''}</textarea></label>
-        <label style="font-weight:400"><input type="checkbox" name="is_verified" checked={one.is_verified === 1} style="width:auto;margin-right:8px" />Verified</label>
-        <label>Status<select name="status">{['active', 'pending', 'removed'].map((s) => <option value={s} selected={s === one!.status}>{s}</option>)}</select></label>
+            <p class="fh">Featured: {one.is_featured} until {one.featured_until ? when(one.featured_until) : '—'} · Stripe customer {one.stripe_customer_id ?? '—'} · sub {one.stripe_subscription_id ?? '—'} ({one.subscription_status ?? '—'}). Featured state is controlled by Stripe webhooks only.</p>
+            <button class="btn" type="submit" style="margin-top:12px">Save</button>
+          </form>
+        </div>
+      </div>
 
-        <h3>Attributes</h3>
-        <label style="font-weight:400"><input type="checkbox" name="hours24" checked={a.hours24} style="width:auto;margin-right:8px" />24 hours</label>
-        <label style="font-weight:400"><input type="checkbox" name="free_estimate" checked={a.free_estimate} style="width:auto;margin-right:8px" />Free estimates</label>
-        <label style="font-weight:400"><input type="checkbox" name="discreet" checked={a.discreet} style="width:auto;margin-right:8px" />Unmarked vehicles</label>
-        <label style="font-weight:400"><input type="checkbox" name="insurance_billing" checked={a.insurance_billing} style="width:auto;margin-right:8px" />Bills insurance</label>
-        <label style="font-weight:400"><input type="checkbox" name="financing" checked={a.financing} style="width:auto;margin-right:8px" />Financing</label>
-        <fieldset style="border:0;padding:0;margin:14px 0 0"><legend style="font-weight:600;font-size:.92rem">Certifications</legend>
-          {CERTIFICATIONS.map((c) => <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="certifications" value={c.slug} checked={a!.certifications.includes(c.slug)} style="width:auto;margin-right:8px" />{c.name}</label>)}
-        </fieldset>
-        <label>License no.<input name="license_no" value={a.license_no} maxlength="40" /></label>
-        <fieldset style="border:0;padding:0;margin:14px 0 0"><legend style="font-weight:600;font-size:.92rem">Languages</legend>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))">{LANGUAGES.map((lang) => <label style="font-weight:400;margin:4px 0"><input type="checkbox" name="languages" value={lang} checked={a!.languages.includes(lang)} style="width:auto;margin-right:8px" />{lang}</label>)}</div>
-        </fieldset>
-        <label>Service area (one city per line)<textarea name="service_area" style="min-height:80px">{a.service_area.join('\n')}</textarea></label>
-        <label>Long about (featured only, shown while featured)<textarea name="long_about" maxlength="2500" style="min-height:120px">{one.long_about ?? ''}</textarea></label>
-        {Array.from({ length: CUSTOM_FAQ_LIMIT }).map((_, i) => (
-          <div><label>FAQ {i + 1} question<input name={`faq_q${i}`} maxlength="160" value={faq[i]?.q ?? ''} /></label><label>Answer<textarea name={`faq_a${i}`} maxlength="600" style="min-height:60px">{faq[i]?.a ?? ''}</textarea></label></div>
-        ))}
-
-        <p class="small">Featured: {one.is_featured} until {one.featured_until ? when(one.featured_until) : '—'} · Stripe customer {one.stripe_customer_id ?? '—'} · sub {one.stripe_subscription_id ?? '—'} ({one.subscription_status ?? '—'}). Featured state is controlled by Stripe webhooks only.</p>
-        <button class="btn" type="submit" style="margin-top:12px">Save</button>
-      </form>
-
-      <section>
-        <h2>Change log</h2>
-        {log.length === 0 ? <p class="small">No changes recorded yet.</p> : (
-          <div class="table-wrap"><table><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Changed</th></tr></thead><tbody>
-            {log.map((e) => {
-              let keys = '';
-              try { keys = Object.keys(JSON.parse(e.after ?? '{}')).join(', '); } catch {}
-              return <tr><td>{when(e.created_at)}</td><td>{e.actor_type}{e.actor ? ` · ${e.actor}` : ''}</td><td>{e.action}</td><td><details><summary>{keys || '—'}</summary><pre class="small" style="white-space:pre-wrap">before: {e.before}
+      <div class="card">
+        <div class="card-h"><h3>Change log</h3></div>
+        {log.length === 0 ? (
+          <div class="card-b"><p class="sub" style="margin:0">No changes recorded yet.</p></div>
+        ) : (
+          <div class="table-wrap"><table>
+            <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Changed</th></tr></thead>
+            <tbody>
+              {log.map((e) => {
+                let keys = '';
+                try { keys = Object.keys(JSON.parse(e.after ?? '{}')).join(', '); } catch {}
+                return <tr><td class="mut" style="white-space:nowrap">{when(e.created_at)}</td><td class="mut">{e.actor_type}{e.actor ? ` · ${e.actor}` : ''}</td><td>{e.action}</td><td><details><summary style="cursor:pointer">{keys || '—'}</summary><pre class="sub2" style="white-space:pre-wrap;margin-top:6px">before: {e.before}
 after: {e.after}</pre></details></td></tr>;
-            })}
-          </tbody></table></div>
+              })}
+            </tbody>
+          </table></div>
         )}
-      </section>
+      </div>
     </>
   )}
+
   {rows.length > 0 && (
-    <div class="table-wrap"><table><thead><tr><th>Name</th><th>City</th><th>Phone</th><th>Status</th><th>Flags</th></tr></thead><tbody>
-      {rows.map((r) => <tr><td><a href={`/admin/listings?id=${r.id}`}>{r.name}</a></td><td>{r.city}, {r.state}</td><td>{r.phone}</td><td>{r.status}</td><td>{r.is_verified ? 'V ' : ''}{r.is_claimed ? 'C ' : ''}{r.is_featured ? 'F' : ''}</td></tr>)}
-    </tbody></table></div>
+    <div class="card">
+      <div class="card-h"><h3>Results</h3><span class="hint">{rows.length}</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Name</th><th>City</th><th>Phone</th><th>Status</th><th>Flags</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr>
+              <td><a class="co" href={`/admin/listings?id=${r.id}`}>{r.name}</a></td>
+              <td class="mut">{r.city}, {r.state}</td>
+              <td class="mut">{r.phone}</td>
+              <td><span class={`pill ${STATUS_PILL[r.status] ?? 'muted'}`}>{r.status}</span></td>
+              <td>{r.is_verified ? <span class="badge verified" style="margin-right:4px">Verified</span> : ''}{r.is_claimed ? <span class="badge claimed" style="margin-right:4px">Claimed</span> : ''}{r.is_featured ? <span class="badge featured">Featured</span> : ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    </div>
+  )}
+
+  {!one && !rows.length && q && (
+    <div class="card"><div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg></div><b>No companies match "{q}"</b>Try a different name, phone, city or owner email.</div></div>
   )}
 </Admin>

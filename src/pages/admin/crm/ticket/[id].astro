@@ -14,53 +14,71 @@ const isImg = (ct: string) => /^image\//i.test(ct);
 const kb = (n: number) => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
 const attachOf = (messageId: number) => attachments.filter((a) => a.message_id === messageId);
 const pending = ticket.status === 'pending';
+const STATUS_PILL: Record<string, string> = { open: 'info', pending: 'warn', closed: 'muted' };
 ---
 <Admin title={ticket.subject}>
-  <p class="small" style="margin:-6px 0 10px"><a href="/admin/crm/tickets">← Support inbox</a>{ticket.listing_id ? <> · <a href={`/admin/crm/${ticket.listing_id}`}>{ticket.company}</a></> : null}</p>
+  <p slot="sub" class="sub">From {ticket.from_email}{ticket.source === 'email' ? ' · via email' : ''}</p>
+  <Fragment slot="actions">
+    <span class={`pill ${STATUS_PILL[ticket.status] ?? 'muted'}`} style="align-self:center">{ticket.status}</span>
+    <a class="btn secondary small" href="/admin/crm/tickets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Support inbox</a>
+    {ticket.listing_id && <a class="btn secondary small" href={`/admin/crm/${ticket.listing_id}`}>{ticket.company}</a>}
+  </Fragment>
+
   {msg === 'sent' && <div class="notice" role="status">Reply sent.</div>}
   {msg === 'send-failed' && <div class="notice error" role="alert">The reply was saved but the email didn't send (check email settings).</div>}
-  <p class="small" style="margin:0 0 16px">From {ticket.from_email} · {ticket.status}{ticket.source === 'email' ? ' · via email' : ''}</p>
 
   {pending && (
-    <div class="notice warn" role="alert" style="max-width:680px">
+    <div class="notice warn" role="alert" style="max-width:720px">
       <strong>Held for review.</strong> This email is from an address that doesn't match a known listing. Approve it to move it into your open inbox, or reject to delete it.
-      <div style="display:flex;gap:8px;margin-top:8px">
+      <div style="display:flex;gap:8px;margin-top:10px">
         <form action="/api/admin/ticket" method="post" style="display:inline"><input type="hidden" name="ticket_id" value={id} /><input type="hidden" name="action" value="approve" /><button class="btn small" type="submit">Approve</button></form>
         <form action="/api/admin/ticket" method="post" style="display:inline"><input type="hidden" name="ticket_id" value={id} /><input type="hidden" name="action" value="reject" /><button class="btn small secondary" type="submit">Reject &amp; delete</button></form>
       </div>
     </div>
   )}
 
-  <div style="max-width:680px">
+  <div style="max-width:720px">
     {messages.map((m) => {
       const files = attachOf(m.id);
+      const out = m.direction === 'out';
       return (
-      <div class="card" style={`margin-bottom:10px${m.direction === 'out' ? ';border-left:3px solid #0f6d6a' : ''}`}>
-        <div class="small" style="color:#666;margin-bottom:4px">{m.direction === 'out' ? 'You' : ticket.from_email} · {when(m.created_at)}</div>
-        <div style="white-space:pre-wrap">{m.body}</div>
-        {files.length > 0 && (
-          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px">
-            {files.map((f) => (isImg(f.content_type)
-              ? <a href={`/api/admin/attachment?id=${f.id}`} target="_blank" rel="noopener" title={f.filename}><img src={`/api/admin/attachment?id=${f.id}`} alt={f.filename} loading="lazy" style="max-width:150px;max-height:150px;border:1px solid #e5e5e5;border-radius:6px;object-fit:cover" /></a>
-              : <a class="btn small secondary" href={`/api/admin/attachment?id=${f.id}`} target="_blank" rel="noopener">{f.filename} · {kb(f.size)}</a>
-            ))}
+      <div class="card" style={`margin-bottom:12px${out ? ';border-left:3px solid var(--a-brand)' : ''}`}>
+        <div class="card-b">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span class={`pill ${out ? 'brand' : 'muted'}`} style="padding:2px 8px">{out ? 'You' : ticket.from_email}</span>
+            <span class="sub2" style="margin:0">{when(m.created_at)}</span>
           </div>
-        )}
+          <div style="white-space:pre-wrap;color:var(--a-ink)">{m.body}</div>
+          {files.length > 0 && (
+            <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:10px">
+              {files.map((f) => (isImg(f.content_type)
+                ? <a href={`/api/admin/attachment?id=${f.id}`} target="_blank" rel="noopener" title={f.filename}><img src={`/api/admin/attachment?id=${f.id}`} alt={f.filename} loading="lazy" style="max-width:150px;max-height:150px;border:1px solid var(--a-border);border-radius:8px;object-fit:cover" /></a>
+                : <a class="btn small secondary" href={`/api/admin/attachment?id=${f.id}`} target="_blank" rel="noopener">{f.filename} · {kb(f.size)}</a>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     );})}
 
-    <form action="/api/admin/ticket" method="post" style="margin-top:14px">
-      <input type="hidden" name="ticket_id" value={id} />
-      <input type="hidden" name="action" value="reply" />
-      <label for="body">Reply (emails {ticket.from_email})</label>
-      <textarea id="body" name="body" rows="5" required maxlength="4000" style="width:100%"></textarea>
-      <button class="btn" type="submit" style="margin-top:8px">Send reply</button>
-    </form>
-    <form action="/api/admin/ticket" method="post" style="margin-top:8px">
-      <input type="hidden" name="ticket_id" value={id} />
-      <input type="hidden" name="action" value="status" />
-      <input type="hidden" name="status" value={ticket.status === 'closed' ? 'open' : 'closed'} />
-      <button class="btn secondary" type="submit">{ticket.status === 'closed' ? 'Reopen ticket' : 'Close ticket'}</button>
-    </form>
+    <div class="card">
+      <div class="card-h"><h3>Reply</h3><span class="hint">emails {ticket.from_email}</span></div>
+      <div class="card-b">
+        <form action="/api/admin/ticket" method="post">
+          <input type="hidden" name="ticket_id" value={id} />
+          <input type="hidden" name="action" value="reply" />
+          <textarea id="body" name="body" rows="5" required maxlength="4000" aria-label="Reply message"></textarea>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <button class="btn" type="submit">Send reply</button>
+            <button class="btn secondary" type="submit" form="statusform">{ticket.status === 'closed' ? 'Reopen ticket' : 'Close ticket'}</button>
+          </div>
+        </form>
+        <form id="statusform" action="/api/admin/ticket" method="post">
+          <input type="hidden" name="ticket_id" value={id} />
+          <input type="hidden" name="action" value="status" />
+          <input type="hidden" name="status" value={ticket.status === 'closed' ? 'open' : 'closed'} />
+        </form>
+      </div>
+    </div>
   </div>
 </Admin>

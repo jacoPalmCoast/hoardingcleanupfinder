@@ -7,8 +7,14 @@ const s = await emailStats();
 const when = (ts: number | null) => (ts ? tsToDate(ts)?.toLocaleString('en-US') ?? '—' : '');
 // Most informative delivery marker per row, worst-first.
 const mark = (r: any): string => r.complained_at ? 'complaint' : r.bounced_at ? 'bounced' : r.status === 'failed' ? 'failed' : r.status === 'suppressed' ? 'suppressed' : r.clicked_at ? 'clicked' : r.opened_at ? 'opened' : r.delivered_at ? 'delivered' : r.status;
+const MARK_PILL: Record<string, string> = { complaint: 'bad', bounced: 'bad', failed: 'bad', suppressed: 'muted', clicked: 'ok', opened: 'ok', delivered: 'ok', sent: 'info', queued: 'info' };
 ---
 <Admin title="Email log">
+  <p slot="sub" class="sub">Last 150 messages · delivery, open, bounce and complaint markers fill in from the Resend webhook</p>
+  <Fragment slot="actions">
+    <a class="btn secondary small" href="/admin/suppressions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2.5"/><path d="m3 6 9 6 9-6"/></svg>Suppressions</a>
+  </Fragment>
+
   <div class="stats">
     <div class="stat"><b>{s.total}</b><span>Sent, 30 days</span></div>
     <div class="stat"><b>{s.sent}</b><span>Accepted</span></div>
@@ -17,19 +23,33 @@ const mark = (r: any): string => r.complained_at ? 'complaint' : r.bounced_at ? 
     <div class="stat"><b>{s.bounced}</b><span>Bounced</span></div>
     <div class="stat"><b>{s.complained}</b><span>Complaints</span></div>
   </div>
-  <p class="small">Last 150 messages. Delivery/open/bounce/complaint markers are filled in by the Resend webhook once it's connected. <a href="/admin/suppressions">Manage suppressions</a>.</p>
-  {rows.length === 0 ? <p>No email sent yet.</p> : (
-    <div class="table-wrap"><table><thead><tr><th>When</th><th>To</th><th>Stream</th><th>Type</th><th>Subject</th><th>Status</th></tr></thead><tbody>
-      {rows.map((r) => (
-        <tr>
-          <td style="white-space:nowrap">{when(r.created_at)}</td>
-          <td>{r.to_email}</td>
-          <td>{r.stream}</td>
-          <td>{r.type ?? '—'}</td>
-          <td style="max-width:280px">{r.subject ?? '—'}{r.error ? <><br/><span class="small" style="color:#b00">{r.error}</span></> : null}</td>
-          <td style="white-space:nowrap">{mark(r)}</td>
-        </tr>
-      ))}
-    </tbody></table></div>
+
+  {rows.length === 0 ? (
+    <div class="card"><div class="empty">
+      <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2.5"/><path d="m3 6 9 6 9-6"/></svg></div>
+      <b>No email sent yet</b>
+      Every message the site sends will be logged here with its delivery status.
+    </div></div>
+  ) : (
+    <div class="card">
+      <div class="card-h"><h3>Recent messages</h3><span class="hint">{rows.length}</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>To</th><th>Stream</th><th>Type</th><th>Subject</th><th>Status</th></tr></thead>
+        <tbody>
+          {rows.map((r) => {
+            const m = mark(r);
+            return (
+            <tr>
+              <td class="mut" style="white-space:nowrap">{when(r.created_at)}</td>
+              <td>{r.to_email}</td>
+              <td class="mut">{r.stream}</td>
+              <td class="mut">{r.type ?? '—'}</td>
+              <td style="max-width:280px">{r.subject ?? '—'}{r.error ? <><br/><span class="sub2" style="color:var(--a-bad)">{r.error}</span></> : null}</td>
+              <td style="white-space:nowrap"><span class={`pill ${MARK_PILL[m] ?? 'muted'}`}>{m}</span></td>
+            </tr>
+          );})}
+        </tbody>
+      </table></div>
+    </div>
   )}
 </Admin>

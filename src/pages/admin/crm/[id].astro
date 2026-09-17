@@ -31,6 +31,7 @@ const records = opencorpEnabled();
 const people = await listingPeople(id);
 const socials = await listingSocials(id);
 const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) ?? '';
+const STAGE_PILL: Record<string, string> = { prospect: 'brand', contacted: 'info', claimed: 'ok', featured: 'warn', lapsed: 'muted' };
 const PLATFORM_LABEL: Record<string, string> = {
   facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', x: 'X (Twitter)', youtube: 'YouTube',
   tiktok: 'TikTok', yelp: 'Yelp', bbb: 'BBB', trustpilot: 'Trustpilot', google: 'Google Business',
@@ -39,129 +40,149 @@ const PLATFORM_LABEL: Record<string, string> = {
 };
 ---
 <Admin title={l.name}>
-  <p class="small" style="margin:-6px 0 10px"><a href="/admin/crm">← Pipeline</a> · <a href={`/company/${l.slug}`}>View public page</a> · <a href={`/admin/analytics?id=${id}`}>Full analytics</a></p>
-  <p class="small" style="margin:0 0 16px">{l.city}, {l.state} · {l.is_claimed === 1 ? 'Claimed' : 'Unclaimed'}{l.subscription_status ? ` · ${l.subscription_status}` : ''}{l.featured_until ? ` · featured until ${when(l.featured_until)}` : ''}</p>
+  <p slot="sub" class="sub">{l.city}, {l.state} · {l.is_claimed === 1 ? 'Claimed' : 'Unclaimed'}{l.subscription_status ? ` · ${l.subscription_status}` : ''}{l.featured_until ? ` · featured until ${when(l.featured_until)}` : ''}</p>
+  <Fragment slot="actions">
+    <span class={`pill ${STAGE_PILL[stage] ?? 'muted'}`} style="align-self:center"><span class="dot"></span>{STAGE_LABEL[stage as never] ?? stage}</span>
+    <a class="btn secondary small" href="/admin/crm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Pipeline</a>
+    <a class="btn secondary small" href={`/company/${l.slug}`} target="_blank">Public page</a>
+    <a class="btn secondary small" href={`/admin/analytics?id=${id}`}>Analytics</a>
+  </Fragment>
 
-  <div class="two" style="gap:24px">
+  <div class="stats">
+    <div class="stat"><b>{(s.unique_views || s.views).toLocaleString('en-US')}</b><span>Visitors 30d</span></div>
+    <div class="stat"><b>{s.calls.toLocaleString('en-US')}</b><span>Call taps</span></div>
+    <div class="stat"><b>{s.website.toLocaleString('en-US')}</b><span>Website</span></div>
+    <div class="stat"><b>{s.leads.toLocaleString('en-US')}</b><span>Leads</span></div>
+  </div>
+
+  <div class="two" style="gap:16px;margin-top:16px">
     <div>
-      <div class="stats">
-        <div class="stat"><b>{(s.unique_views || s.views).toLocaleString('en-US')}</b><span>Visitors 30d</span></div>
-        <div class="stat"><b>{s.calls.toLocaleString('en-US')}</b><span>Call taps</span></div>
-        <div class="stat"><b>{s.website.toLocaleString('en-US')}</b><span>Website</span></div>
-        <div class="stat"><b>{s.leads.toLocaleString('en-US')}</b><span>Leads</span></div>
-      </div>
-
-      <h2 style="margin:20px 0 8px">Activity</h2>
-      <form action="/api/admin/crm" method="post" style="margin-bottom:8px">
-        <input type="hidden" name="listing_id" value={id} />
-        <input type="hidden" name="action" value="note" />
-        <textarea name="body" rows="2" required maxlength="2000" placeholder="Add a note…" style="width:100%"></textarea>
-        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
-          <button class="btn small" type="submit">Save note</button>
-          <button class="btn small secondary" type="submit" formaction="/api/admin/crm" name="action" value="call">Log as call</button>
-        </div>
-      </form>
-      <form action="/api/admin/crm" method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
-        <input type="hidden" name="listing_id" value={id} />
-        <input type="hidden" name="action" value="task" />
-        <input type="text" name="body" required maxlength="500" placeholder="Follow-up task…" style="flex:1;min-width:200px" />
-        <input type="date" name="due" aria-label="Due date" />
-        <button class="btn small secondary" type="submit">Add task</button>
-      </form>
-
-      {timeline.length === 0 ? <p class="small">No activity yet.</p> : (
-        <ul style="list-style:none;padding:0;margin:0">
-          {timeline.map((it) => (
-            <li style="padding:8px 0;border-bottom:1px solid #eee">
-              <div style="display:flex;justify-content:space-between;gap:10px">
-                <strong style={it.kind === 'task' && !it.done && it.due_at && it.due_at < t ? 'color:#b00' : ''}>{it.title}{it.kind === 'task' && it.due_at ? ` · due ${when(it.due_at)}` : ''}</strong>
-                <span class="small" style="white-space:nowrap;color:#666">{when(it.ts)}</span>
-              </div>
-              {it.detail && <div class="small" style="margin-top:2px">{it.detail}</div>}
-              {it.kind === 'task' && !it.done && (
-                <form action="/api/admin/crm" method="post" style="display:inline">
-                  <input type="hidden" name="action" value="complete_task" /><input type="hidden" name="activity_id" value={it.activityId} /><input type="hidden" name="back" value={`/admin/crm/${id}`} />
-                  <button class="linkbtn small" type="submit">Mark done</button>
-                </form>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-
-    <aside>
       <div class="card">
-        <h3 style="margin:0 0 8px">Stage</h3>
-        <form action="/api/admin/crm" method="post">
-          <input type="hidden" name="listing_id" value={id} />
-          <input type="hidden" name="action" value="stage" />
-          <select name="stage" style="width:100%">
-            {STAGES.map((st) => <option value={st} selected={stage === st}>{STAGE_LABEL[st]}</option>)}
-            <option value="" selected={!cr?.stage}>Automatic ({STAGE_LABEL[derived as never]})</option>
-          </select>
-          <button class="btn small" type="submit" style="margin-top:8px;width:100%">Update stage</button>
-        </form>
-        {cr?.stage && <p class="small" style="margin:6px 0 0">Manually set. "Automatic" follows claim/billing status.</p>}
-      </div>
-
-      <div class="card" style="margin-top:14px">
-        <h3 style="margin:0 0 8px">Contacts</h3>
-        {contacts.length === 0 ? <p class="small" style="margin:0">No email on file.</p> : (
+        <div class="card-h"><h3>Activity</h3></div>
+        <div class="card-b">
+          <form action="/api/admin/crm" method="post">
+            <input type="hidden" name="listing_id" value={id} />
+            <input type="hidden" name="action" value="note" />
+            <textarea name="body" rows="2" required maxlength="2000" placeholder="Add a note…"></textarea>
+            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+              <button class="btn small" type="submit">Save note</button>
+              <button class="btn small secondary" type="submit" formaction="/api/admin/crm" name="action" value="call">Log as call</button>
+            </div>
+          </form>
+          <form action="/api/admin/crm" method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px">
+            <input type="hidden" name="listing_id" value={id} />
+            <input type="hidden" name="action" value="task" />
+            <input type="text" name="body" required maxlength="500" placeholder="Follow-up task…" style="flex:1;min-width:200px" />
+            <input type="date" name="due" aria-label="Due date" style="width:auto" />
+            <button class="btn small secondary" type="submit">Add task</button>
+          </form>
+        </div>
+        {timeline.length === 0 ? (
+          <div class="empty" style="padding:26px 20px"><b>No activity yet</b>Notes, calls and tasks will show here.</div>
+        ) : (
           <ul style="list-style:none;padding:0;margin:0">
-            {contacts.map((c) => <li style="margin-bottom:6px"><a href={`mailto:${c.email}`}>{c.email}</a><br/><span class="small">{c.role}</span></li>)}
+            {timeline.map((it) => (
+              <li style="padding:12px 18px;border-top:1px solid var(--a-border)">
+                <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">
+                  <strong style={it.kind === 'task' && !it.done && it.due_at && it.due_at < t ? 'color:var(--a-bad)' : 'color:var(--a-ink)'}>{it.title}{it.kind === 'task' && it.due_at ? ` · due ${when(it.due_at)}` : ''}</strong>
+                  <span class="sub2" style="white-space:nowrap;margin:0">{when(it.ts)}</span>
+                </div>
+                {it.detail && <div class="sub2" style="margin-top:3px">{it.detail}</div>}
+                {it.kind === 'task' && !it.done && (
+                  <form action="/api/admin/crm" method="post" style="display:inline">
+                    <input type="hidden" name="action" value="complete_task" /><input type="hidden" name="activity_id" value={it.activityId} /><input type="hidden" name="back" value={`/admin/crm/${id}`} />
+                    <button class="linkbtn small" type="submit" style="margin-top:4px">Mark done</button>
+                  </form>
+                )}
+              </li>
+            ))}
           </ul>
         )}
-        <p class="small" style="margin:10px 0 0">Phone: {l.phone ? formatPhone(l.phone) : '—'}<br/>Website: {l.website ? <a href={l.website} rel="nofollow noopener" target="_blank">link</a> : '—'}</p>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <div class="card-h"><h3>Stage</h3></div>
+        <div class="card-b">
+          <form action="/api/admin/crm" method="post">
+            <input type="hidden" name="listing_id" value={id} />
+            <input type="hidden" name="action" value="stage" />
+            <select name="stage">
+              {STAGES.map((st) => <option value={st} selected={stage === st}>{STAGE_LABEL[st]}</option>)}
+              <option value="" selected={!cr?.stage}>Automatic ({STAGE_LABEL[derived as never]})</option>
+            </select>
+            <button class="btn small" type="submit" style="margin-top:10px;width:100%">Update stage</button>
+          </form>
+          {cr?.stage && <p class="fh" style="margin-top:8px">Manually set. "Automatic" follows claim/billing status.</p>}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h3>Contacts</h3></div>
+        <div class="card-b">
+          {contacts.length === 0 ? <p class="sub" style="margin:0">No email on file.</p> : (
+            <ul style="list-style:none;padding:0;margin:0">
+              {contacts.map((c) => <li style="margin-bottom:8px"><a href={`mailto:${c.email}`}>{c.email}</a><div class="sub2">{c.role}</div></li>)}
+            </ul>
+          )}
+          <p class="sub2" style="margin-top:10px">Phone: {l.phone ? formatPhone(l.phone) : '—'}<br/>Website: {l.website ? <a href={l.website} rel="nofollow noopener" target="_blank">link</a> : '—'}</p>
+        </div>
       </div>
 
       {socials.length > 0 && (
-        <div class="card" style="margin-top:14px">
-          <h3 style="margin:0 0 8px">Profiles &amp; listings</h3>
-          <ul style="list-style:none;padding:0;margin:0">
-            {socials.map((sc) => <li style="margin-bottom:4px"><a href={sc.url} rel="nofollow noopener" target="_blank">{PLATFORM_LABEL[sc.platform] ?? sc.platform}</a></li>)}
-          </ul>
-          <p class="small" style="margin:8px 0 0;color:#666">Where this business appears online. We link out only — these directories aren't scraped.</p>
+        <div class="card">
+          <div class="card-h"><h3>Profiles &amp; listings</h3></div>
+          <div class="card-b">
+            <ul style="list-style:none;padding:0;margin:0">
+              {socials.map((sc) => <li style="margin-bottom:5px"><a href={sc.url} rel="nofollow noopener" target="_blank">{PLATFORM_LABEL[sc.platform] ?? sc.platform}</a></li>)}
+            </ul>
+            <p class="fh" style="margin-top:10px">Where this business appears online. We link out only — these directories aren't scraped.</p>
+          </div>
         </div>
       )}
 
-      <div class="card" style="margin-top:14px">
-        <h3 style="margin:0 0 8px">People</h3>
-        {people.length === 0 ? <p class="small" style="margin:0">No names found. Run enrichment, or add a Hunter key for named contacts.</p> : (
-          <ul style="list-style:none;padding:0;margin:0">
-            {people.map((p) => (
-              <li style="margin-bottom:6px">
-                <span style={p.is_primary ? 'font-weight:600;color:#0f6d6a' : ''}>{p.name}</span>{p.role ? <span class="small"> · {p.role}</span> : null}
-                <br/><span class="small" style="color:#666">{p.source} · conf {p.confidence}{p.email ? ' · ' + p.email : ''}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {records && l.name && (
-          <form action="/api/admin/enrich" method="post" style="margin-top:10px"><input type="hidden" name="action" value="records_one" /><input type="hidden" name="listing_id" value={id} /><input type="hidden" name="back" value={`/admin/crm/${id}`} /><button class="btn small secondary" type="submit">Look up owner in state records</button></form>
-        )}
+      <div class="card">
+        <div class="card-h"><h3>People</h3></div>
+        <div class="card-b">
+          {people.length === 0 ? <p class="sub" style="margin:0">No names found. Run enrichment, or add a Hunter key for named contacts.</p> : (
+            <ul style="list-style:none;padding:0;margin:0">
+              {people.map((p) => (
+                <li style="margin-bottom:8px">
+                  <span style={p.is_primary ? 'font-weight:600;color:var(--a-brand-ink)' : 'color:var(--a-ink)'}>{p.name}</span>{p.role ? <span class="mut"> · {p.role}</span> : null}
+                  <div class="sub2">{p.source} · conf {p.confidence}{p.email ? ' · ' + p.email : ''}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {records && l.name && (
+            <form action="/api/admin/enrich" method="post" style="margin-top:10px"><input type="hidden" name="action" value="records_one" /><input type="hidden" name="listing_id" value={id} /><input type="hidden" name="back" value={`/admin/crm/${id}`} /><button class="btn small secondary" type="submit">Look up owner in state records</button></form>
+          )}
+        </div>
       </div>
 
-      <div class="card" style="margin-top:14px">
-        <h3 style="margin:0 0 8px">Found emails</h3>
-        {candidates.length === 0 ? <p class="small" style="margin:0">None yet. Run enrichment from <a href="/admin/crm/enrichment">the enrichment page</a>{l.website ? ', or find via provider below' : ''}.</p> : (
-          <ul style="list-style:none;padding:0;margin:0">
-            {candidates.map((c) => (
-              <li style="margin-bottom:8px">
-                <span style={c.status === 'primary' ? 'font-weight:600;color:#0f6d6a' : ''}>{c.email}</span>
-                <br/><span class="small">{c.source} · conf {c.confidence} · MX {c.mx_ok == null ? '?' : c.mx_ok ? '✓' : '✗'} · {c.status}</span>
-                <div style="margin-top:2px">
-                  {c.status !== 'primary' && <form action="/api/admin/enrich" method="post" style="display:inline"><input type="hidden" name="action" value="set_primary" /><input type="hidden" name="candidate_id" value={c.id} /><input type="hidden" name="back" value={`/admin/crm/${id}`} /><button class="linkbtn small" type="submit">Use</button></form>}
-                  <form action="/api/admin/enrich" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="action" value="reject" /><input type="hidden" name="candidate_id" value={c.id} /><input type="hidden" name="back" value={`/admin/crm/${id}`} /><button class="linkbtn small" type="submit">Reject</button></form>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        {hunter && l.website && (
-          <form action="/api/admin/enrich" method="post" style="margin-top:8px"><input type="hidden" name="action" value="hunter_domain" /><input type="hidden" name="listing_id" value={id} /><input type="hidden" name="back" value={`/admin/crm/${id}`} /><button class="btn small secondary" type="submit">Find via provider</button></form>
-        )}
+      <div class="card">
+        <div class="card-h"><h3>Found emails</h3></div>
+        <div class="card-b">
+          {candidates.length === 0 ? <p class="sub" style="margin:0">None yet. Run enrichment from <a href="/admin/crm/enrichment">the enrichment page</a>{l.website ? ', or find via provider below' : ''}.</p> : (
+            <ul style="list-style:none;padding:0;margin:0">
+              {candidates.map((c) => (
+                <li style="margin-bottom:10px">
+                  <span style={c.status === 'primary' ? 'font-weight:600;color:var(--a-brand-ink)' : 'color:var(--a-ink)'}>{c.email}</span>
+                  <div class="sub2">{c.source} · conf {c.confidence} · MX {c.mx_ok == null ? '?' : c.mx_ok ? '✓' : '✗'} · {c.status}</div>
+                  <div style="margin-top:3px">
+                    {c.status !== 'primary' && <form action="/api/admin/enrich" method="post" style="display:inline"><input type="hidden" name="action" value="set_primary" /><input type="hidden" name="candidate_id" value={c.id} /><input type="hidden" name="back" value={`/admin/crm/${id}`} /><button class="linkbtn small" type="submit">Use</button></form>}
+                    <form action="/api/admin/enrich" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="action" value="reject" /><input type="hidden" name="candidate_id" value={c.id} /><input type="hidden" name="back" value={`/admin/crm/${id}`} /><button class="linkbtn small" type="submit">Reject</button></form>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {hunter && l.website && (
+            <form action="/api/admin/enrich" method="post" style="margin-top:8px"><input type="hidden" name="action" value="hunter_domain" /><input type="hidden" name="listing_id" value={id} /><input type="hidden" name="back" value={`/admin/crm/${id}`} /><button class="btn small secondary" type="submit">Find via provider</button></form>
+          )}
+        </div>
       </div>
-    </aside>
+    </div>
   </div>
 </Admin>

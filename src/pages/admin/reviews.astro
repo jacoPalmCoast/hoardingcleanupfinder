@@ -4,23 +4,38 @@ import { reviewsForModeration } from '../../lib/db';
 import { tsToDate } from '../../lib/util';
 const rows = await reviewsForModeration();
 const stars = (n: number) => '★★★★★☆☆☆☆☆'.slice(5 - n, 10 - n);
+const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '—';
 ---
 <Admin title="Reviews to moderate">
-  {rows.length === 0 ? <p>Nothing pending.</p> : (
-    <div class="table-wrap"><table><thead><tr><th>When</th><th>Listing</th><th>Rating</th><th>Review</th><th>From</th><th></th></tr></thead><tbody>
-      {rows.map((r) => (
-        <tr>
-          <td>{tsToDate(r.created_at)?.toLocaleDateString('en-US') ?? '—'}</td>
-          <td><a href={`/company/${r.slug}`}>{r.name}</a></td>
-          <td style="color:#0f6d6a;letter-spacing:1px;white-space:nowrap">{stars(r.rating)}</td>
-          <td style="max-width:360px;white-space:pre-line">{r.body}</td>
-          <td class="small">{r.author}<br/>{r.email}</td>
-          <td class="actions">
-            <form action="/api/admin/review" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="approve" /><button class="btn small">Approve</button></form>
-            <form action="/api/admin/review" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="reject" /><button class="btn small danger">Reject</button></form>
-          </td>
-        </tr>
-      ))}
-    </tbody></table></div>
+  <p slot="sub" class="sub">{rows.length.toLocaleString('en-US')} review{rows.length === 1 ? '' : 's'} awaiting approval</p>
+
+  {rows.length === 0 ? (
+    <div class="card"><div class="empty">
+      <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17.3 6.2 20.5l1.1-6.5L2.6 9.4l6.5-.9L12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5Z"/></svg></div>
+      <b>Nothing pending</b>
+      New company reviews wait here until you approve or reject them.
+    </div></div>
+  ) : (
+    <div class="card">
+      <div class="card-h"><h3>Pending reviews</h3><span class="hint">{rows.length}</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>Listing</th><th>Rating</th><th>Review</th><th>From</th><th></th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr>
+              <td class="mut" style="white-space:nowrap">{when(r.created_at)}</td>
+              <td><a class="co" href={`/company/${r.slug}`}>{r.name}</a></td>
+              <td style="color:var(--a-brand);letter-spacing:1px;white-space:nowrap">{stars(r.rating)}</td>
+              <td style="max-width:360px;white-space:pre-line">{r.body}</td>
+              <td class="mut">{r.author}<br/>{r.email}</td>
+              <td class="actions">
+                <form action="/api/admin/review" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="approve" /><button class="btn small">Approve</button></form>
+                <form action="/api/admin/review" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="reject" /><button class="btn small danger">Reject</button></form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    </div>
   )}
 </Admin>

@@ -1,13 +1,45 @@
 ---
-import Base from '../../layouts/Base.astro';
+import '../../styles/global.css';
+import '../../styles/admin.css';
 const msg = Astro.url.searchParams.get('msg');
 ---
-<Base title="Admin sign in" description="Admin" noindex>
-  <h1>Admin</h1>
-  {msg === 'bad' && <div class="notice error" role="alert">Wrong password.</div>}
-  <form action="/api/admin/login" method="post" style="max-width:360px">
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" required autocomplete="current-password" />
-    <button class="btn" type="submit" style="margin-top:12px">Sign in</button>
-  </form>
-</Base>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin sign in | Hoarding Cleanup Finder</title>
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#0f6d6a" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="adm-body">
+    <div class="adm-app" style="display:grid;place-items:center;min-height:100vh;padding:24px">
+      <div class="adm" style="width:100%;max-width:390px">
+        <div style="display:flex;align-items:center;gap:11px;justify-content:center;margin-bottom:20px">
+          <span class="mk" style="width:34px;height:34px;border-radius:9px;background:var(--a-brand);color:#fff;display:grid;place-items:center;flex:0 0 auto">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"/></svg>
+          </span>
+          <div><div style="font-weight:600;font-size:15px;color:var(--a-ink);line-height:1.1">Hoarding Cleanup Finder</div><div style="color:var(--a-faint);font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase">Admin</div></div>
+        </div>
+        <div class="card">
+          <div class="card-b">
+            <h1 style="font-size:19px;margin:0 0 4px;color:var(--a-ink)">Sign in</h1>
+            <p class="sub" style="margin:0 0 18px">Enter your password to reach the admin.</p>
+            {msg === 'bad' && <div class="notice error" role="alert" style="margin-bottom:16px">Wrong password.</div>}
+            <form action="/api/admin/login" method="post">
+              <div class="field">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" required autocomplete="current-password" />
+              </div>
+              <button class="btn" type="submit" style="width:100%">Sign in</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

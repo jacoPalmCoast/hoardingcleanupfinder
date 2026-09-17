@@ -154,6 +154,9 @@ body.adm-body{margin:0;background:var(--a-canvas);color:var(--a-ink);
 .adm .avatar{width:30px;height:30px;border-radius:8px;background:var(--a-tint);color:var(--a-brand-ink);display:grid;place-items:center;font-weight:600;font-size:12px;flex:0 0 auto}
 .adm .cell-co{display:flex;align-items:center;gap:11px}
 .adm .cell-co .mut{color:var(--a-muted);font-size:12px}
+.adm .mut{color:var(--a-muted)} .adm td.mut{color:var(--a-muted)}
+.adm .co{font-weight:600;color:var(--a-ink)}
+.adm td .sub2{color:var(--a-muted);font-size:12.5px;margin-top:2px}
 
 /* ---------------- legacy stat tiles (non-priority pages) ---------------- */
 .adm .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin:0 0 20px}

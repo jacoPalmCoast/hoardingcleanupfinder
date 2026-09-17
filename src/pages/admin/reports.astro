@@ -2,20 +2,37 @@
 import Admin from '../../layouts/Admin.astro';
 import { env } from '../../lib/env';
 const rows = (await env.DB.prepare(`SELECT r.*, l.name, l.slug FROM reports r JOIN listings l ON l.id = r.listing_id WHERE r.status = 'open' ORDER BY r.created_at DESC`).all<any>()).results;
+const KIND_PILL: Record<string, string> = { removal: 'bad', closed: 'bad', wrong: 'warn', duplicate: 'warn', spam: 'bad', other: 'muted' };
 ---
 <Admin title="Open reports">
-  {rows.length === 0 ? <p>None.</p> : (
-    <div class="table-wrap"><table><thead><tr><th>Listing</th><th>Kind</th><th>From</th><th>Message</th><th></th></tr></thead><tbody>
-      {rows.map((r: any) => (
-        <tr>
-          <td><a href={`/company/${r.slug}`}>{r.name}</a><br/><a href={`/admin/listings?id=${r.listing_id}`}>edit</a></td>
-          <td>{r.kind}</td><td>{r.email}</td><td>{r.message}</td>
-          <td class="actions">
-            <form action="/api/admin/report" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="close" /><button class="btn small">Close</button></form>
-            {r.kind === 'removal' || r.kind === 'closed' ? <form action="/api/admin/report" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="remove-listing" /><button class="btn small danger">Remove listing</button></form> : null}
-          </td>
-        </tr>
-      ))}
-    </tbody></table></div>
+  <p slot="sub" class="sub">{rows.length.toLocaleString('en-US')} flagged listing{rows.length === 1 ? '' : 's'} from visitors and owners</p>
+
+  {rows.length === 0 ? (
+    <div class="card"><div class="empty">
+      <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15V3M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1"/></svg></div>
+      <b>No open reports</b>
+      Flagged content and takedown requests will appear here.
+    </div></div>
+  ) : (
+    <div class="card">
+      <div class="card-h"><h3>Flagged content</h3><span class="hint">{rows.length}</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Listing</th><th>Kind</th><th>From</th><th>Message</th><th></th></tr></thead>
+        <tbody>
+          {rows.map((r: any) => (
+            <tr>
+              <td><a class="co" href={`/company/${r.slug}`}>{r.name}</a><div class="sub2"><a class="linkish" href={`/admin/listings?id=${r.listing_id}`}>Edit listing</a></div></td>
+              <td><span class={`pill ${KIND_PILL[r.kind] ?? 'muted'}`}>{r.kind}</span></td>
+              <td class="mut">{r.email}</td>
+              <td>{r.message}</td>
+              <td class="actions">
+                <form action="/api/admin/report" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="close" /><button class="btn small">Close</button></form>
+                {r.kind === 'removal' || r.kind === 'closed' ? <form action="/api/admin/report" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="remove-listing" /><button class="btn small danger">Remove listing</button></form> : null}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    </div>
   )}
 </Admin>

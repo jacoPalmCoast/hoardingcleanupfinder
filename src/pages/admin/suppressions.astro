@@ -3,22 +3,38 @@ import Admin from '../../layouts/Admin.astro';
 import { listSuppressions } from '../../lib/db';
 import { tsToDate } from '../../lib/util';
 const rows = await listSuppressions();
+const REASON_PILL: Record<string, string> = { bounce: 'bad', bounced: 'bad', complaint: 'bad', complained: 'bad', unsubscribe: 'muted', unsubscribed: 'muted', manual: 'warn' };
 ---
 <Admin title="Suppressed addresses">
-  <p class="small">These addresses never receive marketing mail (transactional mail like sign-in codes still goes through). Bounces and complaints are added automatically by the Resend webhook; unsubscribes add themselves. Remove one only if you're sure it was a mistake.</p>
-  {rows.length === 0 ? <p>No suppressed addresses.</p> : (
-    <div class="table-wrap"><table><thead><tr><th>Address</th><th>Reason</th><th>Source</th><th>Since</th><th></th></tr></thead><tbody>
-      {rows.map((r) => (
-        <tr>
-          <td>{r.email}</td>
-          <td>{r.reason}</td>
-          <td>{r.source ?? '—'}</td>
-          <td style="white-space:nowrap">{tsToDate(r.created_at)?.toLocaleDateString('en-US') ?? '—'}</td>
-          <td class="actions">
-            <form action="/api/admin/suppression" method="post" style="display:inline"><input type="hidden" name="email" value={r.email} /><input type="hidden" name="action" value="remove" /><button class="btn small secondary">Remove</button></form>
-          </td>
-        </tr>
-      ))}
-    </tbody></table></div>
+  <p slot="sub" class="sub">Addresses that never receive marketing mail — transactional mail (sign-in codes) still goes through</p>
+
+  <div class="notice">Bounces and complaints are added automatically by the Resend webhook; unsubscribes add themselves. Remove one only if you're sure it was a mistake.</div>
+
+  {rows.length === 0 ? (
+    <div class="card"><div class="empty">
+      <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2.5"/><path d="m3 6 9 6 9-6"/></svg></div>
+      <b>No suppressed addresses</b>
+      Bounces, complaints and unsubscribes will be listed here.
+    </div></div>
+  ) : (
+    <div class="card">
+      <div class="card-h"><h3>Suppression list</h3><span class="hint">{rows.length}</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Address</th><th>Reason</th><th>Source</th><th>Since</th><th></th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr>
+              <td>{r.email}</td>
+              <td><span class={`pill ${REASON_PILL[(r.reason ?? '').toLowerCase()] ?? 'muted'}`}>{r.reason}</span></td>
+              <td class="mut">{r.source ?? '—'}</td>
+              <td class="mut" style="white-space:nowrap">{tsToDate(r.created_at)?.toLocaleDateString('en-US') ?? '—'}</td>
+              <td class="actions">
+                <form action="/api/admin/suppression" method="post" style="display:inline"><input type="hidden" name="email" value={r.email} /><input type="hidden" name="action" value="remove" /><button class="btn small secondary">Remove</button></form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    </div>
   )}
 </Admin>

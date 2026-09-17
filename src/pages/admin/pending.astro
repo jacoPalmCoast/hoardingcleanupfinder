@@ -3,22 +3,37 @@ import Admin from '../../layouts/Admin.astro';
 import { env } from '../../lib/env';
 import type { Listing } from '../../lib/db';
 const rows = (await env.DB.prepare(`SELECT * FROM listings WHERE status = 'pending' ORDER BY created_at DESC LIMIT 100`).all<Listing>()).results;
+const initials = (name: string) => name.replace(/[^a-zA-Z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '–';
 ---
 <Admin title="Pending listings">
-  {rows.length === 0 ? <p>Nothing pending.</p> : (
-    <div class="table-wrap"><table><thead><tr><th>Company</th><th>Contact</th><th>Services</th><th>Description</th><th></th></tr></thead><tbody>
-      {rows.map((r) => (
-        <tr>
-          <td><strong>{r.name}</strong><br/>{r.city}, {r.state} {r.zip}</td>
-          <td>{r.phone}<br/>{r.email}<br/>{r.website && <a href={r.website} rel="nofollow noopener" target="_blank">site</a>}</td>
-          <td>{r.services}</td>
-          <td>{r.description}</td>
-          <td class="actions">
-            <form action="/api/admin/listing" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="approve" /><button class="btn small">Approve</button></form>
-            <form action="/api/admin/listing" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="remove" /><button class="btn small danger">Reject</button></form>
-          </td>
-        </tr>
-      ))}
-    </tbody></table></div>
+  <p slot="sub" class="sub">{rows.length.toLocaleString('en-US')} submission{rows.length === 1 ? '' : 's'} waiting to be approved or rejected</p>
+
+  {rows.length === 0 ? (
+    <div class="card"><div class="empty">
+      <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1ZM4 22v-7"/></svg></div>
+      <b>Nothing pending</b>
+      New company submissions show up here for review before they go live.
+    </div></div>
+  ) : (
+    <div class="card">
+      <div class="card-h"><h3>New submissions</h3><span class="hint">{rows.length}</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Company</th><th>Contact</th><th>Services</th><th>Description</th><th></th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr>
+              <td><div class="cell-co"><span class="avatar">{initials(r.name)}</span><div><span class="co">{r.name}</span><div class="sub2">{r.city}, {r.state} {r.zip}</div></div></div></td>
+              <td class="mut">{r.phone}<br/>{r.email}<br/>{r.website && <a href={r.website} rel="nofollow noopener" target="_blank">site</a>}</td>
+              <td class="mut">{r.services}</td>
+              <td class="mut">{r.description}</td>
+              <td class="actions">
+                <form action="/api/admin/listing" method="post" style="display:inline"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="approve" /><button class="btn small">Approve</button></form>
+                <form action="/api/admin/listing" method="post" style="display:inline;margin-left:6px"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="action" value="remove" /><button class="btn small danger">Reject</button></form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    </div>
   )}
 </Admin>

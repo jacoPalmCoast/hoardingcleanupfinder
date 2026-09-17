@@ -35,10 +35,11 @@ const canceled = rows.filter((r) => r.subscription_status === 'canceled' || (!is
 const money = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
 const planLabel = (r: Row) => r.plan_interval === 'year' ? 'Annual' : r.plan_interval === 'month' ? 'Monthly' : '—';
 const when = (v: unknown) => { const d = tsToDate(v); return d ? d.toLocaleDateString('en-US') : '—'; };
+const STATUS_PILL: Record<string, string> = { active: 'ok', trialing: 'info', past_due: 'warn', canceled: 'muted', incomplete: 'warn', unpaid: 'bad' };
 const stripeBase = 'https://dashboard.stripe.com';
 ---
 <Admin title="Billing">
-  <p class="small">Paying and lapsed customers for the directory's Stripe account. Featured state is controlled only by Stripe webhooks; this page reads what they wrote.</p>
+  <p slot="sub" class="sub">Paying and lapsed customers from Stripe · featured state is controlled by Stripe webhooks only</p>
 
   <div class="stats">
     <div class="stat"><b>{activeRows.length}</b><span>Active subscriptions</span></div>
@@ -49,27 +50,34 @@ const stripeBase = 'https://dashboard.stripe.com';
   </div>
 
   {rows.length === 0 ? (
-    <p>No customers yet. When a company buys a featured spot, they appear here with plan, status and renewal date.</p>
+    <div class="card"><div class="empty">
+      <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg></div>
+      <b>No customers yet</b>
+      When a company buys a featured spot, they appear here with plan, status and renewal date.
+    </div></div>
   ) : (
-    <div class="table-wrap"><table>
-      <thead><tr><th>Company</th><th>Owner</th><th>Plan</th><th>Amount</th><th>Status</th><th>Featured until</th><th>Stripe</th></tr></thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr>
-            <td><a href={`/admin/listings?id=${r.id}`}>{r.name}</a><br/><span class="small">{r.city}, {r.state}{isActive(r) ? '' : ' · not live'}</span></td>
-            <td class="small">{r.owner_email ?? '—'}</td>
-            <td>{planLabel(r)}</td>
-            <td>{r.plan_amount ? money(r.plan_amount / 100) + (r.plan_interval === 'year' ? '/yr' : '/mo') : '—'}</td>
-            <td>{r.subscription_status ?? '—'}</td>
-            <td>{when(r.featured_until)}</td>
-            <td class="small">
-              {r.stripe_customer_id ? <a href={`${stripeBase}/customers/${r.stripe_customer_id}`} target="_blank" rel="noopener">customer ↗</a> : '—'}
-              {r.stripe_subscription_id && <> · <a href={`${stripeBase}/subscriptions/${r.stripe_subscription_id}`} target="_blank" rel="noopener">sub ↗</a></>}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table></div>
+    <div class="card">
+      <div class="card-h"><h3>Customers</h3><span class="hint">{rows.length}</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Company</th><th>Owner</th><th>Plan</th><th>Amount</th><th>Status</th><th>Featured until</th><th>Stripe</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr>
+              <td><a class="co" href={`/admin/listings?id=${r.id}`}>{r.name}</a><div class="sub2">{r.city}, {r.state}{isActive(r) ? '' : ' · not live'}</div></td>
+              <td class="mut">{r.owner_email ?? '—'}</td>
+              <td class="mut">{planLabel(r)}</td>
+              <td>{r.plan_amount ? money(r.plan_amount / 100) + (r.plan_interval === 'year' ? '/yr' : '/mo') : '—'}</td>
+              <td>{r.subscription_status ? <span class={`pill ${STATUS_PILL[r.subscription_status] ?? 'muted'}`}>{r.subscription_status.replace('_', ' ')}</span> : <span class="mut">—</span>}</td>
+              <td class="mut">{when(r.featured_until)}</td>
+              <td class="mut">
+                {r.stripe_customer_id ? <a href={`${stripeBase}/customers/${r.stripe_customer_id}`} target="_blank" rel="noopener">customer ↗</a> : '—'}
+                {r.stripe_subscription_id && <> · <a href={`${stripeBase}/subscriptions/${r.stripe_subscription_id}`} target="_blank" rel="noopener">sub ↗</a></>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    </div>
   )}
-  <p class="hint">MRR normalises annual plans to a monthly figure (price ÷ 12). Stripe links open the account's dashboard; make sure you're in the matching mode (test vs live). Plan and amount are captured from Stripe on each subscription event.</p>
+  <p class="sub" style="margin-top:14px">MRR normalises annual plans to a monthly figure (price ÷ 12). Stripe links open the account's dashboard — make sure you're in the matching mode (test vs live). Plan and amount are captured from Stripe on each subscription event.</p>
 </Admin>
