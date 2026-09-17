@@ -34,6 +34,8 @@ const ICONS: Record<string, string> = {
   analytics: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 15l3-3 3 3 5-6"/></svg>',
   email: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2.5"/><path d="m3 6 9 6 9-6"/></svg>',
   automation: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>',
+  pricing: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2 2 0 0 1 0 2.8ZM7 7h.01"/></svg>',
+  specials: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7ZM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z"/></svg>',
   setup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>',
   signout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>',
@@ -55,7 +57,11 @@ const groups: { title?: string; items: Item[] }[] = [
     { href: '/admin/reviews', label: 'Reviews', icon: 'reviews', count: c.pending_reviews, hot: (c.pending_reviews ?? 0) > 0 },
     { href: '/admin/reports', label: 'Reports', icon: 'reports', count: c.open_reports, hot: (c.open_reports ?? 0) > 0 },
   ]},
-  { title: 'Revenue', items: [{ href: '/admin/billing', label: 'Billing', icon: 'billing' }] },
+  { title: 'Revenue', items: [
+    { href: '/admin/billing', label: 'Billing', icon: 'billing' },
+    { href: '/admin/pricing', label: 'Pricing', icon: 'pricing' },
+    { href: '/admin/specials', label: 'Specials', icon: 'specials' },
+  ] },
   { title: 'Insights', items: [
     { href: '/admin/analytics', label: 'Analytics', icon: 'analytics' },
     { href: '/admin/emails', label: 'Email', icon: 'email' },

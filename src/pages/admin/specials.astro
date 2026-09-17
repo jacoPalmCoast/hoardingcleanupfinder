@@ -1,0 +1,69 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { getSettings, activeSpecial } from '../../lib/settings';
+
+const s = await getSettings(['special_enabled', 'special_headline', 'special_subtext', 'special_promo_id', 'special_starts', 'special_ends']);
+const live = await activeSpecial(); // null unless enabled AND inside its date window
+const on = s.special_enabled === 'on';
+const headline = s.special_headline || '';
+const saved = Astro.url.searchParams.get('saved');
+const statusPill = live ? { cls: 'ok', label: 'Live now' } : on && headline ? { cls: 'warn', label: 'Scheduled / outside window' } : { cls: 'muted', label: 'Off' };
+---
+<Admin title="Specials">
+  <p slot="sub" class="sub">Run a promo banner on the upgrade page · optionally auto-apply a Stripe coupon at checkout</p>
+  <Fragment slot="actions">
+    <span class={`pill ${statusPill.cls}`}><span class="dot"></span>{statusPill.label}</span>
+    <a class="btn secondary small" href="/admin/pricing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2 2 0 0 1 0 2.8ZM7 7h.01"/></svg>Pricing</a>
+  </Fragment>
+
+  {saved && <div class="notice" role="status">Saved. The banner and any auto-applied coupon are live for new visitors.</div>}
+
+  {(headline) && (
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-h"><h3>Preview</h3><span class="hint">how it looks on /featured</span></div>
+      <div class="card-b">
+        <div style="display:flex;align-items:center;gap:12px 14px;flex-wrap:wrap;padding:14px 16px;border:1px solid var(--a-brand);background:var(--a-tint);border-radius:12px;max-width:640px">
+          <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--a-brand);color:#fff;padding:3px 9px;border-radius:999px">Limited time</span>
+          <div><strong style="color:var(--a-ink)">{headline}</strong>{s.special_subtext && <div class="sub2">{s.special_subtext}</div>}</div>
+        </div>
+        {!live && on && <p class="fh" style="margin:10px 0 0">Saved but not showing publicly — it's outside the date window below.</p>}
+      </div>
+    </div>
+  )}
+
+  <div class="two-6-4">
+    <div class="card">
+      <div class="card-h"><h3>Promo details</h3></div>
+      <div class="card-b">
+        <form action="/api/admin/pricing" method="post">
+          <input type="hidden" name="action" value="save_special" />
+          <label style="display:flex;gap:12px;align-items:flex-start;border:1px solid var(--a-border);border-radius:9px;padding:14px;font-weight:400;margin:0 0 16px;cursor:pointer">
+            <input type="checkbox" name="special_enabled" value="on" checked={on} style="margin-top:3px;width:auto" />
+            <span><strong style="display:block;font-weight:600;margin-bottom:3px">Show the promo banner</strong><span class="fh" style="margin:0">Displays on every upgrade page, within the date window below.</span></span>
+          </label>
+          <div class="field"><label for="h">Headline</label><input id="h" name="special_headline" type="text" maxlength="120" value={headline} placeholder="Founding advertiser — 50% off your first 3 months" /></div>
+          <div class="field"><label for="sub">Subtext <span class="fh" style="display:inline">(optional)</span></label><input id="sub" name="special_subtext" type="text" maxlength="200" value={s.special_subtext ?? ''} placeholder="Use code FOUND50 at checkout — ends soon." /></div>
+          <div class="two">
+            <div class="field"><label for="st">Starts <span class="fh" style="display:inline">(optional)</span></label><input id="st" name="special_starts" type="date" value={s.special_starts ?? ''} /></div>
+            <div class="field"><label for="en">Ends <span class="fh" style="display:inline">(optional)</span></label><input id="en" name="special_ends" type="date" value={s.special_ends ?? ''} /></div>
+          </div>
+          <div class="field"><label for="promo">Auto-apply Stripe promotion code <span class="fh" style="display:inline">(optional)</span></label><input id="promo" name="special_promo_id" type="text" maxlength="60" value={s.special_promo_id ?? ''} placeholder="promo_…" /><div class="fh">The Stripe <strong>promotion code ID</strong> (starts <code>promo_</code>, from Stripe → Coupons), applied automatically at checkout. Leave blank to let customers type the code themselves.</div></div>
+          <button class="btn" type="submit" style="margin-top:6px">Save special</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card" style="align-self:start">
+      <div class="card-h"><h3>How specials work</h3></div>
+      <div class="card-b">
+        <ul style="margin:0;padding-left:18px;color:var(--a-muted);font-size:13px;line-height:1.7">
+          <li>The banner is pure presentation — set the discount in Stripe.</li>
+          <li>Your checkout already accepts promo codes, so a customer can enter one even without an auto-apply set here.</li>
+          <li>To auto-apply: in Stripe create a <strong>Coupon</strong> → add a <strong>Promotion code</strong>, copy its <code>promo_…</code> ID here.</li>
+          <li>The date window controls when the banner shows; the Stripe coupon's own limits still apply to the actual discount.</li>
+        </ul>
+        <a class="btn secondary small" href="https://dashboard.stripe.com/coupons" target="_blank" rel="noopener" style="margin-top:14px">Open Stripe coupons ↗</a>
+      </div>
+    </div>
+  </div>
+</Admin>

@@ -1,0 +1,63 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { env } from '../../lib/env';
+import { featuredPricing, getSettings } from '../../lib/settings';
+import { stripeConfigured } from '../../lib/stripe';
+
+const pricing = await featuredPricing();
+const raw = await getSettings(['stripe_price_monthly', 'stripe_price_annual', 'price_monthly_usd', 'price_annual_usd']);
+const liveMode = !!env.STRIPE_SECRET_KEY?.startsWith('sk_live');
+const monthlySrc = raw.stripe_price_monthly ? 'override' : env.STRIPE_PRICE_MONTHLY ? 'env' : 'unset';
+const annualSrc = raw.stripe_price_annual ? 'override' : env.STRIPE_PRICE_ANNUAL ? 'env' : 'unset';
+const saved = Astro.url.searchParams.get('saved');
+const annualSave = Number(pricing.monthlyUsd) * 12 - Number(pricing.annualUsd);
+---
+<Admin title="Pricing">
+  <p slot="sub" class="sub">Featured plan price + which Stripe price actually bills · changes take effect immediately, no redeploy</p>
+  <Fragment slot="actions">
+    <span class={`pill ${stripeConfigured() ? (liveMode ? 'ok' : 'warn') : 'bad'}`}><span class="dot"></span>{stripeConfigured() ? (liveMode ? 'Live mode' : 'Test mode') : 'Stripe not set'}</span>
+    <a class="btn secondary small" href="/admin/specials"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7ZM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z"/></svg>Specials</a>
+  </Fragment>
+
+  {saved && <div class="notice" role="status">Saved. Live immediately for new checkouts.</div>}
+
+  <div class="two-6-4">
+    <div class="card">
+      <div class="card-h"><h3>Featured plan</h3></div>
+      <div class="card-b">
+        <form action="/api/admin/pricing" method="post">
+          <input type="hidden" name="action" value="save_pricing" />
+
+          <div class="gh" style="padding:0 0 4px">Displayed price</div>
+          <p class="fh" style="margin:0 0 12px">What families and owners see on the upgrade page. Purely cosmetic — keep it in sync with the Stripe price below.</p>
+          <div class="two">
+            <div class="field"><label for="m">Monthly ($)</label><input id="m" name="price_monthly_usd" type="number" min="0" value={pricing.monthlyUsd} /></div>
+            <div class="field"><label for="a">Annual ($)</label><input id="a" name="price_annual_usd" type="number" min="0" value={pricing.annualUsd} /></div>
+          </div>
+          <p class="fh" style="margin:0 0 18px">At these numbers, annual saves customers ${annualSave > 0 ? annualSave.toLocaleString('en-US') : 0} vs. paying monthly.</p>
+
+          <div class="gh" style="padding:0 0 4px">Stripe price (what actually bills)</div>
+          <p class="fh" style="margin:0 0 12px">The card is charged whatever these Stripe Price IDs resolve to. Stripe won't let you edit a price's amount — to change what you charge, create a new Price in Stripe and paste its ID here.</p>
+          <div class="field"><label for="sm">Monthly Stripe Price ID <span class="fh" style="display:inline">({monthlySrc === 'override' ? 'custom' : monthlySrc === 'env' ? 'from Worker var' : 'not set'})</span></label><input id="sm" name="stripe_price_monthly" type="text" placeholder="price_…" value={pricing.stripeMonthly} /></div>
+          <div class="field"><label for="sa">Annual Stripe Price ID <span class="fh" style="display:inline">({annualSrc === 'override' ? 'custom' : annualSrc === 'env' ? 'from Worker var' : 'not set'})</span></label><input id="sa" name="stripe_price_annual" type="text" placeholder="price_…" value={pricing.stripeAnnual} /></div>
+          <p class="fh" style="margin:0 0 16px">Leave a field blank to fall back to the Worker var. IDs must start with <code>price_</code>.</p>
+
+          <button class="btn" type="submit">Save pricing</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card" style="align-self:start">
+      <div class="card-h"><h3>How billing works</h3></div>
+      <div class="card-b">
+        <p class="sub" style="margin:0 0 12px">Stripe is the source of truth for money. This page only sets the displayed price and picks which Stripe price is live — it never invents an amount.</p>
+        <ul style="margin:0;padding-left:18px;color:var(--a-muted);font-size:13px;line-height:1.7">
+          <li>To change the charge: create a new Price on the product in Stripe, copy its <code>price_…</code> ID, paste it here.</li>
+          <li>Featured status is driven only by Stripe webhooks — never toggled by hand.</li>
+          <li>You're in <strong>{liveMode ? 'live' : 'test'}</strong> mode; make sure the Price IDs match that mode.</li>
+        </ul>
+        <a class="btn secondary small" href="https://dashboard.stripe.com/products" target="_blank" rel="noopener" style="margin-top:14px">Open Stripe products ↗</a>
+      </div>
+    </div>
+  </div>
+</Admin>

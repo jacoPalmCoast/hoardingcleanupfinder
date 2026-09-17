@@ -3,6 +3,7 @@ import Base from '../../layouts/Base.astro';
 import { getListingBySlug, isLive } from '../../lib/db';
 import { currentOwner, ownerOwns } from '../../lib/services';
 import { stripeConfigured } from '../../lib/stripe';
+import { featuredPricing, activeSpecial } from '../../lib/settings';
 import { parseServices } from '../../lib/util';
 import { SERVICE_BY_SLUG } from '../../data/services';
 import { env } from '../../lib/env';
@@ -16,9 +17,11 @@ const msg = Astro.url.searchParams.get('msg');
 
 const services = parseServices(l.services);
 const serviceNames = services.map((s) => SERVICE_BY_SLUG[s]?.name).filter(Boolean) as string[];
-const monthly = env.FEATURED_MONTHLY_USD;
-const annual = env.FEATURED_ANNUAL_USD;
+const pricing = await featuredPricing();
+const monthly = pricing.monthlyUsd;
+const annual = pricing.annualUsd;
 const annualSave = Number(monthly) * 12 - Number(annual);
+const special = await activeSpecial();
 const hasRating = !!(l.review_count > 0 && l.rating);
 const canBuy = owns && !featured && stripeConfigured();
 ---
@@ -27,6 +30,13 @@ const canBuy = owns && !featured && stripeConfigured();
   <span class="eyebrow">Featured listing</span>
   <h1>Put {l.name} at the top in <span class="accent">{l.city}</span>.</h1>
   <p class="lede">Families searching for {serviceNames.slice(0, 2).join(' and ').toLowerCase() || 'cleanup'} in {l.city} see featured companies first — with your full story, service area and links, before they ever pick up the phone.</p>
+
+  {special && (
+    <div class="promo-banner">
+      <span class="promo-tag">Limited time</span>
+      <div><strong>{special.headline}</strong>{special.subtext && <div class="promo-sub">{special.subtext}</div>}</div>
+    </div>
+  )}
 
   {owns && !featured && <p style="margin-top:16px"><a class="btn secondary" href={`/company/${l.slug}?preview=1`}>See your featured profile →</a></p>}
 
@@ -136,6 +146,10 @@ const canBuy = owns && !featured && stripeConfigured();
 
 <style>
   .muted { color: var(--muted); }
+  .promo-banner { display: flex; align-items: center; gap: 12px 14px; flex-wrap: wrap; margin-top: 18px; padding: 14px 16px; border: 1px solid var(--teal); background: var(--teal-soft); border-radius: var(--radius-lg); }
+  .promo-banner strong { color: var(--ink); font-size: 1.02rem; }
+  .promo-tag { display: inline-flex; align-items: center; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; background: var(--teal); color: #fff; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .promo-sub { color: var(--muted); font-size: .92rem; margin-top: 2px; }
   .fu-sec { padding-block: clamp(28px, 5vw, 46px); border-top: 1px solid var(--line); margin-top: 8px; }
   .fu-sec .eyebrow { margin-bottom: 6px; }
   .compare { display: grid; gap: 16px; grid-template-columns: 1fr; margin-top: 20px; }

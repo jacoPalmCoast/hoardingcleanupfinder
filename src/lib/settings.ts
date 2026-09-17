@@ -29,3 +29,31 @@ export async function setSetting(key: string, value: string): Promise<void> {
 // Convenience accessors with env fallback.
 export async function mailingAddress(): Promise<string> { return (await getSetting('mailing_address')) || env.MAILING_ADDRESS || ''; }
 export async function businessName(): Promise<string> { return (await getSetting('business_name')) || env.SITE_NAME || ''; }
+
+// Featured pricing. Display amounts (what /featured shows) and the Stripe Price IDs that actually
+// bill are editable here with env fallback, so Jaco can change price/plan without a redeploy. The
+// charged amount is always whatever the Stripe Price ID resolves to — Stripe is the source of truth.
+export interface FeaturedPricing { monthlyUsd: string; annualUsd: string; stripeMonthly: string; stripeAnnual: string }
+export async function featuredPricing(): Promise<FeaturedPricing> {
+  const s = await getSettings(['price_monthly_usd', 'price_annual_usd', 'stripe_price_monthly', 'stripe_price_annual']);
+  return {
+    monthlyUsd: s.price_monthly_usd || env.FEATURED_MONTHLY_USD || '49',
+    annualUsd: s.price_annual_usd || env.FEATURED_ANNUAL_USD || '399',
+    stripeMonthly: s.stripe_price_monthly || env.STRIPE_PRICE_MONTHLY || '',
+    stripeAnnual: s.stripe_price_annual || env.STRIPE_PRICE_ANNUAL || '',
+  };
+}
+
+// A running special/promo. Presentation (banner) lives here; any actual discount is a Stripe
+// promotion code, so the money stays in Stripe. Returns null unless enabled AND inside its window.
+export interface Special { headline: string; subtext: string; promoId: string; startsOn: string; endsOn: string }
+export async function activeSpecial(): Promise<Special | null> {
+  const s = await getSettings(['special_enabled', 'special_headline', 'special_subtext', 'special_promo_id', 'special_starts', 'special_ends']);
+  if (s.special_enabled !== 'on') return null;
+  const headline = (s.special_headline || '').trim();
+  if (!headline) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  if (s.special_starts && today < s.special_starts) return null;
+  if (s.special_ends && today > s.special_ends) return null;
+  return { headline, subtext: (s.special_subtext || '').trim(), promoId: (s.special_promo_id || '').trim(), startsOn: s.special_starts || '', endsOn: s.special_ends || '' };
+}
