@@ -1,0 +1,52 @@
+---
+// Unique, factual local-context prose for a city or service-in-city page, templated from
+// that page's real numbers (listing/verified/24-hour counts, state licensing note, services
+// present). No two pages read the same, which keeps it clear of scaled-content rules and
+// gives answer engines a citable, localized passage. Used only when a city has no bespoke body.
+import { SERVICE_BY_SLUG } from '../data/services';
+interface Props {
+  city: string; state: string; stateName: string;
+  n: number; verified: number; hours24: number; stateNote: string;
+  services?: string[];          // service slugs present in this city
+  service?: string;             // when on a single-service page
+}
+const { city, state, stateName, n, verified, hours24, stateNote, services = [], service } = Astro.props;
+const place = `${city}, ${state}`;
+const svc = service ? SERVICE_BY_SLUG[service] : null;
+const svcNames = services.map((s) => SERVICE_BY_SLUG[s]?.name).filter(Boolean) as string[];
+const list = (a: string[]) => (a.length <= 1 ? a[0] ?? '' : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]);
+const heading = svc ? `${svc.name} in ${place}` : `Hoarding and biohazard cleanup in ${place}`;
+---
+<section class="lc prose">
+  <h2>{heading}</h2>
+  {svc ? (
+    <p>
+      {n} {svc.name.toLowerCase()} {n === 1 ? 'company serves' : 'companies serve'} {city} and the surrounding
+      area on this page{verified ? `, ${verified} of them verified by us` : ''}.
+      {hours24 ? ` ${hours24} list 24-hour response, which matters most for biohazard and unattended-death calls.` : ''}
+      {svc.description}
+    </p>
+  ) : (
+    <p>
+      {n} cleanup {n === 1 ? 'company serves' : 'companies serve'} {city}{verified ? `, and ${verified} ${verified === 1 ? 'is' : 'are'} verified — a working phone, a real website, and at least three public reviews checked by us` : ''}.
+      {svcNames.length ? ` Between them they cover ${list(svcNames.map((x) => x.toLowerCase()))}.` : ''}
+      {hours24 ? ` ${hours24} advertise around-the-clock availability.` : ''}
+    </p>
+  )}
+  <p>
+    Pricing in {city} follows local labor rates and landfill fees rather than any national list price, so the ranges
+    on this page are national guides, not quotes. The reliable move is the same everywhere: get a written estimate
+    after an on-site walk-through, and get a second one on anything over a few thousand dollars.
+  </p>
+  <p>
+    {stateNote} Beyond any state rule, look for OSHA bloodborne-pathogen training and, for trauma or death scenes,
+    IICRC or ABRA credentials — and ask where the waste actually goes. You can call any company here directly, or
+    send one request and we pass it to up to three of them at no charge.
+  </p>
+</section>
+
+<style>
+  .lc { margin: 8px 0 4px; max-width: 68ch; }
+  .lc h2 { font-size: 1.15rem; }
+  .lc p { margin: 0 0 .8em; }
+</style>

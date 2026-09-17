@@ -1,17 +1,49 @@
 ---
 import Base from '../../layouts/Base.astro';
 import SearchForm from '../../components/SearchForm.astro';
-import { SERVICE_BY_SLUG } from '../../data/services';
+import { SERVICES, SERVICE_BY_SLUG } from '../../data/services';
 import Faq from '../../components/Faq.astro';
+import QuickAnswer from '../../components/QuickAnswer.astro';
+import CostTable from '../../components/CostTable.astro';
+import RelatedLinks from '../../components/RelatedLinks.astro';
 import { topCities, statesWithCounts } from '../../lib/db';
-import { intentsFor } from '../../data/intents';
+import { intentsFor, COST } from '../../data/intents';
+import { GUIDES } from '../../data/guides';
 import { faqSchema, webPageSchema, breadcrumbSchema } from '../../lib/seo';
 import { env } from '../../lib/env';
+
+// Primary guides per service, filtered to ones that actually exist.
+const GUIDE_MAP: Record<string, { href: string; label: string }[]> = {
+  'hoarding-cleanup': [
+    { href: '/guides/hoarding-cleanup-cost', label: 'What hoarding cleanup costs' },
+    { href: '/guides/how-to-choose-a-hoarding-cleanup-company', label: 'How to choose a company' },
+    { href: '/guides/hoarding-levels-1-5', label: 'Hoarding levels 1–5' },
+  ],
+  'biohazard-cleanup': [
+    { href: '/guides/biohazard-cleanup-what-it-covers', label: 'What biohazard cleanup covers' },
+    { href: '/guides/biohazard-cleanup-cost', label: 'Biohazard cleanup cost' },
+    { href: '/guides/crime-scene-cleanup-who-pays-and-who-does-it', label: 'Crime scene cleanup: who pays' },
+  ],
+  'unattended-death-cleanup': [
+    { href: '/guides/unattended-death-cleanup', label: 'Unattended death cleanup' },
+    { href: '/guides/what-happens-after-an-unattended-death', label: 'What happens after a death is found' },
+  ],
+  'estate-cleanout': [
+    { href: '/guides/estate-cleanout-guide', label: 'Estate cleanout: a step-by-step guide' },
+    { href: '/guides/estate-cleanout-cost', label: 'Estate cleanout cost' },
+    { href: '/guides/estate-cleanout-checklist-for-executors', label: 'Executor checklist' },
+  ],
+};
+
 const svc = SERVICE_BY_SLUG[Astro.params.service ?? ''];
 if (!svc) return new Response(null, { status: 404 });
 const [cities, states] = await Promise.all([topCities(40), statesWithCounts()]);
 const total = states.reduce((a, s) => a + s.n, 0);
 const faq = intentsFor('service', svc.slug, { state: 'US', stateName: 'the United States', n: total, verified: 0, hours24: 0, stateNote: 'Licensing rules vary by state; see the state page for the property.', service: svc.slug }, 10);
+const cost = COST[svc.slug as keyof typeof COST];
+const money = (n: number) => '$' + n.toLocaleString('en-US');
+const relatedGuides = (GUIDE_MAP[svc.slug] ?? []).filter((g) => GUIDES.some((x) => `/guides/${x.slug}` === g.href));
+const otherServices = SERVICES.filter((s) => s.slug !== svc.slug).map((s) => ({ href: `/services/${s.slug}`, label: s.name }));
 const url = `${env.SITE_URL}/services/${svc.slug}`;
 const description = `${svc.description} Find ${svc.name.toLowerCase()} companies by city across ${states.length} states.`;
 const jsonld = [
@@ -24,12 +56,27 @@ const jsonld = [
   <p class="crumbs"><a href="/">Home</a> › {svc.name}</p>
   <h1>{svc.name} companies</h1>
   <p class="lede">{svc.description}</p>
+
+  <QuickAnswer>
+    <p><strong>{svc.name}</strong> typically costs <strong>{money(cost.low)}–{money(cost.high)}</strong> nationally {cost.unit}. We list companies across {states.length} states and {total.toLocaleString()} verified and unverified listings. Search your city below, call directly, or send one request to reach several companies at once.</p>
+  </QuickAnswer>
+
   <SearchForm service={svc.slug} />
+
+  <section>
+    <h2>What {svc.name.toLowerCase()} costs</h2>
+    <CostTable services={[svc.slug]} caption="Typical U.S. cost range" />
+  </section>
+
   {cities.length > 0 && (
     <section>
-      <h2>By city</h2>
+      <h2>{svc.name} by city</h2>
       <ul class="list-links four">{cities.map((c) => <li><a href={`/${c.state.toLowerCase()}/${c.slug}/${svc.slug}`}>{c.name}, {c.state}</a></li>)}</ul>
     </section>
   )}
+
   <Faq items={faq} heading={`${svc.name}: questions people ask`} />
+
+  <RelatedLinks heading="Guides on this service" links={relatedGuides} />
+  <RelatedLinks heading="Other cleanup services" links={otherServices} />
 </Base>

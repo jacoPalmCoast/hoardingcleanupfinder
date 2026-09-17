@@ -8,8 +8,10 @@ import { env } from '../lib/env';
 import Faq from '../components/Faq.astro';
 import { intentsFor } from '../data/intents';
 import { faqSchema, webPageSchema } from '../lib/seo';
+import { activeOffer } from '../lib/offers';
+import { featuredPricing } from '../lib/settings';
 
-const [cities, states] = await Promise.all([topCities(24), statesWithCounts()]);
+const [cities, states, offer, pricing] = await Promise.all([topCities(24), statesWithCounts(), activeOffer(), featuredPricing()]);
 const total = states.reduce((a, s) => a + s.n, 0);
 const faq = intentsFor('service', undefined, { state: 'US', stateName: 'the United States', n: total, verified: 0, hours24: 0, stateNote: 'Licensing rules vary by state; each state page explains what applies.' }, 6);
 const jsonld = [webPageSchema(env.SITE_URL, env.SITE_NAME, 'Find hoarding cleanup, biohazard cleanup, unattended death cleanup and estate cleanout companies across the United States.', { speakable: true }), faqSchema(faq)];
@@ -68,6 +70,30 @@ const msg = Astro.url.searchParams.get('msg');
     </section>
   )}
 
+  <section class="biz" aria-labelledby="biz-h">
+    <div class="biz-inner">
+      <span class="eyebrow">For cleanup companies</span>
+      {offer ? (
+        <>
+          <span class="biz-tag">Limited time</span>
+          <h2 id="biz-h">Own a cleanup company? <span class="accent">{offer.headline}</span></h2>
+          <p class="lede">Build a detailed profile families can trust — your full story, service area, certifications, Google rating and direct links — and get to the top of your city's search results. {offer.subtext}</p>
+          {offer.rampText && <p class="biz-ramp">{offer.rampText}</p>}
+        </>
+      ) : (
+        <>
+          <h2 id="biz-h">Own a cleanup company? <span class="accent">Get found by the families who need you.</span></h2>
+          <p class="lede">Every company is listed free. Claim yours to build a detailed profile — your full story, service area, certifications, hours, Google rating and direct links — so families choose you before they ever call. Featured placement puts you at the top of your city, from ${pricing.monthlyUsd}/month.</p>
+        </>
+      )}
+      <div class="biz-cta">
+        <a class="btn" href="/add-listing">{offer ? 'Claim your profile & start free' : 'Add or claim your listing'}</a>
+        <a class="btn secondary" href="/guides/claim-your-listing">How listings &amp; featured work</a>
+      </div>
+      <p class="small biz-note">Free listing forever. No commissions, no per-lead fees. Cancel featured anytime.</p>
+    </div>
+  </section>
+
   <Faq items={faq} heading="Before you hire anyone" />
 
   <section class="prose">
@@ -76,3 +102,16 @@ const msg = Astro.url.searchParams.get('msg');
     <p>If you run a cleanup company and something here is wrong, use the "report a correction" link on your listing and we will fix it within a day. If you want a listing removed, we will do that too.</p>
   </section>
 </Base>
+
+<style>
+  .biz { margin: clamp(28px, 5vw, 48px) 0 8px; border: 1px solid var(--teal); background: var(--teal-soft); border-radius: var(--radius-lg); padding: clamp(22px, 4vw, 40px); }
+  .biz-inner { max-width: 62ch; }
+  .biz .eyebrow { margin-bottom: 8px; }
+  .biz-tag { display: inline-flex; align-items: center; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; background: var(--teal); color: #fff; padding: 3px 10px; border-radius: 999px; margin-bottom: 10px; }
+  .biz h2 { font-size: clamp(1.35rem, 1.1rem + 1.2vw, 1.9rem); letter-spacing: -.02em; margin: 0 0 .35em; }
+  .biz .lede { margin-top: .5rem; color: var(--text); }
+  .biz-ramp { display: inline-block; margin: 12px 0 0; padding: 9px 14px; background: #fff; border: 1px solid var(--teal); color: var(--teal-dark); border-radius: 999px; font-weight: 600; font-size: .95rem; }
+  .biz-cta { display: flex; flex-wrap: wrap; gap: 10px 12px; margin-top: 20px; }
+  .biz-cta .btn { width: auto; }
+  .biz-note { margin-top: 14px; color: var(--muted); }
+</style>

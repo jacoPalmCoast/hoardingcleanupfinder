@@ -5,6 +5,7 @@ import QuoteForm from '../../components/QuoteForm.astro';
 import Faq from '../../components/Faq.astro';
 import Socials from '../../components/Socials.astro';
 import Reviews from '../../components/Reviews.astro';
+import RelatedLinks from '../../components/RelatedLinks.astro';
 import { getListingBySlug, nearbyListings, isLive, approvedReviews } from '../../lib/db';
 import { currentOwner, ownerOwns } from '../../lib/services';
 import { formatPhone, parseServices, hostOf, isoDay } from '../../lib/util';
@@ -61,6 +62,11 @@ const jsonld = [
 ];
 // Paragraphs only; owners type plain text, we never render their HTML.
 const aboutParas = longAbout ? longAbout.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).slice(0, 8) : [];
+const relatedLinks = [
+  { href: `/${l.state.toLowerCase()}/${l.city_slug}`, label: `All cleanup companies in ${l.city}` },
+  ...services.filter((s) => SERVICE_BY_SLUG[s]).map((s) => ({ href: `/services/${s}`, label: SERVICE_BY_SLUG[s].name })),
+  { href: `/state/${l.state.toLowerCase()}`, label: `${stateName} directory` },
+];
 const gaps: string[] = [];
 if (l.is_claimed !== 1) {
   if (!attrs.certifications.length) gaps.push('certifications');
@@ -94,7 +100,7 @@ if (l.is_claimed !== 1) {
       <h1>{l.name}</h1>
       <p class="lede">{l.description ?? `${l.name} serves ${l.city}, ${stateName} and the surrounding area.`}</p>
       <dl class="facts">
-        <dt>Services</dt><dd>{serviceNames.join(', ') || '—'}</dd>
+        <dt>Services</dt><dd>{services.length ? services.filter((s) => SERVICE_BY_SLUG[s]).map((s, i) => <>{i > 0 ? ', ' : ''}<a href={`/services/${s}`}>{SERVICE_BY_SLUG[s].name}</a></>) : '—'}</dd>
         <dt>Phone</dt><dd>{l.phone ? <a href={`/api/go/call/${l.id}?s=company`} rel="nofollow">{formatPhone(l.phone)}</a> : '—'}</dd>
         <dt>Website</dt><dd>{l.website ? <a href={`/api/go/website/${l.id}?s=company`} rel="nofollow noopener" target="_blank">{hostOf(l.website)}<span class="sr-only"> (opens in new tab)</span></a> : '—'}</dd>
         <dt>Location</dt><dd>{l.address ? `${l.address}` : `${l.city}, ${l.state}${l.zip ? ' ' + l.zip : ''}`}</dd>
@@ -143,6 +149,8 @@ if (l.is_claimed !== 1) {
           <div class="grid">{nearby.map((n) => <ListingCard l={n} />)}</div>
         </section>
       )}
+
+      {!previewing && <RelatedLinks heading="Explore more" links={relatedLinks} />}
     </article>
     <aside><QuoteForm listingId={l.id} city={l.city} state={l.state} heading={`Request a quote from ${l.name}`} /></aside>
   </div>

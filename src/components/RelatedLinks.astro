@@ -1,0 +1,23 @@
+---
+// Contextual internal-linking block. Strengthens crawl depth and topical clustering, and
+// gives readers (and answer engines) the obvious next hops. Renders nothing if empty.
+interface Link { href: string; label: string; }
+interface Props { heading: string; links: Link[]; }
+const { heading, links } = Astro.props;
+const seen = new Set<string>();
+const items = links.filter((l) => l.href && !seen.has(l.href) && (seen.add(l.href), true));
+---
+{items.length > 0 && (
+  <nav class="rel" aria-label={heading}>
+    <h2>{heading}</h2>
+    <ul>{items.map((l) => <li><a href={l.href}>{l.label}</a></li>)}</ul>
+  </nav>
+)}
+
+<style>
+  .rel { margin-top: clamp(24px, 4vw, 36px); }
+  .rel h2 { font-size: 1.05rem; margin-bottom: 10px; }
+  .rel ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px 10px; }
+  .rel li a { display: inline-block; font-size: .9rem; padding: 7px 13px; border: 1px solid var(--grey-2); border-radius: 999px; background: var(--grey-1); color: var(--teal-dark); text-decoration: none; }
+  .rel li a:hover { border-color: var(--teal); background: var(--teal-soft); }
+</style>

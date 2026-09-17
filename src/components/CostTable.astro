@@ -1,0 +1,43 @@
+---
+// National price-range table for one or more services. Tables are a strong GEO surface:
+// they are easy for search engines to feature and for LLMs to quote exactly. Ranges are
+// national and labeled as such; the surrounding page text localizes.
+import { COST, COST_DRIVER } from '../data/intents';
+import { SERVICE_BY_SLUG } from '../data/services';
+interface Props { services?: string[]; caption?: string; place?: string; }
+const { services = Object.keys(COST), caption, place } = Astro.props;
+const rows = services.filter((s) => COST[s as keyof typeof COST] && SERVICE_BY_SLUG[s]);
+const money = (n: number) => '$' + n.toLocaleString('en-US');
+---
+<figure class="ct">
+  <table>
+    <caption>{caption ?? `Typical U.S. cost ranges${place ? ` — pricing near ${place} follows local labor and landfill fees` : ''}`}</caption>
+    <thead><tr><th scope="col">Service</th><th scope="col">Typical range</th><th scope="col">What drives the price</th></tr></thead>
+    <tbody>
+      {rows.map((s) => {
+        const c = COST[s as keyof typeof COST];
+        return (
+          <tr>
+            <th scope="row"><a href={`/services/${s}`}>{SERVICE_BY_SLUG[s].name}</a></th>
+            <td class="ct-range">{money(c.low)}–{money(c.high)}</td>
+            <td class="ct-drv">{COST_DRIVER[s]}</td>
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+  <figcaption>National averages, not quotes. Always get a written estimate after an on-site walk-through.</figcaption>
+</figure>
+
+<style>
+  .ct { margin: 20px 0; overflow-x: auto; }
+  .ct table { width: 100%; border-collapse: collapse; font-size: .94rem; min-width: 460px; }
+  .ct caption { text-align: left; font-size: .82rem; color: var(--muted); margin-bottom: 8px; }
+  .ct thead th { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); border-bottom: 1px solid var(--grey-2); }
+  .ct th, .ct td { text-align: left; padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .ct tbody th { font-weight: 600; }
+  .ct tbody th a { text-decoration: none; }
+  .ct-range { font-weight: 600; color: var(--ink); white-space: nowrap; }
+  .ct-drv { color: var(--muted); }
+  .ct figcaption { font-size: .82rem; color: var(--muted); margin-top: 8px; }
+</style>

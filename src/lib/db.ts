@@ -48,6 +48,7 @@ export interface City {
   lng: number | null;
   population: number | null;
   intro: string | null;
+  body: string | null;      // bespoke local HTML for top metros; null falls back to generated context
   listing_count?: number;
 }
 

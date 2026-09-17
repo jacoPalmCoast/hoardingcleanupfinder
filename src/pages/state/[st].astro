@@ -7,8 +7,12 @@ import { citiesForState, listingsForState } from '../../lib/db';
 import { trackImpressions, waitCtx } from '../../lib/events';
 import { STATES, isState } from '../../data/states';
 import Faq from '../../components/Faq.astro';
+import QuickAnswer from '../../components/QuickAnswer.astro';
+import CostTable from '../../components/CostTable.astro';
+import RelatedLinks from '../../components/RelatedLinks.astro';
 import { STATE_NOTES } from '../../data/stateNotes';
 import { intentsFor } from '../../data/intents';
+import { SERVICES } from '../../data/services';
 import { parseAttrs } from '../../data/attrs';
 import { faqSchema, webPageSchema, breadcrumbSchema } from '../../lib/seo';
 import { env } from '../../lib/env';
@@ -35,6 +39,9 @@ const jsonld = [
 <Base title={`Hoarding cleanup in ${name}`} description={description} jsonld={jsonld}>
   <p class="crumbs"><a href="/">Home</a> › <a href="/state">States</a> › {name}</p>
   <h1>Hoarding and biohazard cleanup companies in {name}</h1>
+  <QuickAnswer>
+    <p><strong>{listings.length}+ cleanup {listings.length === 1 ? 'company serves' : 'companies serve'} {name}</strong> across {cities.length} metro {cities.length === 1 ? 'area' : 'areas'}{verified ? `, ${verified} verified` : ''}. Hoarding cleanup runs about <strong>$1,500–$5,000</strong> for a typical home; biohazard and unattended-death work is often billed to insurance. Pick your city below, or send one quote request to reach several companies.</p>
+  </QuickAnswer>
   <SearchForm compact />
   {note && <p class="lede">{note}</p>}
   {cities.length > 0 && (
@@ -53,4 +60,11 @@ const jsonld = [
     </section>
     <aside><QuoteForm state={st} heading={`Get quotes in ${name}`} /></aside>
   </div>
+
+  <section>
+    <h2>What cleanup costs in {name}</h2>
+    <CostTable place={name} />
+  </section>
+
+  <RelatedLinks heading="Browse by service" links={SERVICES.map((s) => ({ href: `/services/${s.slug}`, label: s.name }))} />
 </Base>

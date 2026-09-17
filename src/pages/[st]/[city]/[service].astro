@@ -3,12 +3,16 @@ import Base from '../../../layouts/Base.astro';
 import ListingCard from '../../../components/ListingCard.astro';
 import QuoteForm from '../../../components/QuoteForm.astro';
 import Faq from '../../../components/Faq.astro';
-import { getCity, listingsForCity, MIN_LISTINGS_FOR_PAGE } from '../../../lib/db';
+import QuickAnswer from '../../../components/QuickAnswer.astro';
+import CostTable from '../../../components/CostTable.astro';
+import RelatedLinks from '../../../components/RelatedLinks.astro';
+import LocalContext from '../../../components/LocalContext.astro';
+import { getCity, listingsForCity, countByCityService, citiesForState, MIN_LISTINGS_FOR_PAGE } from '../../../lib/db';
 import { trackImpressions, waitCtx } from '../../../lib/events';
 import { STATES, isState } from '../../../data/states';
-import { SERVICE_BY_SLUG } from '../../../data/services';
+import { SERVICES, SERVICE_BY_SLUG } from '../../../data/services';
 import { STATE_NOTES } from '../../../data/stateNotes';
-import { intentsFor } from '../../../data/intents';
+import { intentsFor, COST } from '../../../data/intents';
 import { parseAttrs } from '../../../data/attrs';
 import { faqSchema, webPageSchema, breadcrumbSchema } from '../../../lib/seo';
 import { env } from '../../../lib/env';
@@ -23,6 +27,11 @@ if (!city) return new Response(null, { status: 404 });
 const listings = await listingsForCity(st, citySlug, svc.slug);
 if (listings.length < MIN_LISTINGS_FOR_PAGE) return new Response(null, { status: 404 });
 trackImpressions(listings.map((l) => l.id), Astro.request, 'city', waitCtx(Astro.locals));
+const [counts, stateCities] = await Promise.all([countByCityService(st, citySlug), citiesForState(st)]);
+const nearbySameSvc = stateCities.filter((c) => c.slug !== citySlug).slice(0, 8);
+const otherServicesHere = SERVICES.filter((s) => s.slug !== svc.slug && (counts[s.slug] ?? 0) >= MIN_LISTINGS_FOR_PAGE);
+const cost = COST[svc.slug as keyof typeof COST];
+const money = (n: number) => '$' + n.toLocaleString('en-US');
 const stateName = STATES[st];
 const title = `${svc.name} in ${city.name}, ${st}`;
 const url = `${env.SITE_URL}/${st.toLowerCase()}/${citySlug}/${svc.slug}`;
@@ -46,11 +55,31 @@ const jsonld = [
   <p class="crumbs"><a href="/">Home</a> › <a href={`/state/${st.toLowerCase()}`}>{stateName}</a> › <a href={`/${st.toLowerCase()}/${citySlug}`}>{city.name}</a> › {svc.name}</p>
   <h1>{title}</h1>
   <p class="lede">{svc.description} {listings.length} companies in {city.name} list this service{hours24 ? `; ${hours24} respond 24 hours a day` : ''}.</p>
+
+  <QuickAnswer>
+    <p><strong>{listings.length} {svc.name.toLowerCase()} {listings.length === 1 ? 'company serves' : 'companies serve'} {city.name}, {st}</strong>{verified ? `, ${verified} verified` : ''}{hours24 ? `; ${hours24} respond 24/7` : ''}. Expect roughly <strong>{money(cost.low)}–{money(cost.high)}</strong> nationally {cost.unit}. Call directly or send one request to reach up to three companies at once.</p>
+  </QuickAnswer>
+
   <div class="two">
     <section>
+      <h2 class="sr-head">{svc.name} companies in {city.name}</h2>
       <div class="grid">{listings.map((l) => <ListingCard l={l} showCity={false} source="city" />)}</div>
       <Faq items={faq} heading={`${svc.name} in ${city.name}: what to know`} />
     </section>
     <aside><QuoteForm city={city.name} state={st} heading={`Get ${svc.name.toLowerCase()} quotes`} /></aside>
   </div>
+
+  <LocalContext city={city.name} state={st} stateName={stateName} n={listings.length} verified={verified} hours24={hours24} stateNote={STATE_NOTES[st] ?? ''} service={svc.slug} />
+
+  <section>
+    <h2>{svc.name} cost near {city.name}</h2>
+    <CostTable services={[svc.slug]} place={`${city.name}, ${st}`} />
+  </section>
+
+  <RelatedLinks heading={`Other cleanup services in ${city.name}`} links={otherServicesHere.map((s) => ({ href: `/${st.toLowerCase()}/${citySlug}/${s.slug}`, label: `${s.name} (${counts[s.slug]})` }))} />
+  <RelatedLinks heading={`Nearby cities in ${stateName}`} links={nearbySameSvc.map((c) => ({ href: `/${st.toLowerCase()}/${c.slug}`, label: `${c.name} (${c.listing_count})` }))} />
 </Base>
+
+<style>
+  .sr-head { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+</style>

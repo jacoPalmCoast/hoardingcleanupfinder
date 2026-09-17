@@ -31,12 +31,19 @@ export interface Intent {
 const where = (c: IntentCtx) => (c.city ? `${c.city}, ${c.state}` : c.stateName);
 const near = (c: IntentCtx) => (c.city ? `in ${c.city}` : `in ${c.stateName}`);
 const plural = (n: number, w: string) => `${n} ${n === 1 ? w : w.endsWith('y') ? w.slice(0, -1) + 'ies' : w + 's'}`;
-const COST = {
+export const COST = {
   'hoarding-cleanup': { low: 1500, high: 5000, unit: 'for a typical home; severe cases run $10,000 to $25,000' },
   'biohazard-cleanup': { low: 1500, high: 6000, unit: 'for a single room; large or multi-room scenes run higher' },
   'unattended-death-cleanup': { low: 2000, high: 8000, unit: 'depending on how long the body went undiscovered and how much material must be removed' },
   'estate-cleanout': { low: 800, high: 4000, unit: 'for a full house, priced mostly by truckload' },
 } as const;
+// Short, table-friendly summary of what drives each service's price (GEO/answer surfaces).
+export const COST_DRIVER: Record<string, string> = {
+  'hoarding-cleanup': 'Volume (truckloads), biohazard, sorting time, access',
+  'biohazard-cleanup': 'Contaminated material removed, disinfection, structural tear-out',
+  'unattended-death-cleanup': 'Time undiscovered, flooring/subfloor removal, odor treatment',
+  'estate-cleanout': 'Truckloads, stairs and access, donation/resale credits',
+};
 const money = (n: number) => '$' + n.toLocaleString('en-US');
 
 export const INTENTS: Intent[] = [

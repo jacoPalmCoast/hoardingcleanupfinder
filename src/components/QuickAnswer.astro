@@ -1,0 +1,20 @@
+---
+// A short, direct answer at the top of a page — the passage search engines pull as a
+// featured snippet and LLMs quote. Marked .speakable so it maps to the page's
+// SpeakableSpecification schema. Keep the slot content to 2–4 plain sentences.
+interface Props { heading?: string; }
+const { heading = 'Quick answer' } = Astro.props;
+---
+<aside class="qa speakable" aria-label={heading}>
+  <p class="qa-h">{heading}</p>
+  <div class="qa-b"><slot /></div>
+</aside>
+
+<style>
+  .qa { border: 1px solid var(--teal); background: var(--teal-soft); border-left-width: 4px; border-radius: 0 var(--radius) var(--radius) 0; padding: 14px 18px; margin: 6px 0 20px; max-width: 70ch; }
+  .qa-h { margin: 0 0 4px; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--teal); }
+  .qa-b { color: var(--text); }
+  .qa-b :global(p) { margin: 0 0 .5em; }
+  .qa-b :global(p:last-child) { margin-bottom: 0; }
+  .qa-b :global(strong) { color: var(--ink); }
+</style>
