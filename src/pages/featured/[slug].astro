@@ -28,6 +28,8 @@ const canBuy = owns && !featured && stripeConfigured();
   <h1>Put {l.name} at the top in <span class="accent">{l.city}</span>.</h1>
   <p class="lede">Families searching for {serviceNames.slice(0, 2).join(' and ').toLowerCase() || 'cleanup'} in {l.city} see featured companies first — with your full story, service area and links, before they ever pick up the phone.</p>
 
+  {owns && !featured && <p style="margin-top:16px"><a class="btn secondary" href={`/company/${l.slug}?preview=1`}>See your featured profile →</a></p>}
+
   {msg === 'cancelled' && <div class="notice warn" style="margin-top:16px">Checkout was cancelled. Nothing was charged.</div>}
   {msg === 'unavailable' && <div class="notice error" role="alert" style="margin-top:16px">Payments are not switched on yet. Email hello@hoardingcleanupfinder.com and we will set it up by hand.</div>}
   {featured && <div class="notice" style="margin-top:16px">This listing is already featured. <a href="/account">Manage billing</a>.</div>}

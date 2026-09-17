@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { env } from '../../../lib/env';
 import { clean, isEmail, redirect, digits, safeUrl } from '../../../lib/util';
 import { currentOwner, ownerOwns } from '../../../lib/services';
-import { getListingById, isLive } from '../../../lib/db';
+import { getListingById } from '../../../lib/db';
 import { isService } from '../../../data/services';
 import { parseAttrs, attrsFromForm, faqFromForm, parseFaq } from '../../../data/attrs';
 import { audit, diff } from '../../../lib/audit';
@@ -16,8 +16,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!Number.isInteger(id) || !(await ownerOwns(owner.id, id))) return new Response('Forbidden', { status: 403 });
   const l = await getListingById(id);
   if (!l) return new Response(null, { status: 404 });
-  // Tier is decided server-side from the live subscription, never from the form. Invariant 2.
-  const tier: 'free' | 'featured' = isLive(l) ? 'featured' : 'free';
 
   const name = clean(form.get('name'), 120);
   const phone = clean(form.get('phone'), 30);
@@ -30,11 +28,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!name || pd.length !== 10 || (email && !isEmail(email)) || services.length === 0 || !description) return redirect(`/account/edit/${id}?msg=invalid`);
 
   const prevAttrs = parseAttrs(l.attrs);
-  const attrs = attrsFromForm(form, tier, prevAttrs);
-  // Featured-only content: a free owner cannot change it (the fields are disabled client-side,
-  // and ignored here), but whatever they wrote while featured is kept for when they re-subscribe.
-  const longAbout = tier === 'featured' ? clean(form.get('long_about'), 2500) || null : l.long_about;
-  const customFaq = tier === 'featured' ? JSON.stringify(faqFromForm(form)) : l.custom_faq;
+  // Featured content can be DRAFTED at any tier so owners can fill it in and preview
+  // their featured profile before paying. Storage is always allowed; public DISPLAY stays
+  // gated on the live subscription (publicAttrs strips featured-only attrs and the company
+  // page only renders long_about / custom_faq when isLive), so nothing unpaid is ever shown.
+  const attrs = attrsFromForm(form, 'featured', prevAttrs);
+  const longAbout = clean(form.get('long_about'), 2500) || null;
+  const customFaq = JSON.stringify(faqFromForm(form));
 
   const before = { name: l.name, phone: l.phone, website: l.website, email: l.email, address: l.address, services: l.services, description: l.description, attrs: prevAttrs, long_about: l.long_about, custom_faq: parseFaq(l.custom_faq) };
   const after = { name, phone, website, email: email || null, address: address || null, services: JSON.stringify(services), description, attrs, long_about: longAbout, custom_faq: parseFaq(customFaq) };

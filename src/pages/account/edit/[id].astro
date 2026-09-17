@@ -16,12 +16,13 @@ const featured = isLive(l);
 const a = parseAttrs(l.attrs);
 const faq = parseFaq(l.custom_faq);
 const msg = Astro.url.searchParams.get('msg');
-const areaLimit = featured ? FEATURED_AREA_LIMIT : FREE_AREA_LIMIT;
+const areaLimit = FEATURED_AREA_LIMIT;
 ---
 <Base title={`Edit ${l.name}`} description="Edit your listing." noindex>
   <p class="crumbs"><a href="/account">Your listings</a> › Edit</p>
   <h1>Edit {l.name}</h1>
-  <p class="small">Changes go live immediately and are logged. {featured ? 'Your listing is featured, so every section below is open.' : <>Free listings can edit the basics, certifications, languages and up to {FREE_AREA_LIMIT} extra cities. <a href={`/featured/${l.slug}`}>Featured listings</a> unlock unlimited service area, a written About section, custom questions and the buyer-facing flags.</>}</p>
+  <p class="small">Changes go live immediately and are logged. {featured ? 'Your listing is featured, so every section below is live.' : <>The basics show on your free listing now. You can also fill in the <strong>featured sections</strong> below and <a href={`/company/${l.slug}?preview=1`} target="_blank">preview</a> the full profile — they stay hidden to the public until you <a href={`/featured/${l.slug}`}>get featured</a>.</>}</p>
+  {!featured && <p style="margin:2px 0 6px"><a class="btn secondary" href={`/company/${l.slug}?preview=1`} target="_blank">Preview featured profile →</a> <span class="small">Save first to see your latest changes.</span></p>}
   {msg === 'invalid' && <div class="notice error" role="alert">Something was missing or invalid. Name, phone, at least one service and a description are required.</div>}
   <form action="/api/account/save" method="post" style="max-width:640px">
     <input type="hidden" name="id" value={l.id} />
@@ -61,11 +62,11 @@ const areaLimit = featured ? FEATURED_AREA_LIMIT : FREE_AREA_LIMIT;
     </fieldset>
     <label for="service_area">Other cities you serve <span class="small">(one per line, up to {areaLimit})</span></label>
     <textarea id="service_area" name="service_area" maxlength="2000" style="min-height:90px">{a.service_area.slice(0, areaLimit).join('\n')}</textarea>
-    <p class="hint">These appear on your page and in the structured data search engines read. {!featured && a.service_area.length > areaLimit && `You have ${a.service_area.length} cities saved from when you were featured; only the first ${areaLimit} are shown and saved while not featured. `}{!featured && `Featured listings can add up to ${FEATURED_AREA_LIMIT}.`}</p>
+    <p class="hint">These appear on your page and in the structured data search engines read. {!featured && `While not featured, the public page shows the first ${FREE_AREA_LIMIT}; any extra are saved and appear once you get featured.`}</p>
 
     <h2>Featured listing content</h2>
-    {!featured && <p class="notice">These sections are locked while your listing is not featured. Anything you wrote while featured is kept and becomes editable and visible again when you <a href={`/featured/${l.slug}`}>get featured</a>.</p>}
-    <fieldset style="border:0;padding:0;margin:14px 0 0" disabled={!featured}>
+    {!featured && <p class="notice">Fill these in now and <a href={`/company/${l.slug}?preview=1`} target="_blank">preview</a> your full profile. They're saved as a draft and stay hidden to the public until you <a href={`/featured/${l.slug}`}>get featured</a> — then they go live automatically, no re-typing.</p>}
+    <fieldset style="border:0;padding:0;margin:14px 0 0">
       <legend style="font-weight:600;font-size:.92rem">Good to know</legend>
       <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="free_estimate" checked={a.free_estimate} style="width:auto;margin-right:8px" />Free on-site estimates</label>
       <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="discreet" checked={a.discreet} style="width:auto;margin-right:8px" />Unmarked vehicles on request</label>
@@ -73,9 +74,9 @@ const areaLimit = featured ? FEATURED_AREA_LIMIT : FREE_AREA_LIMIT;
       <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="financing" checked={a.financing} style="width:auto;margin-right:8px" />Financing or payment plans available</label>
     </fieldset>
     <label for="long_about">About your company <span class="small">(up to 2,500 characters, plain text, blank line between paragraphs)</span></label>
-    <textarea id="long_about" name="long_about" maxlength="2500" style="min-height:160px" disabled={!featured}>{l.long_about ?? ''}</textarea>
+    <textarea id="long_about" name="long_about" maxlength="2500" style="min-height:160px">{l.long_about ?? ''}</textarea>
     <p class="hint">Write it for a family member in a hard week: how you work, how long you have done this, what happens on day one. No phone numbers or links here; they are already on the page.</p>
-    <fieldset style="border:0;padding:0;margin:14px 0 0" disabled={!featured}>
+    <fieldset style="border:0;padding:0;margin:14px 0 0">
       <legend style="font-weight:600;font-size:.92rem">Questions you get asked <span class="small">(up to {CUSTOM_FAQ_LIMIT}; shown on your page and to search engines)</span></legend>
       {Array.from({ length: CUSTOM_FAQ_LIMIT }).map((_, i) => (
         <div style="margin:10px 0 16px">
@@ -86,7 +87,7 @@ const areaLimit = featured ? FEATURED_AREA_LIMIT : FREE_AREA_LIMIT;
         </div>
       ))}
     </fieldset>
-    <fieldset style="border:0;padding:0;margin:18px 0 0" disabled={!featured}>
+    <fieldset style="border:0;padding:0;margin:18px 0 0">
       <legend style="font-weight:600;font-size:.92rem">Social links <span class="small">(shown as icons on your featured listing)</span></legend>
       {SOCIAL_PLATFORMS.map((p) => (
         <div style="margin:8px 0">

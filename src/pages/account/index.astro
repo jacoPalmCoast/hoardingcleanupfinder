@@ -76,7 +76,7 @@ const email = Astro.url.searchParams.get('email') ?? '';
             <div class="actions">
               <a class="btn small" href={`/account/edit/${l.id}`}>Edit listing</a>
               <a class="btn small secondary" href={`/account/performance/${l.id}`}>Performance</a>
-              {isLive(l) || l.stripe_customer_id ? <form action="/api/stripe/portal" method="post" style="display:inline"><button type="submit" class="btn small secondary">Manage billing</button></form> : <a class="btn small secondary" href={`/featured/${l.slug}`}>Get featured</a>}
+              {isLive(l) || l.stripe_customer_id ? <form action="/api/stripe/portal" method="post" style="display:inline"><button type="submit" class="btn small secondary">Manage billing</button></form> : <><a class="btn small secondary" href={`/company/${l.slug}?preview=1`}>Preview featured</a><a class="btn small" href={`/featured/${l.slug}`}>Get featured</a></>}
             </div>
           </div>
         ))}

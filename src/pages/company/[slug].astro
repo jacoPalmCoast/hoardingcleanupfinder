@@ -6,6 +6,7 @@ import Faq from '../../components/Faq.astro';
 import Socials from '../../components/Socials.astro';
 import Reviews from '../../components/Reviews.astro';
 import { getListingBySlug, nearbyListings, isLive, approvedReviews } from '../../lib/db';
+import { currentOwner, ownerOwns } from '../../lib/services';
 import { formatPhone, parseServices, hostOf, isoDay } from '../../lib/util';
 import { SERVICE_BY_SLUG } from '../../data/services';
 import { STATES } from '../../data/states';
@@ -17,11 +18,24 @@ import { env } from '../../lib/env';
 
 const l = await getListingBySlug(Astro.params.slug ?? '');
 if (!l || l.status !== 'active') return new Response(null, { status: 404 });
+
+// Owner preview: signed-in owner of this listing can see it rendered as a full
+// featured profile before paying, via ?preview=1. Gated to the owner so nobody
+// else can surface unpaid featured content, and never counted as a real view.
+const liveFeatured = isLive(l);
+const wantPreview = Astro.url.searchParams.get('preview') === '1';
+let previewing = false;
+if (wantPreview && !liveFeatured) {
+  const owner = await currentOwner(Astro.request);
+  previewing = !!owner && (await ownerOwns(owner.id, l.id));
+}
+// A preview response carries owner-gated content and must never be cached or shared.
+if (previewing) Astro.response.headers.set('cache-control', 'private, no-store');
 // Count this page view (real visitors only; bots are filtered inside trackEvent).
-trackEvent('view', l.id, Astro.request, 'company', waitCtx(Astro.locals));
+if (!previewing) trackEvent('view', l.id, Astro.request, 'company', waitCtx(Astro.locals));
 const services = parseServices(l.services);
 const serviceNames = services.map((s) => SERVICE_BY_SLUG[s]?.name).filter(Boolean) as string[];
-const featured = isLive(l);
+const featured = liveFeatured || previewing;
 // Render-time tier gate: stored featured-only attributes are hidden while not featured.
 const attrs = publicAttrs(parseAttrs(l.attrs), featured);
 const facts = attrFacts(attrs);
@@ -52,7 +66,16 @@ if (l.is_claimed !== 1) {
 }
 ---
 
-<Base title={`${l.name} — ${l.city}, ${l.state}`} description={description} jsonld={jsonld}>
+<Base title={`${l.name} — ${l.city}, ${l.state}`} description={description} jsonld={jsonld} noindex={previewing}>
+  {previewing && (
+    <div class="preview-bar" role="status">
+      <div class="pb-msg"><span class="pb-tag">Preview</span> This is how <b>{l.name}</b> looks featured — it isn't live yet.</div>
+      <div class="pb-act">
+        <a class="pb-exit" href={`/company/${l.slug}`}>Exit preview</a>
+        <a class="pb-cta" href={`/featured/${l.slug}`}>Get featured</a>
+      </div>
+    </div>
+  )}
   <p class="crumbs"><a href="/">Home</a> › <a href={`/state/${l.state.toLowerCase()}`}>{stateName}</a> › <a href={`/${l.state.toLowerCase()}/${l.city_slug}`}>{l.city}</a> › {l.name}</p>
   {msg === 'lead-sent' && <div class="notice" role="status">Your request was sent. Expect a call or email from the company, usually within one business day.</div>}
   {msg === 'report-sent' && <div class="notice" role="status">Thanks. We review every report within one business day.</div>}
@@ -121,3 +144,14 @@ if (l.is_claimed !== 1) {
     <aside><QuoteForm listingId={l.id} city={l.city} state={l.state} heading={`Request a quote from ${l.name}`} /></aside>
   </div>
 </Base>
+
+<style>
+  .preview-bar { position: sticky; top: 0; z-index: 60; background: var(--teal); color: #fff; margin: 0 0 18px; padding: 10px 16px; border-radius: 0 0 12px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; box-shadow: 0 6px 22px rgba(15,109,106,.18); }
+  .pb-msg { font-size: .92rem; line-height: 1.4; }
+  .pb-msg b { font-weight: 600; }
+  .pb-tag { display: inline-block; font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; background: rgba(255,255,255,.18); padding: 2px 8px; border-radius: 999px; margin-right: 8px; vertical-align: middle; }
+  .pb-act { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; }
+  .pb-exit { color: #fff; text-decoration: underline; text-underline-offset: 2px; font-size: .88rem; font-weight: 500; }
+  .pb-cta { background: #fff; color: var(--teal); font-weight: 700; font-size: .9rem; padding: 8px 16px; border-radius: 8px; text-decoration: none; white-space: nowrap; }
+  .pb-cta:hover { background: #f3f7f6; }
+</style>
