@@ -4,6 +4,7 @@ import SearchForm from '../../components/SearchForm.astro';
 import { GUIDE_BY_SLUG, GUIDES } from '../../data/guides';
 import { env } from '../../lib/env';
 import Faq from '../../components/Faq.astro';
+import QuickAnswer from '../../components/QuickAnswer.astro';
 import { faqSchema, webPageSchema, breadcrumbSchema, ORG_ID } from '../../lib/seo';
 const g = GUIDE_BY_SLUG[Astro.params.slug ?? ''];
 if (!g) return new Response(null, { status: 404 });
@@ -22,6 +23,7 @@ const jsonld = [
   <article class="prose">
     <h1>{g.title}</h1>
     <p class="small">Updated {g.updated}</p>
+    {g.summary && <QuickAnswer><p set:html={g.summary} /></QuickAnswer>}
     <Fragment set:html={g.html} />
   </article>
   <Faq items={faq} heading="Quick answers" />

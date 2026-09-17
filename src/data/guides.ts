@@ -1,4 +1,5 @@
 import { GUIDES_2026_09 } from './guides-2026-09';
+import { GUIDE_GEO } from './guides-geo';
 
 export interface Guide {
   slug: string;
@@ -6,6 +7,7 @@ export interface Guide {
   description: string;
   updated: string;
   html: string;
+  summary?: string;   // 1–3 sentence direct answer shown as a quick-answer block (GEO/snippet surface)
   faq?: { q: string; a: string }[];
 }
 
@@ -192,5 +194,13 @@ const GUIDES_2026_09_13: Guide[] = [
 ];
 
 // Company-facing guide goes last so the buyer guides lead the index.
-export const GUIDES: Guide[] = [...GUIDES_2026_09_13.filter((g) => g.slug !== 'claim-your-listing'), ...GUIDES_2026_09, ...GUIDES_2026_09_13.filter((g) => g.slug === 'claim-your-listing')];
+const ALL_GUIDES: Guide[] = [...GUIDES_2026_09_13.filter((g) => g.slug !== 'claim-your-listing'), ...GUIDES_2026_09, ...GUIDES_2026_09_13.filter((g) => g.slug === 'claim-your-listing')];
+
+// Layer the GEO summaries and supplemental FAQs on top. A guide keeps its own faq if it
+// has one; the GEO faq only fills in where a guide shipped without one.
+export const GUIDES: Guide[] = ALL_GUIDES.map((g) => {
+  const geo = GUIDE_GEO[g.slug];
+  if (!geo) return g;
+  return { ...g, summary: geo.summary ?? g.summary, faq: g.faq ?? geo.faq };
+});
 export const GUIDE_BY_SLUG: Record<string, Guide> = Object.assign(Object.create(null), Object.fromEntries(GUIDES.map((g) => [g.slug, g])));
