@@ -131,19 +131,58 @@ export async function approveTicket(id: number): Promise<void> {
   await env.DB.prepare(`UPDATE tickets SET status = 'open', updated_at = unixepoch() WHERE id = ?1 AND status = 'pending'`).bind(id).run();
 }
 
-// Reject a held ticket: delete it, its messages, and its R2 attachment objects. Only acts on
-// 'pending' tickets so a real (open/closed) conversation can never be nuked by this path.
+// Permanently delete tickets, their messages, and their R2 attachment objects. Shared by the
+// reject/delete paths. Returns how many ticket rows were removed.
+async function purgeTickets(ids: number[]): Promise<number> {
+  const clean = [...new Set(ids.filter((n) => Number.isInteger(n) && n > 0))];
+  if (clean.length === 0) return 0;
+  const ph = clean.map((_, i) => `?${i + 1}`).join(',');
+  const keys = (await env.DB.prepare(`SELECT r2_key FROM ticket_attachments WHERE ticket_id IN (${ph})`).bind(...clean).all<{ r2_key: string }>()).results;
+  if (env.ATTACH) for (const k of keys) { try { await env.ATTACH.delete(k.r2_key); } catch { /* best effort */ } }
+  const res = await env.DB.batch([
+    env.DB.prepare(`DELETE FROM ticket_attachments WHERE ticket_id IN (${ph})`).bind(...clean),
+    env.DB.prepare(`DELETE FROM ticket_messages WHERE ticket_id IN (${ph})`).bind(...clean),
+    env.DB.prepare(`DELETE FROM tickets WHERE id IN (${ph})`).bind(...clean),
+  ]);
+  return res[2]?.meta?.changes ?? 0;
+}
+
+// Reject a held ticket: only acts on 'pending' tickets so a real (open/closed) conversation can
+// never be nuked by this path.
 export async function rejectTicket(id: number): Promise<boolean> {
   const t = await env.DB.prepare(`SELECT status FROM tickets WHERE id = ?1`).bind(id).first<{ status: string }>();
   if (!t || t.status !== 'pending') return false;
-  const keys = (await env.DB.prepare(`SELECT r2_key FROM ticket_attachments WHERE ticket_id = ?1`).bind(id).all<{ r2_key: string }>()).results;
-  if (env.ATTACH) for (const k of keys) { try { await env.ATTACH.delete(k.r2_key); } catch { /* best effort */ } }
-  await env.DB.batch([
-    env.DB.prepare(`DELETE FROM ticket_attachments WHERE ticket_id = ?1`).bind(id),
-    env.DB.prepare(`DELETE FROM ticket_messages WHERE ticket_id = ?1`).bind(id),
-    env.DB.prepare(`DELETE FROM tickets WHERE id = ?1`).bind(id),
-  ]);
+  await purgeTickets([id]);
   return true;
+}
+
+// Delete a ticket regardless of status (operator action from the inbox / ticket page).
+export async function deleteTicket(id: number): Promise<boolean> {
+  return (await purgeTickets([id])) > 0;
+}
+
+// Bulk delete. Returns the number of tickets removed.
+export async function deleteTickets(ids: number[]): Promise<number> {
+  return purgeTickets(ids);
+}
+
+// Set status on many tickets at once (bulk close / reopen).
+export async function setTicketsStatus(ids: number[], status: 'open' | 'closed'): Promise<number> {
+  const clean = [...new Set(ids.filter((n) => Number.isInteger(n) && n > 0))];
+  if (clean.length === 0) return 0;
+  const ph = clean.map((_, i) => `?${i + 2}`).join(',');
+  const res = await env.DB.prepare(`UPDATE tickets SET status = ?1, updated_at = unixepoch() WHERE id IN (${ph})`).bind(status, ...clean).run();
+  return res.meta?.changes ?? 0;
+}
+
+// Ticket counts per status, for the inbox tab badges.
+export interface TicketCounts { open: number; pending: number; closed: number; all: number }
+export async function ticketCounts(): Promise<TicketCounts> {
+  const rows = (await env.DB.prepare(`SELECT status, COUNT(*) AS n FROM tickets GROUP BY status`).all<{ status: string; n: number }>()).results;
+  const by: Record<string, number> = {};
+  for (const r of rows) by[r.status] = r.n;
+  const open = by.open ?? 0, pending = by.pending ?? 0, closed = by.closed ?? 0;
+  return { open, pending, closed, all: open + pending + closed + Object.entries(by).filter(([k]) => !['open', 'pending', 'closed'].includes(k)).reduce((a, [, v]) => a + v, 0) };
 }
 
 export async function getAttachment(id: number): Promise<AttachmentRow & { r2_key: string } | null> {

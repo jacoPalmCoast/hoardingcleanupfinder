@@ -16,7 +16,7 @@ const attachOf = (messageId: number) => attachments.filter((a) => a.message_id =
 const pending = ticket.status === 'pending';
 const STATUS_PILL: Record<string, string> = { open: 'info', pending: 'warn', closed: 'muted' };
 ---
-<Admin title={ticket.subject}>
+<Admin title={ticket.subject} crumbs={[{ label: 'CRM', href: '/admin/crm' }, { label: 'Support inbox', href: '/admin/crm/tickets' }]}>
   <p slot="sub" class="sub">From {ticket.from_email}{ticket.source === 'email' ? ' · via email' : ''}</p>
   <Fragment slot="actions">
     <span class={`pill ${STATUS_PILL[ticket.status] ?? 'muted'}`} style="align-self:center">{ticket.status}</span>
@@ -71,12 +71,18 @@ const STATUS_PILL: Record<string, string> = { open: 'info', pending: 'warn', clo
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
             <button class="btn" type="submit">Send reply</button>
             <button class="btn secondary" type="submit" form="statusform">{ticket.status === 'closed' ? 'Reopen ticket' : 'Close ticket'}</button>
+            <span style="flex:1"></span>
+            <button class="btn secondary" type="submit" form="deleteform" style="color:var(--a-bad)" onclick="return confirm('Delete this ticket permanently? This removes the whole conversation and any attachments.')">Delete ticket</button>
           </div>
         </form>
         <form id="statusform" action="/api/admin/ticket" method="post">
           <input type="hidden" name="ticket_id" value={id} />
           <input type="hidden" name="action" value="status" />
           <input type="hidden" name="status" value={ticket.status === 'closed' ? 'open' : 'closed'} />
+        </form>
+        <form id="deleteform" action="/api/admin/ticket" method="post">
+          <input type="hidden" name="ticket_id" value={id} />
+          <input type="hidden" name="action" value="delete" />
         </form>
       </div>
     </div>

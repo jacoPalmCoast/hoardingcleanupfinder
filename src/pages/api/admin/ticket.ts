@@ -2,15 +2,27 @@ import type { APIRoute } from 'astro';
 import { requireAdmin } from '../../../lib/adminGuard';
 import { clean, redirect, escapeHtml } from '../../../lib/util';
 import { sendEmail, emailShell } from '../../../lib/services';
-import { getTicket, addTicketMessage, setTicketStatus, approveTicket, rejectTicket } from '../../../lib/tickets';
+import { getTicket, addTicketMessage, setTicketStatus, approveTicket, rejectTicket, deleteTicket, deleteTickets, setTicketsStatus } from '../../../lib/tickets';
 import { addActivity } from '../../../lib/crm';
 
 export const POST: APIRoute = async ({ request }) => {
   const denied = await requireAdmin(request);
   if (denied) return denied;
   const form = await request.formData();
-  const id = Number(clean(form.get('ticket_id'), 12));
   const action = clean(form.get('action'), 20);
+
+  // Bulk actions operate on a set of checked rows; redirect back to the tab the operator was on.
+  if (action === 'bulk_delete' || action === 'bulk_close' || action === 'bulk_open') {
+    const ids = form.getAll('ids').map((v) => Number(clean(v, 12))).filter((n) => Number.isInteger(n) && n > 0);
+    const tab = clean(form.get('tab'), 10);
+    const listUrl = `/admin/crm/tickets${tab ? `?status=${tab}` : ''}`;
+    if (ids.length === 0) return redirect(listUrl);
+    if (action === 'bulk_delete') await deleteTickets(ids);
+    else await setTicketsStatus(ids, action === 'bulk_close' ? 'closed' : 'open');
+    return redirect(listUrl);
+  }
+
+  const id = Number(clean(form.get('ticket_id'), 12));
   if (!Number.isInteger(id)) return redirect('/admin/crm/tickets');
   const back = `/admin/crm/ticket/${id}`;
 
@@ -27,6 +39,11 @@ export const POST: APIRoute = async ({ request }) => {
     // Deletes a held (pending) ticket + its attachments. rejectTicket only acts on 'pending'.
     const ok = await rejectTicket(id);
     return redirect(ok ? '/admin/crm/tickets?status=pending' : back);
+  }
+  if (action === 'delete') {
+    // Delete a ticket outright (any status), from the ticket page.
+    await deleteTicket(id);
+    return redirect('/admin/crm/tickets');
   }
   if (action === 'reply') {
     const body = clean(form.get('body'), 4000);
