@@ -3,6 +3,7 @@ import { requireAdmin } from '../../../lib/adminGuard';
 import { clean, redirect } from '../../../lib/util';
 import { stripe } from '../../../lib/stripe';
 import { env } from '../../../lib/env';
+import { createPromotionCode, deactivatePromotionCode } from '../../../lib/stripePromotions';
 
 // Create / delete Stripe coupons from the admin module, so discounts are managed on-site instead
 // of in the Stripe dashboard. Coupons are then referenced by id from an Offer (Offers page).
@@ -44,6 +45,25 @@ export const POST: APIRoute = async ({ request }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await stripe().coupons.create(params as any);
       return redirect('/admin/discounts?msg=created');
+    }
+
+    if (action === 'create_promo') {
+      const couponId = clean(form.get('coupon_id'), 80);
+      if (!couponId) return redirect('/admin/discounts?msg=error');
+      const code = clean(form.get('code'), 40).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const maxRedemptions = Number(clean(form.get('max_redemptions'), 6)) || 0;
+      const expiresRaw = clean(form.get('expires'), 10); // YYYY-MM-DD
+      const expiresAt = expiresRaw ? Math.floor(new Date(expiresRaw + 'T23:59:59Z').getTime() / 1000) : 0;
+      const firstTimeOnly = clean(form.get('first_time'), 4) === 'on';
+      const minAmountUsd = Number(clean(form.get('min_amount'), 12)) || 0;
+      await createPromotionCode({ couponId, code, maxRedemptions, expiresAt: expiresAt || undefined, firstTimeOnly, minAmountUsd });
+      return redirect('/admin/discounts?msg=promo');
+    }
+
+    if (action === 'deactivate_promo') {
+      const id = clean(form.get('id'), 80);
+      if (id) await deactivatePromotionCode(id);
+      return redirect('/admin/discounts?msg=promooff');
     }
   } catch (e) {
     console.error('stripe coupon op failed', (e as Error)?.message);

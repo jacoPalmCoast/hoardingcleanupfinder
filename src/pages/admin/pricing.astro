@@ -2,47 +2,78 @@
 import Admin from '../../layouts/Admin.astro';
 import { env } from '../../lib/env';
 import { featuredPricing, getSettings } from '../../lib/settings';
-import { stripeConfigured } from '../../lib/stripe';
+import { listProductPrices } from '../../lib/stripeProducts';
 
 const pricing = await featuredPricing();
 const raw = await getSettings(['stripe_price_monthly', 'stripe_price_annual', 'price_monthly_usd', 'price_annual_usd']);
+const configured = !!env.STRIPE_SECRET_KEY;
 const liveMode = !!env.STRIPE_SECRET_KEY?.startsWith('sk_live');
+const prices = configured ? await listProductPrices() : [];
 const monthlySrc = raw.stripe_price_monthly ? 'override' : env.STRIPE_PRICE_MONTHLY ? 'env' : 'unset';
 const annualSrc = raw.stripe_price_annual ? 'override' : env.STRIPE_PRICE_ANNUAL ? 'env' : 'unset';
-const saved = Astro.url.searchParams.get('saved');
+const msg = Astro.url.searchParams.get('msg') || (Astro.url.searchParams.get('saved') ? 'saved' : '');
 const annualSave = Number(pricing.monthlyUsd) * 12 - Number(pricing.annualUsd);
 ---
 <Admin title="Pricing">
-  <p slot="sub" class="sub">Featured plan price + which Stripe price actually bills · changes take effect immediately, no redeploy</p>
+  <p slot="sub" class="sub">Create plan prices and pick which ones bill — pushed straight to Stripe · changes take effect immediately, no redeploy</p>
   <Fragment slot="actions">
-    <span class={`pill ${stripeConfigured() ? (liveMode ? 'ok' : 'warn') : 'bad'}`}><span class="dot"></span>{stripeConfigured() ? (liveMode ? 'Live mode' : 'Test mode') : 'Stripe not set'}</span>
+    <span class={`pill ${configured ? (liveMode ? 'ok' : 'warn') : 'bad'}`}><span class="dot"></span>{configured ? (liveMode ? 'Live mode' : 'Test mode') : 'Stripe not set'}</span>
+    <a class="btn secondary small" href="/admin/discounts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9h.01M15 15h.01M16 8 8 16M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z"/></svg>Discounts</a>
     <a class="btn secondary small" href="/admin/offers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7ZM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z"/></svg>Offers</a>
   </Fragment>
 
-  {saved && <div class="notice" role="status">Saved. Live immediately for new checkouts.</div>}
+  {msg === 'saved' && <div class="notice" role="status">Saved. Live immediately for new checkouts.</div>}
+  {msg === 'priced' && <div class="notice" role="status">Plan price created in Stripe and set live. The previous price was archived.</div>}
+  {msg === 'assigned' && <div class="notice" role="status">Plan updated — that price is now what the site sells.</div>}
+  {msg === 'archived' && <div class="notice" role="status">Price archived.</div>}
+  {msg === 'inuse' && <div class="notice error" role="alert">That price is the plan the site is selling right now. Assign a different price to that plan first, then archive it.</div>}
+  {msg === 'error' && <div class="notice error" role="alert">Stripe rejected that — check the values and try again.</div>}
+  {msg === 'nostripe' && <div class="notice error" role="alert">Stripe isn't configured yet (no secret key), so prices can't be pushed to Stripe.</div>}
+
+  {!configured && (
+    <div class="card" style="margin-bottom:16px"><div class="card-b"><p class="mut" style="margin:0">Add <code>STRIPE_SECRET_KEY</code> in Cloudflare to create and manage plan prices from here. Until then, pricing is read-only.</p></div></div>
+  )}
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-h"><h3>Plan prices in Stripe</h3><span class="hint">{prices.length}</span></div>
+    {prices.length === 0 ? (
+      <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7"/></svg></div><b>No plan prices yet</b>Create one below — it's created in Stripe and set as the monthly or annual plan.</div>
+    ) : (
+      <div class="table-wrap"><table>
+        <thead><tr><th>Price</th><th>Sells as</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {prices.map((p) => (
+            <tr>
+              <td><span class="co">{p.terms}</span><div class="sub2"><code class="cid">{p.id}</code></div></td>
+              <td>{p.role ? <span class={`pill ${p.role === 'monthly' ? 'ok' : 'info'}`}><span class="dot"></span>{p.role === 'monthly' ? 'Monthly plan' : 'Annual plan'}</span> : <span class="mut">—</span>}</td>
+              <td>{p.active ? <span class="mut">Active</span> : <span class="mut">Archived</span>}</td>
+              <td class="actions" style="white-space:nowrap">
+                {p.active && p.role !== 'monthly' && <form action="/api/admin/plans" method="post" style="display:inline;margin-right:8px"><input type="hidden" name="action" value="set_role" /><input type="hidden" name="id" value={p.id} /><input type="hidden" name="role" value="monthly" /><button class="linkbtn small" type="submit">Use as monthly</button></form>}
+                {p.active && p.role !== 'annual' && <form action="/api/admin/plans" method="post" style="display:inline;margin-right:8px"><input type="hidden" name="action" value="set_role" /><input type="hidden" name="id" value={p.id} /><input type="hidden" name="role" value="annual" /><button class="linkbtn small" type="submit">Use as annual</button></form>}
+                {p.active && !p.role && <form action="/api/admin/plans" method="post" style="display:inline" onsubmit="return confirm('Archive this price?')"><input type="hidden" name="action" value="archive_price" /><input type="hidden" name="id" value={p.id} /><button class="linkbtn small" type="submit" style="color:var(--a-bad)">Archive</button></form>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    )}
+  </div>
 
   <div class="two-6-4">
     <div class="card">
-      <div class="card-h"><h3>Featured plan</h3></div>
+      <div class="card-h"><h3>Create a plan price</h3></div>
       <div class="card-b">
-        <form action="/api/admin/pricing" method="post">
-          <input type="hidden" name="action" value="save_pricing" />
-
-          <div class="gh" style="padding:0 0 4px">Displayed price</div>
-          <p class="fh" style="margin:0 0 12px">What families and owners see on the upgrade page. Purely cosmetic — keep it in sync with the Stripe price below.</p>
+        <p class="fh" style="margin:0 0 12px">Creates a recurring price in Stripe and, if you assign it, makes it the plan the site sells. Stripe prices can't be edited — to change an amount you create a new one here; the old one is archived automatically.</p>
+        <form action="/api/admin/plans" method="post">
+          <input type="hidden" name="action" value="create_price" />
           <div class="two">
-            <div class="field"><label for="m">Monthly ($)</label><input id="m" name="price_monthly_usd" type="number" min="0" value={pricing.monthlyUsd} /></div>
-            <div class="field"><label for="a">Annual ($)</label><input id="a" name="price_annual_usd" type="number" min="0" value={pricing.annualUsd} /></div>
+            <div class="field"><label for="amount">Amount ($)</label><input id="amount" name="amount" type="number" min="1" step="0.01" placeholder="49.00" required /></div>
+            <div class="field"><label for="interval">Interval</label><select id="interval" name="interval"><option value="month">Monthly</option><option value="year">Yearly</option></select></div>
           </div>
-          <p class="fh" style="margin:0 0 18px">At these numbers, annual saves customers ${annualSave > 0 ? annualSave.toLocaleString('en-US') : 0} vs. paying monthly.</p>
-
-          <div class="gh" style="padding:0 0 4px">Stripe price (what actually bills)</div>
-          <p class="fh" style="margin:0 0 12px">The card is charged whatever these Stripe Price IDs resolve to. Stripe won't let you edit a price's amount — to change what you charge, create a new Price in Stripe and paste its ID here.</p>
-          <div class="field"><label for="sm">Monthly Stripe Price ID <span class="fh" style="display:inline">({monthlySrc === 'override' ? 'custom' : monthlySrc === 'env' ? 'from Worker var' : 'not set'})</span></label><input id="sm" name="stripe_price_monthly" type="text" placeholder="price_…" value={pricing.stripeMonthly} /></div>
-          <div class="field"><label for="sa">Annual Stripe Price ID <span class="fh" style="display:inline">({annualSrc === 'override' ? 'custom' : annualSrc === 'env' ? 'from Worker var' : 'not set'})</span></label><input id="sa" name="stripe_price_annual" type="text" placeholder="price_…" value={pricing.stripeAnnual} /></div>
-          <p class="fh" style="margin:0 0 16px">Leave a field blank to fall back to the Worker var. IDs must start with <code>price_</code>.</p>
-
-          <button class="btn" type="submit">Save pricing</button>
+          <div class="field"><label for="interval_count">Repeat every <span class="fh" style="display:inline">(1 = every month/year; 3 = quarterly)</span></label><input id="interval_count" name="interval_count" type="number" min="1" max="12" value="1" /></div>
+          <div class="field"><label for="role">Assign to</label><select id="role" name="role"><option value="monthly">The Monthly plan (what the site sells monthly)</option><option value="annual">The Annual plan</option><option value="">Just create it — don't assign yet</option></select></div>
+          <button class="btn" type="submit" disabled={!configured}>Create price</button>
+          <div class="fh" style="margin-top:10px">Created in {liveMode ? 'live' : 'test'} mode — a price only bills checkouts in the same mode.</div>
         </form>
       </div>
     </div>
@@ -50,14 +81,41 @@ const annualSave = Number(pricing.monthlyUsd) * 12 - Number(pricing.annualUsd);
     <div class="card" style="align-self:start">
       <div class="card-h"><h3>How billing works</h3></div>
       <div class="card-b">
-        <p class="sub" style="margin:0 0 12px">Stripe is the source of truth for money. This page only sets the displayed price and picks which Stripe price is live — it never invents an amount.</p>
+        <p class="sub" style="margin:0 0 12px">Stripe is the source of truth for money. Assigning a price here is what decides the charge — the displayed price below is only cosmetic.</p>
         <ul style="margin:0;padding-left:18px;color:var(--a-muted);font-size:13px;line-height:1.7">
-          <li>To change the charge: create a new Price on the product in Stripe, copy its <code>price_…</code> ID, paste it here.</li>
+          <li>Change the charge: create a new price and assign it — the old one is archived, existing subscribers keep their current price.</li>
           <li>Featured status is driven only by Stripe webhooks — never toggled by hand.</li>
-          <li>You're in <strong>{liveMode ? 'live' : 'test'}</strong> mode; make sure the Price IDs match that mode.</li>
+          <li>You're in <strong>{liveMode ? 'live' : 'test'}</strong> mode; prices only bill checkouts in that mode.</li>
+          <li>Discounts and promo codes live on <a href="/admin/discounts">Discounts</a>; intro ramps on <a href="/admin/offers">Offers</a>.</li>
         </ul>
-        <a class="btn secondary small" href="https://dashboard.stripe.com/products" target="_blank" rel="noopener" style="margin-top:14px">Open Stripe products ↗</a>
       </div>
     </div>
   </div>
+
+  <details class="card" style="margin-top:16px">
+    <summary style="cursor:pointer;padding:16px;font-weight:600">Displayed price &amp; manual overrides</summary>
+    <div class="card-b" style="border-top:1px solid var(--a-border)">
+      <form action="/api/admin/pricing" method="post">
+        <input type="hidden" name="action" value="save_pricing" />
+        <div class="gh" style="padding:8px 0 4px">Displayed price</div>
+        <p class="fh" style="margin:0 0 12px">What families and owners see on the upgrade page. Cosmetic — keep it in sync with the assigned plan above.</p>
+        <div class="two">
+          <div class="field"><label for="m">Monthly ($)</label><input id="m" name="price_monthly_usd" type="number" min="0" value={pricing.monthlyUsd} /></div>
+          <div class="field"><label for="a">Annual ($)</label><input id="a" name="price_annual_usd" type="number" min="0" value={pricing.annualUsd} /></div>
+        </div>
+        <p class="fh" style="margin:0 0 18px">At these numbers, annual saves customers ${annualSave > 0 ? annualSave.toLocaleString('en-US') : 0} vs. paying monthly.</p>
+
+        <div class="gh" style="padding:8px 0 4px">Stripe Price IDs (manual override)</div>
+        <p class="fh" style="margin:0 0 12px">Normally set by assigning a price above. You can paste an ID directly here if needed.</p>
+        <div class="field"><label for="sm">Monthly Stripe Price ID <span class="fh" style="display:inline">({monthlySrc === 'override' ? 'custom' : monthlySrc === 'env' ? 'from Worker var' : 'not set'})</span></label><input id="sm" name="stripe_price_monthly" type="text" placeholder="price_…" value={pricing.stripeMonthly} /></div>
+        <div class="field"><label for="sa">Annual Stripe Price ID <span class="fh" style="display:inline">({annualSrc === 'override' ? 'custom' : annualSrc === 'env' ? 'from Worker var' : 'not set'})</span></label><input id="sa" name="stripe_price_annual" type="text" placeholder="price_…" value={pricing.stripeAnnual} /></div>
+        <p class="fh" style="margin:0 0 16px">Leave a field blank to fall back to the Worker var. IDs must start with <code>price_</code>.</p>
+        <button class="btn secondary" type="submit">Save displayed price &amp; overrides</button>
+      </form>
+    </div>
+  </details>
 </Admin>
+
+<style>
+  .adm .cid { font-size: 12px; background: var(--a-soft, #f2f5f5); padding: 2px 6px; border-radius: 6px; }
+</style>

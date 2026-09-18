@@ -1,34 +1,39 @@
 ---
 import Admin from '../../layouts/Admin.astro';
 import { listCoupons } from '../../lib/stripeCoupons';
+import { listPromotionCodes } from '../../lib/stripePromotions';
 import { env } from '../../lib/env';
 
 const secret = env.STRIPE_SECRET_KEY || '';
 const configured = !!secret;
 const liveMode = secret.startsWith('sk_live');
 const coupons = configured ? await listCoupons() : [];
+const promos = configured ? await listPromotionCodes() : [];
+const today = new Date().toISOString().slice(0, 10);
 const msg = Astro.url.searchParams.get('msg');
 ---
 <Admin title="Discounts">
-  <p slot="sub" class="sub">Create and manage Stripe coupons here · reference them from an offer on the Offers page</p>
+  <p slot="sub" class="sub">Coupons and shareable promo codes — created straight in Stripe · reference a coupon from an offer on the Offers page</p>
   <Fragment slot="actions">
     <span class={`pill ${configured ? (liveMode ? 'ok' : 'warn') : 'bad'}`}><span class="dot"></span>{configured ? (liveMode ? 'Live mode' : 'Test mode') : 'Stripe not set'}</span>
     <a class="btn secondary small" href="/admin/offers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7Zm0 0h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z"/></svg>Offers</a>
   </Fragment>
 
-  {msg === 'created' && <div class="notice" role="status">Coupon created. Reference it from an offer on the Offers page.</div>}
+  {msg === 'created' && <div class="notice" role="status">Coupon created. Reference it from an offer, or attach a promo code below.</div>}
   {msg === 'deleted' && <div class="notice" role="status">Coupon deleted.</div>}
+  {msg === 'promo' && <div class="notice" role="status">Promo code created. Share it — it applies its coupon at checkout.</div>}
+  {msg === 'promooff' && <div class="notice" role="status">Promo code deactivated. Existing customers keep any discount already applied.</div>}
   {msg === 'error' && <div class="notice error" role="alert">Stripe rejected that — check the values and try again.</div>}
-  {msg === 'nostripe' && <div class="notice error" role="alert">Stripe isn't configured (no secret key), so coupons can't be managed yet.</div>}
+  {msg === 'nostripe' && <div class="notice error" role="alert">Stripe isn't configured (no secret key), so discounts can't be managed yet.</div>}
 
   {!configured && (
-    <div class="card"><div class="card-b"><p class="mut" style="margin:0">Add <code>STRIPE_SECRET_KEY</code> in Cloudflare to manage coupons from here. Until then this page is read-only and empty.</p></div></div>
+    <div class="card"><div class="card-b"><p class="mut" style="margin:0">Add <code>STRIPE_SECRET_KEY</code> in Cloudflare to manage coupons and promo codes from here. Until then this page is read-only and empty.</p></div></div>
   )}
 
   <div class="card" style="margin-bottom:16px">
-    <div class="card-h"><h3>Your coupons</h3><span class="hint">{coupons.length}</span></div>
+    <div class="card-h"><h3>Coupons</h3><span class="hint">{coupons.length}</span></div>
     {coupons.length === 0 ? (
-      <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7"/></svg></div><b>No coupons yet</b>Create one below — then paste its ID into an offer.</div>
+      <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7"/></svg></div><b>No coupons yet</b>A coupon is the discount itself. Create one below, then use it in an offer or a promo code.</div>
     ) : (
       <div class="table-wrap"><table>
         <thead><tr><th>Coupon</th><th>Terms</th><th>ID (for offers)</th><th>Used</th><th></th></tr></thead>
@@ -40,7 +45,7 @@ const msg = Astro.url.searchParams.get('msg');
               <td><code class="cid">{c.id}</code></td>
               <td class="mut">{c.redeemed}</td>
               <td class="actions" style="white-space:nowrap">
-                <form action="/api/admin/discounts" method="post" style="display:inline" onsubmit="return confirm('Delete this coupon? Any offer using it will stop applying a discount.')"><input type="hidden" name="action" value="delete" /><input type="hidden" name="id" value={c.id} /><button class="linkbtn small" type="submit" style="color:var(--a-bad)">Delete</button></form>
+                <form action="/api/admin/discounts" method="post" style="display:inline" onsubmit="return confirm('Delete this coupon? Any offer or promo code using it will stop applying a discount.')"><input type="hidden" name="action" value="delete" /><input type="hidden" name="id" value={c.id} /><button class="linkbtn small" type="submit" style="color:var(--a-bad)">Delete</button></form>
               </td>
             </tr>
           ))}
@@ -49,7 +54,7 @@ const msg = Astro.url.searchParams.get('msg');
     )}
   </div>
 
-  <div class="two-6-4">
+  <div class="two-6-4" style="margin-bottom:16px">
     <div class="card">
       <div class="card-h"><h3>New coupon</h3></div>
       <div class="card-b">
@@ -65,9 +70,67 @@ const msg = Astro.url.searchParams.get('msg');
             <div class="field"><label for="duration">Duration</label><select id="duration" name="duration"><option value="once">Once</option><option value="repeating">Multiple months</option><option value="forever">Forever</option></select></div>
             <div class="field" data-when="repeating" style="display:none"><label for="months">Number of months</label><input id="months" name="months" type="number" min="1" max="36" value="3" /></div>
           </div>
-          <button class="btn" type="submit" style="margin-top:8px">Create coupon</button>
+          <button class="btn" type="submit" style="margin-top:8px" disabled={!configured}>Create coupon</button>
           <div class="fh" style="margin-top:10px">Created in {liveMode ? 'live' : 'test'} mode — coupons only work with checkouts in the same mode.</div>
         </form>
+      </div>
+    </div>
+
+    <div class="card" style="align-self:start">
+      <div class="card-h"><h3>Coupon vs. promo code</h3></div>
+      <div class="card-b">
+        <p class="sub" style="margin:0 0 10px"><strong>Coupon</strong> = the discount (e.g. $34 off for 3 months). Use it in an <a href="/admin/offers">offer</a> to auto-apply at checkout.</p>
+        <p class="sub" style="margin:0"><strong>Promo code</strong> = a word customers type (e.g. <code>FOUNDING</code>) that applies a coupon. Create the coupon first, then attach a code below.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-h"><h3>Promotion codes</h3><span class="hint">{promos.length}</span></div>
+    {promos.length === 0 ? (
+      <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9h.01M15 15h.01M16 8 8 16M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z"/></svg></div><b>No promo codes yet</b>A promo code is a word customers type at checkout to apply a coupon. Create one below.</div>
+    ) : (
+      <div class="table-wrap"><table>
+        <thead><tr><th>Code</th><th>Applies</th><th>Limits</th><th>Used</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {promos.map((p) => (
+            <tr>
+              <td><code class="cid">{p.code}</code></td>
+              <td class="mut">{p.couponName}{p.couponTerms ? ` · ${p.couponTerms}` : ''}</td>
+              <td class="mut">{[p.max ? `max ${p.max}` : null, p.expires ? `ends ${p.expires}` : null, p.firstTimeOnly ? 'new customers' : null].filter(Boolean).join(' · ') || '—'}</td>
+              <td class="mut">{p.redeemed}</td>
+              <td>{p.active ? <span class="pill ok"><span class="dot"></span>Active</span> : <span class="mut">Off</span>}</td>
+              <td class="actions" style="white-space:nowrap">
+                {p.active && <form action="/api/admin/discounts" method="post" style="display:inline" onsubmit="return confirm('Deactivate this promo code? It can’t be reactivated.')"><input type="hidden" name="action" value="deactivate_promo" /><input type="hidden" name="id" value={p.id} /><button class="linkbtn small" type="submit" style="color:var(--a-bad)">Deactivate</button></form>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    )}
+  </div>
+
+  <div class="two-6-4">
+    <div class="card">
+      <div class="card-h"><h3>New promo code</h3></div>
+      <div class="card-b">
+        {coupons.length === 0 ? (
+          <p class="mut" style="margin:0">Create a coupon above first — a promo code needs a coupon to apply.</p>
+        ) : (
+          <form action="/api/admin/discounts" method="post">
+            <input type="hidden" name="action" value="create_promo" />
+            <div class="field"><label for="code">Code <span class="fh" style="display:inline">(what customers type)</span></label><input id="code" name="code" type="text" maxlength="40" placeholder="FOUNDING" style="text-transform:uppercase" /><div class="fh">Letters and numbers only. Leave blank to let Stripe generate one.</div></div>
+            <div class="field"><label for="coupon_id">Applies which coupon</label><select id="coupon_id" name="coupon_id">{coupons.map((c) => <option value={c.id}>{c.name} · {c.terms}</option>)}</select></div>
+            <div class="two">
+              <div class="field"><label for="max_redemptions">Max redemptions <span class="fh" style="display:inline">(optional)</span></label><input id="max_redemptions" name="max_redemptions" type="number" min="0" placeholder="100" /></div>
+              <div class="field"><label for="expires">Expires <span class="fh" style="display:inline">(optional)</span></label><input id="expires" name="expires" type="date" min={today} /></div>
+            </div>
+            <div class="field"><label for="min_amount">Minimum order ($) <span class="fh" style="display:inline">(optional)</span></label><input id="min_amount" name="min_amount" type="number" min="0" step="0.01" placeholder="0.00" /></div>
+            <label style="display:flex;gap:10px;align-items:center;font-weight:400;margin:2px 0 14px;cursor:pointer"><input type="checkbox" name="first_time" value="on" style="width:auto" /><span class="fh" style="margin:0">New customers only (first purchase)</span></label>
+            <button class="btn" type="submit">Create promo code</button>
+            <div class="fh" style="margin-top:10px">Created in {liveMode ? 'live' : 'test'} mode.</div>
+          </form>
+        )}
       </div>
     </div>
 
@@ -76,12 +139,11 @@ const msg = Astro.url.searchParams.get('msg');
       <div class="card-b">
         <p class="sub" style="margin:0 0 12px">To make <strong>$49/mo → $15/mo for 3 months</strong>:</p>
         <ol style="margin:0;padding-left:18px;color:var(--a-muted);font-size:13px;line-height:1.75">
-          <li>Type <strong>Amount off</strong>, amount <strong>$34</strong> (49 − 34 = 15).</li>
-          <li>Duration <strong>Multiple months</strong>, <strong>3</strong> months.</li>
-          <li>Create it, copy the <strong>ID</strong> from the table.</li>
-          <li>On <a href="/admin/offers">Offers</a>, paste the ID and set the free-trial days, then set the offer live.</li>
+          <li>Coupon: <strong>Amount off</strong>, <strong>$34</strong> (49 − 34 = 15), <strong>Multiple months, 3</strong>.</li>
+          <li>Auto-apply it: attach the coupon to an <a href="/admin/offers">offer</a> with a free-trial and set it live.</li>
+          <li>Or hand it out as a code: create a promo code above pointing at that coupon.</li>
         </ol>
-        <p class="fh" style="margin:12px 0 0">The 30-day free trial is set on the offer itself, not here. Change the base price on <a href="/admin/pricing">Pricing</a>.</p>
+        <p class="fh" style="margin:12px 0 0">Change the base price on <a href="/admin/pricing">Pricing</a>.</p>
       </div>
     </div>
   </div>
