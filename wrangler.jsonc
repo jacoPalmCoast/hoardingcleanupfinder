@@ -18,7 +18,7 @@
   "vars": {
     "SITE_URL": "https://hoardingcleanupfinder.com",
     "SITE_NAME": "Hoarding Cleanup Finder",
-    "FROM_EMAIL": "onboarding@resend.dev",
+    "FROM_EMAIL": "hello@hoardingcleanupfinder.com",
     "FEATURED_MONTHLY_USD": "49",
     "FEATURED_ANNUAL_USD": "399",
     "TURNSTILE_SITE_KEY": "0x4AAAAAAEz-zMBix5CVEIyu",
