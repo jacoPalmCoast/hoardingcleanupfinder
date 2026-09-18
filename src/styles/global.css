@@ -79,6 +79,7 @@ header.site .wrap { display: flex; align-items: center; justify-content: space-b
 .brand span { color: var(--teal); }
 nav.main a { margin-left: 22px; text-decoration: none; color: var(--muted); font-size: .95rem; font-weight: 500; }
 nav.main a:hover { color: var(--teal-dark); }
+nav.main a.login { color: var(--teal-dark); font-weight: 600; }
 @media (max-width: 560px) {
   header.site .wrap { flex-wrap: wrap; padding-top: 12px; padding-bottom: 12px; min-height: 0; }
   nav.main { display: flex; flex-wrap: wrap; gap: 8px 20px; width: 100%; }
