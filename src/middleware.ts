@@ -11,12 +11,15 @@ const CSP = [
   "object-src 'none'",
   "frame-ancestors 'none'",
   "img-src 'self' data: https:",
-  "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+  "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
-  "connect-src 'self' https://challenges.cloudflare.com",
+  "connect-src 'self' https://challenges.cloudflare.com https://cloudflareinsights.com https://static.cloudflareinsights.com",
   "frame-src https://challenges.cloudflare.com",
-  "form-action 'self'",
+  // Stripe Checkout + Billing Portal are hosted redirects: the form posts to /api/stripe/* which
+  // 303-redirects to checkout.stripe.com / billing.stripe.com. Without these, form-action blocks the
+  // redirect and the button silently does nothing.
+  "form-action 'self' https://checkout.stripe.com https://billing.stripe.com",
   "upgrade-insecure-requests",
 ].join('; ');
 
