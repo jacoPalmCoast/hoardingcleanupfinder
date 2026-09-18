@@ -7,6 +7,8 @@ const statusParam = (Astro.url.searchParams.get('status') ?? 'open').toLowerCase
 const status = statusParam === 'closed' ? 'closed' : statusParam === 'pending' ? 'pending' : statusParam === 'all' ? null : 'open';
 const [rows, pendingCount] = await Promise.all([listTickets(status), pendingTicketCount()]);
 const when = (ts: number) => tsToDate(ts)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
+// Arrival date + time in Eastern (the admin's timezone) so "when it came in" is precise, not UTC.
+const whenDT = (ts: number) => tsToDate(ts)?.toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) ?? '';
 const tabs = [
   { key: 'open', label: 'Open' },
   { key: 'pending', label: pendingCount > 0 ? `Review (${pendingCount})` : 'Review' },
@@ -30,10 +32,11 @@ const STATUS_PILL: Record<string, string> = { open: 'info', pending: 'warn', clo
       <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2.5"/><path d="m3 6 9 6 9-6"/></svg></div><b>No {status ?? ''} tickets</b>Customer emails land here as they arrive.</div>
     ) : (
       <div class="table-wrap"><table>
-        <thead><tr><th>Updated</th><th>Subject</th><th>From</th><th>Company</th><th>Status</th></tr></thead>
+        <thead><tr><th>Received</th><th>Updated</th><th>Subject</th><th>From</th><th>Company</th><th>Status</th></tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr>
+              <td class="mut" style="white-space:nowrap">{whenDT(r.created_at)}</td>
               <td class="mut" style="white-space:nowrap">{when(r.updated_at)}</td>
               <td><a class="co" href={`/admin/crm/ticket/${r.id}`}>{r.subject}</a> <span class="mut">({r.msgs})</span></td>
               <td class="mut">{r.from_email}</td>

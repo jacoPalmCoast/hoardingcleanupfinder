@@ -84,10 +84,10 @@ export async function appendInboundMessage(ticketId: number, body: string, msgId
 }
 
 // ---- Reads ----
-export interface TicketRow { id: number; listing_id: number | null; from_email: string; subject: string; status: string; source?: string; updated_at: number; company: string | null; msgs: number }
+export interface TicketRow { id: number; listing_id: number | null; from_email: string; subject: string; status: string; source?: string; created_at: number; updated_at: number; company: string | null; msgs: number }
 export async function listTickets(status: string | null): Promise<TicketRow[]> {
   return (await env.DB.prepare(
-    `SELECT t.id, t.listing_id, t.from_email, t.subject, t.status, t.source, t.updated_at, l.name AS company,
+    `SELECT t.id, t.listing_id, t.from_email, t.subject, t.status, t.source, t.created_at, t.updated_at, l.name AS company,
         (SELECT COUNT(*) FROM ticket_messages m WHERE m.ticket_id = t.id) AS msgs
      FROM tickets t LEFT JOIN listings l ON l.id = t.listing_id
      ` + (status ? `WHERE t.status = ?1` : '') + `
