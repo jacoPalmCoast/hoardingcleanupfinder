@@ -1,8 +1,10 @@
 ---
 import Admin from '../../layouts/Admin.astro';
 import { getOffers, getOffer, type Offer } from '../../lib/offers';
+import { listCoupons } from '../../lib/stripeCoupons';
 
 const offers = await getOffers();
+const coupons = await listCoupons();
 const editId = Astro.url.searchParams.get('edit') ?? '';
 const editing: Offer | null = editId ? await getOffer(editId) : null;
 const msg = Astro.url.searchParams.get('msg');
@@ -67,7 +69,19 @@ const e = editing;
             <div class="field"><label for="plan">Applies to</label><select id="plan" name="plan"><option value="any" selected={!e || e.plan === 'any'}>Any plan</option><option value="monthly" selected={e?.plan === 'monthly'}>Monthly only</option><option value="annual" selected={e?.plan === 'annual'}>Annual only</option></select></div>
             <div class="field"><label for="trial">Free trial (days)</label><input id="trial" name="trial_days" type="number" min="0" max="365" value={e?.trialDays ?? 0} /><div class="fh">0 = no trial.</div></div>
           </div>
-          <div class="field"><label for="coupon">Stripe coupon or promotion-code ID <span class="fh" style="display:inline">(the intro discount)</span></label><input id="coupon" name="coupon_id" type="text" maxlength="60" value={e?.couponId ?? ''} placeholder="e.g. FOUND50 or promo_…" /><div class="fh">Create the discount in Stripe → Coupons; paste the coupon ID (or a <code>promo_…</code> promotion-code id). It auto-applies at checkout. Leave blank for trial-only or full price.</div></div>
+          <div class="field">
+            <label for="coupon">Discount <span class="fh" style="display:inline">(the intro coupon)</span></label>
+            {coupons.length > 0 ? (
+              <select id="coupon" name="coupon_id">
+                <option value="" selected={!e?.couponId}>— none (trial-only / full price) —</option>
+                {coupons.map((c) => <option value={c.id} selected={e?.couponId === c.id}>{c.name} · {c.terms}</option>)}
+                {e?.couponId && !coupons.some((c) => c.id === e.couponId) && <option value={e.couponId} selected>{e.couponId} (not found in Stripe)</option>}
+              </select>
+            ) : (
+              <input id="coupon" name="coupon_id" type="text" maxlength="60" value={e?.couponId ?? ''} placeholder="coupon id or promo_…" />
+            )}
+            <div class="fh">Pick a coupon, or create one on <a href="/admin/discounts">Discounts</a> first. It auto-applies at checkout after the free trial. Leave as "none" for trial-only or full price.</div>
+          </div>
 
           <div class="gh" style="padding:8px 0 4px">What customers see</div>
           <div class="field"><label for="head">Banner headline</label><input id="head" name="headline" type="text" maxlength="120" value={e?.headline ?? ''} placeholder="30 days free, then 3 months at $15/mo" /></div>
@@ -92,14 +106,14 @@ const e = editing;
       <div class="card-b">
         <p class="sub" style="margin:0 0 12px">Example: <strong>30 days free → $15/mo for 3 months → $49/mo</strong></p>
         <ol style="margin:0;padding-left:18px;color:var(--a-muted);font-size:13px;line-height:1.75">
-          <li>In Stripe → <strong>Coupons</strong>, create a coupon: <strong>$34 off</strong>, duration <strong>repeating, 3 months</strong> (that turns the $49 plan into $15 for 3 months).</li>
-          <li>Copy the coupon's ID into the field on the left.</li>
+          <li>On <a href="/admin/discounts">Discounts</a>, create a coupon: <strong>$34 off</strong>, <strong>Multiple months, 3</strong> (that turns the $49 plan into $15 for 3 months).</li>
+          <li>Back here, pick that coupon in the <strong>Discount</strong> field on the left.</li>
           <li>Set <strong>Free trial = 30</strong> days.</li>
           <li>Write the ramp line so customers see exactly what happens.</li>
           <li>Tick <strong>Make this the live offer</strong> and save.</li>
         </ol>
         <p class="fh" style="margin:12px 0 0">The trial and coupon are real Stripe mechanics applied at checkout — the ramp line is just the words shown to customers, so keep them in sync. Change the base price on <a href="/admin/pricing">Pricing</a>.</p>
-        <a class="btn secondary small" href="https://dashboard.stripe.com/coupons" target="_blank" rel="noopener" style="margin-top:14px">Open Stripe coupons ↗</a>
+        <a class="btn secondary small" href="/admin/discounts" style="margin-top:14px">Manage coupons →</a>
       </div>
     </div>
   </div>

@@ -1,0 +1,109 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { listCoupons } from '../../lib/stripeCoupons';
+import { env } from '../../lib/env';
+
+const secret = env.STRIPE_SECRET_KEY || '';
+const configured = !!secret;
+const liveMode = secret.startsWith('sk_live');
+const coupons = configured ? await listCoupons() : [];
+const msg = Astro.url.searchParams.get('msg');
+---
+<Admin title="Discounts">
+  <p slot="sub" class="sub">Create and manage Stripe coupons here · reference them from an offer on the Offers page</p>
+  <Fragment slot="actions">
+    <span class={`pill ${configured ? (liveMode ? 'ok' : 'warn') : 'bad'}`}><span class="dot"></span>{configured ? (liveMode ? 'Live mode' : 'Test mode') : 'Stripe not set'}</span>
+    <a class="btn secondary small" href="/admin/offers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7Zm0 0h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z"/></svg>Offers</a>
+  </Fragment>
+
+  {msg === 'created' && <div class="notice" role="status">Coupon created. Reference it from an offer on the Offers page.</div>}
+  {msg === 'deleted' && <div class="notice" role="status">Coupon deleted.</div>}
+  {msg === 'error' && <div class="notice error" role="alert">Stripe rejected that — check the values and try again.</div>}
+  {msg === 'nostripe' && <div class="notice error" role="alert">Stripe isn't configured (no secret key), so coupons can't be managed yet.</div>}
+
+  {!configured && (
+    <div class="card"><div class="card-b"><p class="mut" style="margin:0">Add <code>STRIPE_SECRET_KEY</code> in Cloudflare to manage coupons from here. Until then this page is read-only and empty.</p></div></div>
+  )}
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-h"><h3>Your coupons</h3><span class="hint">{coupons.length}</span></div>
+    {coupons.length === 0 ? (
+      <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7"/></svg></div><b>No coupons yet</b>Create one below — then paste its ID into an offer.</div>
+    ) : (
+      <div class="table-wrap"><table>
+        <thead><tr><th>Coupon</th><th>Terms</th><th>ID (for offers)</th><th>Used</th><th></th></tr></thead>
+        <tbody>
+          {coupons.map((c) => (
+            <tr>
+              <td><span class="co">{c.name}</span>{!c.valid && <div class="sub2">expired / maxed out</div>}</td>
+              <td class="mut">{c.terms}</td>
+              <td><code class="cid">{c.id}</code></td>
+              <td class="mut">{c.redeemed}</td>
+              <td class="actions" style="white-space:nowrap">
+                <form action="/api/admin/discounts" method="post" style="display:inline" onsubmit="return confirm('Delete this coupon? Any offer using it will stop applying a discount.')"><input type="hidden" name="action" value="delete" /><input type="hidden" name="id" value={c.id} /><button class="linkbtn small" type="submit" style="color:var(--a-bad)">Delete</button></form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    )}
+  </div>
+
+  <div class="two-6-4">
+    <div class="card">
+      <div class="card-h"><h3>New coupon</h3></div>
+      <div class="card-b">
+        <form action="/api/admin/discounts" method="post">
+          <input type="hidden" name="action" value="create" />
+          <div class="field"><label for="name">Name <span class="fh" style="display:inline">(shown on receipts)</span></label><input id="name" name="name" type="text" maxlength="60" placeholder="Founding advertiser intro" /></div>
+          <div class="two">
+            <div class="field"><label for="kind">Discount type</label><select id="kind" name="kind"><option value="amount">Amount off ($)</option><option value="percent">Percentage off (%)</option></select></div>
+            <div class="field" data-when="amount"><label for="amount">Amount off ($)</label><input id="amount" name="amount" type="number" min="0" step="0.01" placeholder="34.00" /></div>
+            <div class="field" data-when="percent" style="display:none"><label for="percent">Percentage off (%)</label><input id="percent" name="percent" type="number" min="1" max="100" placeholder="25" /></div>
+          </div>
+          <div class="two">
+            <div class="field"><label for="duration">Duration</label><select id="duration" name="duration"><option value="once">Once</option><option value="repeating">Multiple months</option><option value="forever">Forever</option></select></div>
+            <div class="field" data-when="repeating" style="display:none"><label for="months">Number of months</label><input id="months" name="months" type="number" min="1" max="36" value="3" /></div>
+          </div>
+          <button class="btn" type="submit" style="margin-top:8px">Create coupon</button>
+          <div class="fh" style="margin-top:10px">Created in {liveMode ? 'live' : 'test'} mode — coupons only work with checkouts in the same mode.</div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card" style="align-self:start">
+      <div class="card-h"><h3>Build the intro ramp</h3></div>
+      <div class="card-b">
+        <p class="sub" style="margin:0 0 12px">To make <strong>$49/mo → $15/mo for 3 months</strong>:</p>
+        <ol style="margin:0;padding-left:18px;color:var(--a-muted);font-size:13px;line-height:1.75">
+          <li>Type <strong>Amount off</strong>, amount <strong>$34</strong> (49 − 34 = 15).</li>
+          <li>Duration <strong>Multiple months</strong>, <strong>3</strong> months.</li>
+          <li>Create it, copy the <strong>ID</strong> from the table.</li>
+          <li>On <a href="/admin/offers">Offers</a>, paste the ID and set the free-trial days, then set the offer live.</li>
+        </ol>
+        <p class="fh" style="margin:12px 0 0">The 30-day free trial is set on the offer itself, not here. Change the base price on <a href="/admin/pricing">Pricing</a>.</p>
+      </div>
+    </div>
+  </div>
+</Admin>
+
+<style>
+  .adm .cid { font-size: 12px; background: var(--a-soft, #f2f5f5); padding: 2px 6px; border-radius: 6px; }
+</style>
+
+<script is:inline>
+  (function () {
+    var kind = document.getElementById('kind');
+    var dur = document.getElementById('duration');
+    function sync() {
+      document.querySelectorAll('[data-when]').forEach(function (el) {
+        var w = el.getAttribute('data-when');
+        var show = (w === 'amount' || w === 'percent') ? (kind && kind.value === w) : (dur && dur.value === w);
+        el.style.display = show ? '' : 'none';
+      });
+    }
+    if (kind) kind.addEventListener('change', sync);
+    if (dur) dur.addEventListener('change', sync);
+    sync();
+  })();
+</script>
