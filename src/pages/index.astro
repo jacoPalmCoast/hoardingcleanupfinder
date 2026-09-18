@@ -40,6 +40,12 @@ const msg = Astro.url.searchParams.get('msg');
     </p>
     <SearchForm />
     <p class="small">Not sure what kind of help you need? Start with <a href="/guides/how-to-choose-a-hoarding-cleanup-company">how to choose a cleanup company</a> or <a href="/guides/hoarding-cleanup-cost">what hoarding cleanup costs</a>.</p>
+    <div class="trustbar">
+      {total > 0 && <span class="ti"><b>{total.toLocaleString()}</b> companies listed</span>}
+      {states.length > 0 && <span class="ti"><b>{states.length}</b> states covered</span>}
+      <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Phone &amp; website checked</span>
+      <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Free to list &amp; no per-lead fees</span>
+    </div>
   </section>
 
   <section>
@@ -57,9 +63,9 @@ const msg = Astro.url.searchParams.get('msg');
   {cities.length > 0 && (
     <section>
       <h2>Cities</h2>
-      <ul class="list-links four">
+      <ul class="linkgrid">
         {cities.map((c) => (
-          <li><a href={`/${c.state.toLowerCase()}/${c.slug}`}>{c.name}, {c.state}</a> <span class="small">({c.listing_count})</span></li>
+          <li><a href={`/${c.state.toLowerCase()}/${c.slug}`}>{c.name}, {c.state} <span class="n">{c.listing_count}</span></a></li>
         ))}
       </ul>
     </section>
@@ -68,9 +74,9 @@ const msg = Astro.url.searchParams.get('msg');
   {states.length > 0 && (
     <section>
       <h2>Browse by state</h2>
-      <ul class="list-links four">
+      <ul class="linkgrid">
         {states.map((s) => (
-          <li><a href={`/state/${s.state.toLowerCase()}`}>{STATES[s.state]}</a> <span class="small">({s.n})</span></li>
+          <li><a href={`/state/${s.state.toLowerCase()}`}>{STATES[s.state]} <span class="n">{s.n}</span></a></li>
         ))}
       </ul>
     </section>

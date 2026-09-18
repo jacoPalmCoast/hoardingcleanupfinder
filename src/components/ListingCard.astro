@@ -10,6 +10,7 @@ const { l, showCity = true, source = 'city' } = Astro.props;
 const featured = isLive(l);
 const services = parseServices(l.services);
 const a = parseAttrs(l.attrs);
+const hasRating = l.review_count > 0 && l.rating != null;
 ---
 
 <article class:list={['card', { featured }]}>
@@ -22,7 +23,8 @@ const a = parseAttrs(l.attrs);
   <h3><a href={`/company/${l.slug}`}>{l.name}</a></h3>
   <div class="meta">
     {showCity && <span>{l.city}, {l.state}</span>}
-    {l.review_count > 0 && l.rating && <span> · {l.rating.toFixed(1)} ({l.review_count} reviews)</span>}
+    {showCity && hasRating && <span aria-hidden="true"> · </span>}
+    {hasRating && <span class="rating"><span class="star" aria-hidden="true">★</span> <b>{l.rating!.toFixed(1)}</b> <span class="rcount">({l.review_count} reviews)</span></span>}
   </div>
   {l.description && <p style="margin-bottom:6px">{l.description}</p>}
   <div class="small">{services.map((s) => SERVICE_BY_SLUG[s]?.name).filter(Boolean).join(' · ')}</div>
