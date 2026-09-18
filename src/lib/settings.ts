@@ -3,7 +3,7 @@
 // vars are the fallback so nothing breaks before a value is set.
 import { env } from './env';
 
-export const SETTING_KEYS = ['business_name', 'mailing_address', 'support_email', 'support_phone'] as const;
+export const SETTING_KEYS = ['business_name', 'mailing_address', 'support_email', 'support_phone', 'google_site_verification', 'bing_site_verification'] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 export async function getSettings(keys: readonly string[] = SETTING_KEYS): Promise<Record<string, string>> {
@@ -41,6 +41,18 @@ export async function featuredPricing(): Promise<FeaturedPricing> {
     annualUsd: s.price_annual_usd || env.FEATURED_ANNUAL_USD || '399',
     stripeMonthly: s.stripe_price_monthly || env.STRIPE_PRICE_MONTHLY || '',
     stripeAnnual: s.stripe_price_annual || env.STRIPE_PRICE_ANNUAL || '',
+  };
+}
+
+// Search-engine ownership-verification tokens (Google Search Console "HTML tag" method and Bing
+// Webmaster Tools). Rendered as <meta> tags on the homepage only, so no per-request cost elsewhere.
+// Editable in admin (no redeploy); env fallback for a set-and-forget deploy.
+export interface SiteVerification { google: string; bing: string }
+export async function siteVerification(): Promise<SiteVerification> {
+  const s = await getSettings(['google_site_verification', 'bing_site_verification']);
+  return {
+    google: s.google_site_verification || env.GOOGLE_SITE_VERIFICATION || '',
+    bing: s.bing_site_verification || env.BING_SITE_VERIFICATION || '',
   };
 }
 

@@ -33,6 +33,8 @@ export interface Env {
   HUNTER_API_KEY?: string;          // optional Hunter.io key — powers provider-based email enrichment + verification
   OPENCORPORATES_TOKEN?: string;    // optional OpenCorporates API token — owner/officer names from state filings
   GOOGLE_PLACES_KEY?: string;       // optional Google Places API key — extra business details by place_id
+  GOOGLE_SITE_VERIFICATION?: string; // optional GSC HTML-tag token (env fallback; admin setting preferred)
+  BING_SITE_VERIFICATION?: string;   // optional Bing Webmaster msvalidate.01 token (env fallback; admin setting preferred)
 }
 
 export const env = cfEnv as unknown as Env;
