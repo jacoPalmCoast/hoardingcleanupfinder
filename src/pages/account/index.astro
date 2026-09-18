@@ -19,10 +19,10 @@ const siteKey = env.TURNSTILE_SITE_KEY ?? '';
 const step = Astro.url.searchParams.get('step');
 const email = Astro.url.searchParams.get('email') ?? '';
 ---
-<Base title="Company account" description="Manage your listing." noindex>
+<Base title="Advertiser account" description="Manage your listing." noindex>
   {!owner ? (
     <>
-      <h1>Company sign in</h1>
+      <h1>Advertiser's Sign-in</h1>
       <p class="lede">We email you a code. No password to remember.</p>
       {msg === 'wrong-code' && <div class="notice error" role="alert">Wrong or expired code.</div>}
       {msg === 'invalid' && <div class="notice error" role="alert">Check the email address and try again.</div>}
