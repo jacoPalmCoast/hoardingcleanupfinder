@@ -103,6 +103,28 @@ const ld = { '@context': 'https://schema.org', '@graph': graph };
       </div>
       <div class="wrap small" style="margin-top:20px">If you are in immediate danger or someone needs urgent medical help, call 911. Information on this site is general and not medical or legal advice.</div>
     </footer>
+    <script is:inline>
+      // Insert a "Back" control just under the breadcrumbs on every page that has them.
+      // Goes to the previous page when the visitor arrived from within the site; otherwise
+      // falls back to the parent breadcrumb (or home) so a direct/search landing still works.
+      (function () {
+        var crumbs = document.querySelector('main .crumbs');
+        if (!crumbs || document.querySelector('.backlink')) return;
+        var links = crumbs.querySelectorAll('a');
+        var parent = links.length ? links[links.length - 1].getAttribute('href') : '/';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'backlink';
+        btn.setAttribute('aria-label', 'Go back to the previous page');
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back';
+        btn.addEventListener('click', function () {
+          var sameSite = document.referrer && document.referrer.indexOf(location.origin + '/') === 0;
+          if (sameSite && history.length > 1) history.back();
+          else location.href = parent || '/';
+        });
+        crumbs.insertAdjacentElement('afterend', btn);
+      })();
+    </script>
     {env.WEB_ANALYTICS_TOKEN && (
       <script is:inline defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon={`{"token": "${env.WEB_ANALYTICS_TOKEN}"}`}></script>
     )}

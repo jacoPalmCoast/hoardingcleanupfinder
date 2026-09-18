@@ -97,8 +97,13 @@ footer.site .cols { display: grid; gap: 28px 48px; grid-template-columns: 1fr; }
 .hero { padding: clamp(20px, 4vw, 48px) 0 4px; }
 .hero h1 { max-width: 18ch; }
 .lede { font-size: clamp(1.05rem, 1rem + .35vw, 1.2rem); color: var(--muted); max-width: 60ch; margin-top: 1rem; }
-.crumbs { font-size: .85rem; color: var(--muted); margin-bottom: 14px; }
+.crumbs { font-size: .85rem; color: var(--muted); margin-bottom: 10px; }
 .crumbs a { color: var(--muted); }
+/* "Back" control inserted just under the breadcrumbs (see Base.astro). */
+.backlink { display: inline-flex; align-items: center; gap: 6px; font-family: inherit; font-size: .88rem; font-weight: 500; line-height: 1; color: var(--teal); background: none; border: 0; padding: 4px 0; margin: 0 0 16px; cursor: pointer; }
+.backlink svg { flex: none; }
+.backlink:hover { color: var(--teal-dark); text-decoration: underline; text-underline-offset: 2px; }
+.backlink:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; border-radius: 3px; }
 
 /* ---------- forms & search ---------- */
 form.search { display: flex; flex-wrap: wrap; gap: 10px; margin: 26px 0 10px; max-width: 640px; }
