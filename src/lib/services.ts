@@ -67,11 +67,15 @@ export async function sendEmail(to: string, subject: string, html: string, opts:
   let ok = false;
   let resendId: string | undefined;
   let errMsg: string | undefined;
+  // Show a friendly display name in the inbox ("Hoarding Cleanup Finder <hello@…>") rather than a
+  // bare address. If FROM_EMAIL already carries a name, keep it as-is.
+  const bareFrom = env.FROM_EMAIL.replace(/.*<|>.*/g, '').trim();
+  const fromField = env.FROM_EMAIL.includes('<') ? env.FROM_EMAIL : `${env.SITE_NAME} <${bareFrom}>`;
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ from: env.FROM_EMAIL, to: [to], subject, html: outHtml, text: opts.text ?? outHtml.replace(/<[^>]+>/g, ''), headers }),
+      body: JSON.stringify({ from: fromField, to: [to], subject, html: outHtml, text: opts.text ?? outHtml.replace(/<[^>]+>/g, ''), headers }),
     });
     ok = res.ok;
     if (res.ok) {
