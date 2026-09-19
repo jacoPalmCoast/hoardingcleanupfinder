@@ -3,6 +3,7 @@ import Admin from '../../layouts/Admin.astro';
 import { env } from '../../lib/env';
 import { now } from '../../lib/util';
 import { tsToDate } from '../../lib/util';
+import { listInvoices, openBalance } from '../../lib/billing';
 
 // Every listing that has ever had a Stripe customer, newest activity first, with the owner email.
 type Row = {
@@ -36,7 +37,18 @@ const money = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDi
 const planLabel = (r: Row) => r.plan_interval === 'year' ? 'Annual' : r.plan_interval === 'month' ? 'Monthly' : '—';
 const when = (v: unknown) => { const d = tsToDate(v); return d ? d.toLocaleDateString('en-US') : '—'; };
 const STATUS_PILL: Record<string, string> = { active: 'ok', trialing: 'info', past_due: 'warn', canceled: 'muted', incomplete: 'warn', unpaid: 'bad' };
+const INV_PILL: Record<string, string> = { paid: 'ok', open: 'warn', uncollectible: 'bad', void: 'muted', draft: 'muted' };
 const stripeBase = 'https://dashboard.stripe.com';
+const msg = Astro.url.searchParams.get('msg');
+
+// Per-client detail when ?id= is present.
+const detailId = Number(Astro.url.searchParams.get('id') ?? 0);
+const detail = detailId ? rows.find((r) => r.id === detailId) ?? null : null;
+const detInvoices = detail ? await listInvoices(detail.id) : [];
+const detBalance = detail ? await openBalance(detail.id) : 0;
+const detDunning = detail ? (await env.DB.prepare(`SELECT dunning_started_at AS d, cancel_at_period_end AS c FROM listings WHERE id = ?1`).bind(detail.id).first<{ d: number | null; c: number }>()) : null;
+const dunningDay = detDunning?.d ? Math.floor((t - detDunning.d) / 86400) : null;
+const whenD = (v: unknown) => { const d = tsToDate(v); return d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'; };
 ---
 <Admin title="Billing">
   <p slot="sub" class="sub">Paying and lapsed customers from Stripe · featured state is controlled by Stripe webhooks only</p>
@@ -48,6 +60,51 @@ const stripeBase = 'https://dashboard.stripe.com';
     <div class="stat"><b>{pastDue}</b><span>Past due</span></div>
     <div class="stat"><b>{canceled}</b><span>Canceled / lapsed</span></div>
   </div>
+
+  {msg === 'synced' && <div class="notice" role="status">Invoices synced from Stripe.</div>}
+  {msg === 'sync-error' && <div class="notice error" role="alert">Couldn't sync from Stripe — check the customer exists in the current mode.</div>}
+
+  {detail && (
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-h">
+        <h3>{detail.name} — billing detail</h3>
+        <a class="linkish" href="/admin/billing" style="margin-left:auto">← All customers</a>
+      </div>
+      <div class="card-b">
+        <div class="stats" style="margin-bottom:14px">
+          <div class="stat"><b>{detail.subscription_status ? <span class={`pill ${STATUS_PILL[detail.subscription_status] ?? 'muted'}`}>{detail.subscription_status.replace('_', ' ')}</span> : '—'}</b><span>Status</span></div>
+          <div class="stat"><b>{detail.plan_amount ? money(detail.plan_amount / 100) + (detail.plan_interval === 'year' ? '/yr' : '/mo') : '—'}</b><span>Plan</span></div>
+          <div class="stat"><b>{whenD(detail.featured_until)}</b><span>{detDunning?.c ? 'Cancels' : 'Featured until'}</span></div>
+          <div class="stat"><b style={detBalance > 0 ? 'color:var(--a-bad,#b3261e)' : ''}>{detBalance > 0 ? money(detBalance / 100) : '$0.00'}</b><span>Balance due</span></div>
+          <div class="stat"><b style={dunningDay !== null ? 'color:var(--a-warn,#a9740d)' : ''}>{dunningDay !== null ? `Day ${dunningDay} / 7` : '—'}</b><span>Dunning</span></div>
+        </div>
+        <div style="display:flex;gap:10px 14px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <form action="/api/admin/billing" method="post" style="display:inline"><input type="hidden" name="id" value={detail.id} /><input type="hidden" name="action" value="sync" /><button class="btn small secondary" type="submit">Sync from Stripe</button></form>
+          <a class="btn small secondary" href={`/admin/listings?id=${detail.id}`}>Listing</a>
+          {detail.stripe_customer_id && <a class="btn small secondary" href={`${stripeBase}/customers/${detail.stripe_customer_id}`} target="_blank" rel="noopener">Stripe customer ↗</a>}
+          <span class="sub2">Owner: {detail.owner_email ?? '—'}</span>
+        </div>
+        {detInvoices.length === 0 ? (
+          <p class="sub" style="margin:8px 0 0">No invoices recorded yet. Use “Sync from Stripe” to pull history.</p>
+        ) : (
+          <div class="table-wrap"><table>
+            <thead><tr><th>Date</th><th>Period</th><th>Amount</th><th>Status</th><th>Invoice</th></tr></thead>
+            <tbody>
+              {detInvoices.map((inv) => (
+                <tr>
+                  <td class="mut" style="white-space:nowrap">{whenD(inv.created)}</td>
+                  <td class="mut">{inv.period_start && inv.period_end ? `${whenD(inv.period_start)} – ${whenD(inv.period_end)}` : (inv.number ?? '—')}</td>
+                  <td style="white-space:nowrap">{money(((inv.status === 'paid' ? inv.amount_paid : inv.amount_due) ?? 0) / 100)}</td>
+                  <td><span class={`pill ${INV_PILL[inv.status ?? ''] ?? 'muted'}`}>{inv.status ?? '—'}</span></td>
+                  <td>{inv.hosted_invoice_url ? <a href={inv.hosted_invoice_url} target="_blank" rel="noopener">open ↗</a> : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+        )}
+      </div>
+    </div>
+  )}
 
   {rows.length === 0 ? (
     <div class="card"><div class="empty">
@@ -70,8 +127,8 @@ const stripeBase = 'https://dashboard.stripe.com';
               <td>{r.subscription_status ? <span class={`pill ${STATUS_PILL[r.subscription_status] ?? 'muted'}`}>{r.subscription_status.replace('_', ' ')}</span> : <span class="mut">—</span>}</td>
               <td class="mut">{when(r.featured_until)}</td>
               <td class="mut">
-                {r.stripe_customer_id ? <a href={`${stripeBase}/customers/${r.stripe_customer_id}`} target="_blank" rel="noopener">customer ↗</a> : '—'}
-                {r.stripe_subscription_id && <> · <a href={`${stripeBase}/subscriptions/${r.stripe_subscription_id}`} target="_blank" rel="noopener">sub ↗</a></>}
+                <a href={`/admin/billing?id=${r.id}`}>details</a>
+                {r.stripe_customer_id && <> · <a href={`${stripeBase}/customers/${r.stripe_customer_id}`} target="_blank" rel="noopener">Stripe ↗</a></>}
               </td>
             </tr>
           ))}

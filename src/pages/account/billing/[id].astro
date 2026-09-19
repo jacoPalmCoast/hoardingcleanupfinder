@@ -1,0 +1,112 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { currentOwner, ownerOwns } from '../../../lib/services';
+import { getListingById, isLive } from '../../../lib/db';
+import { tsToDate } from '../../../lib/util';
+import { listInvoices, openBalance, money } from '../../../lib/billing';
+
+const owner = await currentOwner(Astro.request);
+if (!owner) return Astro.redirect('/account', 302);
+const id = Number(Astro.params.id);
+if (!Number.isInteger(id) || !(await ownerOwns(owner.id, id))) return new Response('Forbidden', { status: 403 });
+const l = await getListingById(id);
+if (!l) return new Response(null, { status: 404 });
+
+const invoices = await listInvoices(id);
+const balance = await openBalance(id);
+const featured = isLive(l);
+const active = l.subscription_status === 'active' || l.subscription_status === 'trialing';
+const cancelScheduled = l.cancel_at_period_end === 1;
+const untilDate = l.featured_until ? tsToDate(l.featured_until)?.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null;
+const msg = Astro.url.searchParams.get('msg');
+const when = (v: unknown) => { const d = tsToDate(v); return d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'; };
+const planLabel = l.plan_interval === 'year' ? 'Annual' : l.plan_interval === 'month' ? 'Monthly' : null;
+const priceLabel = l.plan_amount ? `${money(l.plan_amount, 'usd')}${l.plan_interval === 'year' ? '/yr' : '/mo'}` : null;
+const STATUS: Record<string, { label: string; cls: string }> = {
+  active: { label: 'Active', cls: 'ok' }, trialing: { label: 'Trial', cls: 'info' },
+  past_due: { label: 'Payment failing', cls: 'warn' }, unpaid: { label: 'Unpaid', cls: 'bad' },
+  canceled: { label: 'Canceled', cls: 'muted' },
+};
+const st = l.subscription_status ? (STATUS[l.subscription_status] ?? { label: l.subscription_status, cls: 'muted' }) : null;
+const INV_PILL: Record<string, string> = { paid: 'ok', open: 'warn', uncollectible: 'bad', void: 'muted', draft: 'muted' };
+---
+<Base title={`Billing — ${l.name}`} description="Billing and payments." noindex>
+  <p class="crumbs"><a href="/account">Your listings</a> › <a href={`/account/edit/${l.id}`}>{l.name}</a> › Billing</p>
+  <h1>Billing</h1>
+  <p class="small" style="margin-top:-6px">{l.name} · {l.city}, {l.state}</p>
+
+  {msg === 'canceled' && <div class="notice" role="status"><strong>Cancellation scheduled.</strong> Your listing stays featured until the end of the paid period, then returns to a free listing.</div>}
+  {msg === 'resumed' && <div class="notice" role="status"><strong>You're all set.</strong> Your featured subscription will keep renewing.</div>}
+  {msg === 'error' && <div class="notice error" role="alert">Something went wrong. Please try again, or use Manage billing.</div>}
+
+  <div class="bill-grid">
+    <div class="bcard">
+      <span class="blabel">Plan</span>
+      <span class="bval">{planLabel ?? (featured ? 'Featured' : 'Free listing')}</span>
+      {priceLabel && <span class="bsub">{priceLabel}</span>}
+    </div>
+    <div class="bcard">
+      <span class="blabel">Status</span>
+      <span class="bval">{st ? <span class={`pill ${st.cls}`}>{st.label}</span> : (featured ? <span class="pill ok">Active</span> : 'Free listing')}</span>
+    </div>
+    <div class="bcard">
+      <span class="blabel">{cancelScheduled ? 'Featured until' : active ? 'Renews' : 'Featured until'}</span>
+      <span class="bval">{untilDate ?? '—'}</span>
+      {cancelScheduled && <span class="bsub" style="color:var(--a-warn,#a9740d)">Cancels — won't renew</span>}
+    </div>
+    <div class="bcard">
+      <span class="blabel">Balance due</span>
+      <span class="bval">{balance > 0 ? money(balance, 'usd') : '$0.00'}</span>
+      {balance > 0 && <span class="bsub" style="color:var(--a-bad,#b3261e)">Update your card below</span>}
+    </div>
+  </div>
+
+  <div class="bill-actions">
+    {(isLive(l) || l.stripe_customer_id) && (
+      <form action="/api/stripe/portal" method="post" style="display:inline"><button type="submit" class="btn secondary">Update card / receipts</button></form>
+    )}
+    {active && l.stripe_subscription_id && (
+      cancelScheduled ? (
+        <form action="/api/account/cancel" method="post" style="display:inline"><input type="hidden" name="id" value={l.id} /><input type="hidden" name="action" value="resume" /><button type="submit" class="btn">Resume subscription</button></form>
+      ) : (
+        <form action="/api/account/cancel" method="post" style="display:inline" onsubmit="return confirm('Cancel featured? Your listing stays featured until the end of the paid period, then returns to a free listing. You can resume any time before then.')"><input type="hidden" name="id" value={l.id} /><input type="hidden" name="action" value="cancel" /><button type="submit" class="linkbtn" style="color:var(--a-bad,#b3261e)">Cancel featured</button></form>
+      )
+    )}
+    {!featured && !active && <a class="btn" href={`/featured/${l.slug}`}>Get featured</a>}
+  </div>
+
+  <h2 style="margin-top:32px">Payment history</h2>
+  {invoices.length === 0 ? (
+    <div class="card"><div class="empty"><b>No payments yet</b>Charges and receipts will appear here once your first payment processes.</div></div>
+  ) : (
+    <div class="card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Status</th><th>Receipt</th></tr></thead>
+        <tbody>
+          {invoices.map((inv) => (
+            <tr>
+              <td class="mut" style="white-space:nowrap">{when(inv.created)}</td>
+              <td class="mut">{inv.period_start && inv.period_end ? `${when(inv.period_start)} – ${when(inv.period_end)}` : (inv.number ?? 'Featured listing')}</td>
+              <td style="white-space:nowrap">{money(inv.status === 'paid' ? inv.amount_paid : inv.amount_due, inv.currency ?? 'usd')}</td>
+              <td><span class={`pill ${INV_PILL[inv.status ?? ''] ?? 'muted'}`}>{inv.status ?? '—'}</span></td>
+              <td>{inv.hosted_invoice_url ? <a href={inv.hosted_invoice_url} target="_blank" rel="noopener noreferrer">View</a> : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    </div>
+  )}
+  <p class="small" style="margin-top:14px"><a href={`/account/edit/${l.id}`}>← Back to editing {l.name}</a></p>
+</Base>
+
+<style>
+  .bill-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 18px 0; }
+  .bcard { border: 1px solid #e0e5e5; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+  .blabel { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted, #6b7280); font-weight: 600; }
+  .bval { font-size: 1.15rem; font-weight: 600; }
+  .bsub { font-size: .82rem; color: var(--muted, #6b7280); }
+  .bill-actions { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; margin: 8px 0 4px; }
+  .bill-actions .btn { width: auto; }
+  .empty { text-align: center; padding: 24px 12px; color: var(--muted, #6b7280); }
+  .empty b { display: block; color: var(--text, #111); margin-bottom: 4px; }
+</style>

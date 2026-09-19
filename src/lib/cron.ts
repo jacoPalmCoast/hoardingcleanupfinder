@@ -2,6 +2,7 @@ import { env } from './env';
 import { now, escapeHtml } from './util';
 import { sendEmail, emailShell } from './services';
 import { rollupEvents, pruneEvents, statsForDayRange, type ListingStats } from './db';
+import { audit } from './audit';
 import { renderTemplate } from './outreach';
 import { runBatch, aiEnrichBatch, opencorpBatch } from './enrich';
 import { runDiscovery } from './discovery';
@@ -55,19 +56,47 @@ async function renewalReminders(): Promise<number> {
   return n;
 }
 
-// 2) Past-due nudge — a card that failed to charge. Stripe keeps retrying; this is a courtesy prompt.
-async function pastDueNudge(): Promise<number> {
+// 2) Dunning — a card that failed to charge. The webhook stamps dunning_started_at on the first
+// failure and sends the immediate notice; this job sends a daily reminder for the next several days
+// and, on day 7, demotes the listing to a free listing (still visible, just not featured). Stripe
+// keeps retrying the card in parallel; a successful retry fires invoice.paid, which clears the clock
+// and re-features the listing automatically. Second documented writer of is_featured (see webhook
+// Invariant 2): this billing-driven demotion, only after 7 unpaid days.
+const DUNNING_DAYS = 7;
+async function billingDunning(): Promise<number> {
+  const t = now();
   const rows = (await env.DB.prepare(
-    `SELECT l.id, l.name, l.slug, l.city, l.featured_until, l.subscription_status, ${ownerEmailSub} AS email
-     FROM listings l WHERE l.subscription_status = 'past_due'`,
-  ).all<FRow>()).results;
+    `SELECT l.id, l.name, l.slug, l.city, l.is_featured, l.subscription_status, l.dunning_started_at, ${ownerEmailSub} AS email
+     FROM listings l WHERE l.dunning_started_at IS NOT NULL`,
+  ).all<{ id: number; name: string; slug: string; city: string; is_featured: number; subscription_status: string | null; dunning_started_at: number | null; email: string | null }>()).results;
   let n = 0;
   for (const l of rows) {
-    if (!l.email) continue;
-    if (await alreadySent('past_due_nudge', l.id, 4)) continue;
-    const body = `<p>We couldn't charge the card on file for <a href="${env.SITE_URL}/company/${l.slug}">${escapeHtml(l.name)}</a>. Stripe will keep retrying over the next few days. To update your card and keep your featured placement, <a href="${env.SITE_URL}/account">open your account</a> and click Manage billing. If the retries fail your listing simply goes back to free — nothing is deleted.</p>`;
-    await sendEmail(l.email, `Update your card for ${l.name}`, emailShell('Payment needs attention', body), { stream: 'txn', type: 'past_due_nudge', listingId: l.id });
-    n++;
+    // Only dun while Stripe still reports the subscription as failing. Any other state (recovered,
+    // canceled, …) is owned by another flow — clear the clock and move on.
+    if (l.subscription_status !== 'past_due' && l.subscription_status !== 'unpaid') {
+      await env.DB.prepare(`UPDATE listings SET dunning_started_at = NULL WHERE id = ?1`).bind(l.id).run();
+      continue;
+    }
+    const days = Math.floor((t - (l.dunning_started_at ?? t)) / DAY);
+    if (days >= DUNNING_DAYS) {
+      if (l.is_featured === 1) {
+        await env.DB.prepare(`UPDATE listings SET is_featured = 0, featured_until = 0, updated_at = unixepoch() WHERE id = ?1`).bind(l.id).run();
+        await audit('system', 'billing', l.id, 'billing.demote', { is_featured: 1 }, { is_featured: 0 });
+      }
+      await env.DB.prepare(`UPDATE listings SET dunning_started_at = NULL WHERE id = ?1`).bind(l.id).run();
+      if (l.email && !(await alreadySent('billing_demoted', l.id, 30))) {
+        const body = `<p>We weren't able to collect payment for the featured listing <a href="${env.SITE_URL}/company/${l.slug}">${escapeHtml(l.name)}</a>, so it's moved back to a free listing for now — still listed in ${escapeHtml(l.city)}, just no longer at the top, and nothing was deleted.</p><p>To restore your featured placement, update your card and it goes straight back up: <a href="${env.SITE_URL}/account/billing/${l.id}">reactivate here</a>.</p>`;
+        await sendEmail(l.email, `Your featured listing moved to free — ${l.name}`, emailShell('Moved to a free listing', body), { stream: 'txn', type: 'billing_demoted', listingId: l.id });
+      }
+      n++;
+    } else {
+      if (!l.email) continue;
+      if (await alreadySent('billing_dunning', l.id, 0.9)) continue;
+      const left = DUNNING_DAYS - days;
+      const body = `<p>We still can't charge the card on file for the featured listing <a href="${env.SITE_URL}/company/${l.slug}">${escapeHtml(l.name)}</a>.</p><p>Please update your card on <a href="${env.SITE_URL}/account/billing/${l.id}">your billing page</a>. In <strong>${left} day${left === 1 ? '' : 's'}</strong> the listing drops back to a free listing if it isn't sorted — nothing is deleted, and it returns to the top the moment payment goes through.</p>`;
+      await sendEmail(l.email, `Reminder: update your card — ${l.name}`, emailShell('Payment still needed', body), { stream: 'txn', type: 'billing_dunning', listingId: l.id });
+      n++;
+    }
   }
   return n;
 }
@@ -204,7 +233,7 @@ export async function runDailyJobs(): Promise<CronResult> {
   try { ran.push(`rollup:${await rollupEvents()}`); } catch (e) { console.error('cron rollup', (e as Error)?.message); ran.push('rollup:err'); }
   const jobs: [string, () => Promise<number>][] = [
     ['renewal', renewalReminders],
-    ['past_due', pastDueNudge],
+    ['dunning', billingDunning],
     ['winback', winback],
     ['claim_followup', claimFollowup],
     ['monthly_report', monthlyReports],

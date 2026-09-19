@@ -68,7 +68,7 @@ const email = Astro.url.searchParams.get('email') ?? '';
               <p class="small" style="margin:8px 0 0">
                 {l.plan_amount ? `${l.plan_interval === 'year' ? 'Annual' : 'Monthly'} plan · $${(l.plan_amount / 100).toLocaleString('en-US')}${l.plan_interval === 'year' ? '/yr' : '/mo'}` : 'Featured plan'}
                 {l.subscription_status ? ` · ${l.subscription_status}` : ''}
-                {l.featured_until ? ` · ${l.subscription_status === 'active' || l.subscription_status === 'trialing' ? 'renews' : 'ends'} ${(tsToDate(l.featured_until)?.toLocaleDateString('en-US')) ?? ''}` : ''}
+                {l.featured_until ? ` · ${l.cancel_at_period_end ? 'cancels' : (l.subscription_status === 'active' || l.subscription_status === 'trialing') ? 'renews' : 'ends'} ${(tsToDate(l.featured_until)?.toLocaleDateString('en-US')) ?? ''}` : ''}
               </p>
             )}
             {stats.get(l.id) && (
@@ -87,7 +87,7 @@ const email = Astro.url.searchParams.get('email') ?? '';
                 <>
                   <a class="btn small secondary" href={`/company/${l.slug}`} target="_blank" rel="noopener">View page</a>
                   <a class="btn small secondary" href={`/account/performance/${l.id}`}>Performance</a>
-                  {isLive(l) || l.stripe_customer_id ? <form action="/api/stripe/portal" method="post" style="display:inline"><button type="submit" class="btn small secondary">Manage billing</button></form> : <><a class="btn small secondary" href={`/company/${l.slug}?preview=1`}>Preview featured</a><a class="btn small" href={`/featured/${l.slug}`}>Get featured</a></>}
+                  {isLive(l) || l.stripe_customer_id ? <a class="btn small secondary" href={`/account/billing/${l.id}`}>Billing</a> : <><a class="btn small secondary" href={`/company/${l.slug}?preview=1`}>Preview featured</a><a class="btn small" href={`/featured/${l.slug}`}>Get featured</a></>}
                 </>
               )}
             </div>

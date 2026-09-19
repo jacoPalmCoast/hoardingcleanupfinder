@@ -29,6 +29,8 @@ export interface Listing {
   subscription_status: string | null;
   plan_interval: string | null;
   plan_amount: number | null;
+  cancel_at_period_end: number;
+  dunning_started_at: number | null;
   status: string;
   source: string | null;
   place_id: string | null;
