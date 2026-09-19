@@ -71,10 +71,11 @@ export async function listInvoices(listingId: number, limit = 24): Promise<Invoi
   return r.results;
 }
 
-// Outstanding balance = amount still due on open/uncollectible invoices (cents).
+// Outstanding balance = amount still due on OPEN invoices only (cents). Voided invoices are $0 and
+// 'uncollectible' ones are written off, so neither is money the advertiser currently owes.
 export async function openBalance(listingId: number): Promise<number> {
   const r = await env.DB.prepare(
-    `SELECT COALESCE(SUM(amount_due), 0) AS due FROM invoices WHERE listing_id = ?1 AND status IN ('open','uncollectible')`,
+    `SELECT COALESCE(SUM(amount_due), 0) AS due FROM invoices WHERE listing_id = ?1 AND status = 'open'`,
   ).bind(listingId).first<{ due: number }>();
   return r?.due ?? 0;
 }

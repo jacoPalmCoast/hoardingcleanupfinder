@@ -107,15 +107,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
         listingId = await listingIdFrom(String(inv.customer));
       }
       if (listingId) {
+        // Per-invoice idempotency: if this invoice is already recorded paid, a webhook retry is
+        // replaying — do the (idempotent) state writes but never re-send the receipt.
+        const prevStatus = (await env.DB.prepare(`SELECT status FROM invoices WHERE id = ?1`).bind(inv.id).first<{ status: string | null }>())?.status ?? null;
         await upsertInvoice(inv, listingId);
         // Payment succeeded: clear any dunning clock so the daily sequence stops.
         await env.DB.prepare(`UPDATE listings SET dunning_started_at = NULL WHERE id = ?1`).bind(listingId).run();
-        // Branded receipt — only for a real charge (skip $0 trial-start invoices).
+        // Branded receipt — only for a real charge (skip $0 trial-start invoices) and only the first
+        // time this invoice is seen paid.
         const paid = typeof inv.amount_paid === 'number' ? inv.amount_paid : 0;
-        if (paid > 0) {
+        if (paid > 0 && prevStatus !== 'paid') {
           const l = await env.DB.prepare(`SELECT name, slug, featured_until FROM listings WHERE id = ?1`).bind(listingId).first<{ name: string; slug: string; featured_until: number | null }>();
-          const to = inv.customer_email || (l ? null : null);
-          const email = to || (await env.DB.prepare(`SELECT o.email AS e FROM owner_listings ol JOIN owners o ON o.id = ol.owner_id WHERE ol.listing_id = ?1 ORDER BY ol.owner_id LIMIT 1`).bind(listingId).first<{ e: string }>())?.e;
+          const email = inv.customer_email || (await env.DB.prepare(`SELECT o.email AS e FROM owner_listings ol JOIN owners o ON o.id = ol.owner_id WHERE ol.listing_id = ?1 ORDER BY ol.owner_id LIMIT 1`).bind(listingId).first<{ e: string }>())?.e;
           if (email && l) {
             const renews = l.featured_until ? new Date(l.featured_until * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null;
             const link = inv.hosted_invoice_url;
@@ -132,19 +135,32 @@ export const POST: APIRoute = async ({ request, locals }) => {
     case 'invoice.payment_failed': {
       const inv = event.data.object as Stripe.Invoice;
       const listingId = await listingIdFrom(String(inv.customer));
-      const l = listingId ? await env.DB.prepare(`SELECT name, slug FROM listings WHERE id = ?1`).bind(listingId).first<{ name: string; slug: string }>() : null;
+      const l = listingId ? await env.DB.prepare(`SELECT name, slug, dunning_started_at FROM listings WHERE id = ?1`).bind(listingId).first<{ name: string; slug: string; dunning_started_at: number | null }>() : null;
+      // Stripe fires this on every failed retry attempt. Treat the first one (clock not yet running)
+      // as the start of dunning; only then send the immediate notice. The daily cron owns the rest.
+      const firstFailure = !!listingId && !l?.dunning_started_at;
       if (listingId) {
         await upsertInvoice(inv, listingId);
-        // Start the dunning clock on the FIRST failure of a run; leave it if already ticking.
         await env.DB.prepare(`UPDATE listings SET dunning_started_at = COALESCE(dunning_started_at, ?2) WHERE id = ?1`).bind(listingId, now()).run();
         await audit('system', 'stripe', listingId, 'billing.payment_failed', null, { invoice: inv.id });
       }
-      const email = inv.customer_email || (listingId ? (await env.DB.prepare(`SELECT o.email AS e FROM owner_listings ol JOIN owners o ON o.id = ol.owner_id WHERE ol.listing_id = ?1 ORDER BY ol.owner_id LIMIT 1`).bind(listingId).first<{ e: string }>())?.e : null);
+      const email = firstFailure ? (inv.customer_email || (listingId ? (await env.DB.prepare(`SELECT o.email AS e FROM owner_listings ol JOIN owners o ON o.id = ol.owner_id WHERE ol.listing_id = ?1 ORDER BY ol.owner_id LIMIT 1`).bind(listingId).first<{ e: string }>())?.e : null)) : null;
       if (email) {
         const body = `<p>We couldn't charge the card on file for the featured listing${l ? ` <a href="${env.SITE_URL}/company/${l.slug}">${escapeHtml(l.name)}</a>` : ''}. We'll try again and remind you daily for the next few days.</p>`
           + `<p>To fix it now, update your card on <a href="${env.SITE_URL}/account/billing/${listingId ?? ''}">your billing page</a>. If it isn't sorted within 7 days the listing drops back to a free listing — nothing is deleted, and it returns to the top the moment payment goes through.</p>`;
         await sendEmail(email, `Payment failed — ${l?.name ?? 'your featured listing'}`, emailShell('Payment needs attention', body), { stream: 'txn', type: 'billing_failed', listingId: listingId ?? undefined });
       }
+      break;
+    }
+    case 'invoice.voided':
+    case 'invoice.marked_uncollectible':
+    case 'invoice.finalized':
+    case 'invoice.updated': {
+      // Keep the local mirror's status/amounts current so the advertiser never sees a phantom
+      // balance for an invoice Stripe has since voided or written off.
+      const inv = event.data.object as Stripe.Invoice;
+      const listingId = await listingIdFrom(String(inv.customer));
+      if (listingId) await upsertInvoice(inv, listingId);
       break;
     }
     default:

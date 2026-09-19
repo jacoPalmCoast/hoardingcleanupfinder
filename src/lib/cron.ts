@@ -27,13 +27,13 @@ async function alreadySent(type: string, listingId: number, withinDays: number):
 
 const ownerEmailSub = `(SELECT o.email FROM owner_listings ol JOIN owners o ON o.id = ol.owner_id WHERE ol.listing_id = l.id ORDER BY ol.owner_id LIMIT 1)`;
 
-interface FRow { id: number; name: string; slug: string; city: string; featured_until: number | null; subscription_status: string | null; email: string | null }
+interface FRow { id: number; name: string; slug: string; city: string; featured_until: number | null; subscription_status: string | null; cancel_at_period_end?: number; email: string | null }
 
 // 1) Featured-expiring / renewal reminder — 7 days and 1 day before featured_until.
 async function renewalReminders(): Promise<number> {
   const t = now();
   const rows = (await env.DB.prepare(
-    `SELECT l.id, l.name, l.slug, l.city, l.featured_until, l.subscription_status, ${ownerEmailSub} AS email
+    `SELECT l.id, l.name, l.slug, l.city, l.featured_until, l.subscription_status, l.cancel_at_period_end, ${ownerEmailSub} AS email
      FROM listings l
      WHERE l.is_featured = 1 AND l.featured_until IS NOT NULL AND l.featured_until > ?1 AND l.featured_until < ?1 + 9 * 86400`,
   ).bind(t).all<FRow>()).results;
@@ -44,7 +44,8 @@ async function renewalReminders(): Promise<number> {
     const type = days >= 6 && days < 8 ? 'renewal_7d' : days >= 0 && days < 2 ? 'renewal_1d' : '';
     if (!type) continue;
     if (await alreadySent(type, l.id, type === 'renewal_7d' ? 20 : 5)) continue;
-    const active = l.subscription_status === 'active' || l.subscription_status === 'trialing';
+    // A subscription set to cancel at period end is ENDING, not renewing — send the "ends soon" copy.
+    const active = (l.subscription_status === 'active' || l.subscription_status === 'trialing') && l.cancel_at_period_end !== 1;
     const when = type === 'renewal_7d' ? 'in about a week' : 'tomorrow';
     const link = `${env.SITE_URL}/company/${l.slug}`;
     const body = active
