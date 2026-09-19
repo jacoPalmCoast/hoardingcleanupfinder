@@ -41,6 +41,7 @@ const ICONS: Record<string, string> = {
   setup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>',
   signout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>',
+  agent: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2.5"/><path d="M12 8V4M8 3h8M8.5 14h.01M15.5 14h.01"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
 };
@@ -66,6 +67,7 @@ const groups: { title?: string; items: Item[] }[] = [
     { href: '/admin/discounts', label: 'Discounts', icon: 'discount' },
   ] },
   { title: 'Insights', items: [
+    { href: '/admin/agent', label: 'Assistant', icon: 'agent' },
     { href: '/admin/analytics', label: 'Analytics', icon: 'analytics' },
     { href: '/admin/demand', label: 'Demand', icon: 'search' },
     { href: '/admin/feedback', label: 'Feedback', icon: 'bell', count: feedbackNew, hot: feedbackNew > 0 },

@@ -5,7 +5,9 @@ export interface Env {
   ASSETS: Fetcher;
   ATTACH?: R2Bucket;                // private R2 bucket for inbound support-email attachments
   PHOTOS?: R2Bucket;                // listing photos, served via the /img/ route
-  AI?: { run: (model: string, input: unknown) => Promise<unknown> };  // Workers AI (LLM extraction)
+  AI?: { run: (model: string, input: unknown) => Promise<unknown> };  // Workers AI (LLM extraction + admin agent fallback)
+  ANTHROPIC_API_KEY?: string;   // when set, the admin agent uses Claude; otherwise Workers AI
+  AGENT_MODEL?: string;         // optional Claude model override for the admin agent
   SITE_URL: string;
   SITE_NAME: string;
   FROM_EMAIL: string;
