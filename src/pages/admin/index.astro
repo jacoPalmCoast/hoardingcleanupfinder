@@ -7,7 +7,7 @@ import { tsToDate } from '../../lib/util';
 
 const c = await adminCounts();
 const support = await pendingTicketCount().catch(() => 0);
-const claimsPending = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM claims WHERE status = 'pending'`).first<{ n: number }>().catch(() => null))?.n ?? 0;
+const claimsPending = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM claims WHERE status = 'review'`).first<{ n: number }>().catch(() => null))?.n ?? 0;
 const statesRow = await env.DB.prepare(`SELECT COUNT(DISTINCT state) AS n FROM listings WHERE status = 'active'`).first<{ n: number }>().catch(() => null);
 const states = statesRow?.n ?? 0;
 const recent = (await env.DB.prepare(`SELECT id, name, city, state, featured_until FROM listings WHERE is_featured = 1 ORDER BY featured_until DESC LIMIT 12`).all<any>()).results;
