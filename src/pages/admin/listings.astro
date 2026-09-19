@@ -5,6 +5,7 @@ import { SERVICES } from '../../data/services';
 import { parseServices, tsToDate } from '../../lib/util';
 import type { Listing } from '../../lib/db';
 import { CERTIFICATIONS, LANGUAGES, parseAttrs, parseFaq, CUSTOM_FAQ_LIMIT } from '../../data/attrs';
+import { listPhotos } from '../../lib/photos';
 const id = Number(Astro.url.searchParams.get('id') ?? 0);
 const q = (Astro.url.searchParams.get('q') ?? '').trim();
 let one: Listing | null = null;
@@ -24,6 +25,7 @@ if (id) {
 } else if (q) rows = (await env.DB.prepare(`SELECT * FROM listings WHERE name LIKE ?1 OR phone_digits LIKE ?1 OR city LIKE ?1 OR email LIKE ?1 ORDER BY name LIMIT 100`).bind(`%${q}%`).all<Listing>()).results;
 const msg = Astro.url.searchParams.get('msg');
 const a = one ? parseAttrs(one.attrs) : null;
+const photos = one ? await listPhotos(one.id) : [];
 const faq = one ? parseFaq(one.custom_faq) : [];
 const when = (t: unknown) => { const d = tsToDate(t); return d ? d.toLocaleString('en-US', { timeZone: 'America/New_York' }) : '—'; };
 const STATUS_PILL: Record<string, string> = { active: 'ok', pending: 'warn', removed: 'muted' };
@@ -80,6 +82,26 @@ const ckGrid = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(190px
           </form>
           <p class="fh" style="margin-top:10px">Use this when a customer changes their email: add the new address, then remove the old one. The new owner signs in with the usual email code.</p>
           {claims.length > 0 && <p class="sub2" style="margin-top:8px">Claims: {claims.map((c) => `${c.email} (${c.status}, ${when(c.created_at)})`).join(' · ')}</p>}
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-h"><h3>Photos</h3><span class="hint">{photos.length}</span></div>
+        <div class="card-b">
+          {photos.length === 0 ? <p class="sub" style="margin:0">No photos uploaded.</p> : (
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
+              {photos.map((p) => (
+                <div style="position:relative;border:1px solid #dfe4e4;border-radius:8px;overflow:hidden;background:#f4f6f6;aspect-ratio:4/3">
+                  <img src={`/img/${p.r2_key}`} alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block" />
+                  <form action="/api/admin/listing" method="post" style="position:absolute;top:4px;right:4px;margin:0" onsubmit="return confirm('Remove this photo from the listing?')">
+                    <input type="hidden" name="id" value={one!.id} /><input type="hidden" name="action" value="photo_delete" /><input type="hidden" name="photo_id" value={p.id} />
+                    <button class="btn small danger" type="submit" aria-label="Remove photo" style="padding:2px 8px">✕</button>
+                  </form>
+                </div>
+              ))}
+            </div>
+          )}
+          <p class="fh" style="margin-top:10px">Owners manage their own gallery; remove anything here that doesn't belong on the directory.</p>
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import { getListingById, isLive } from '../../../lib/db';
 import { parseServices } from '../../../lib/util';
 import { SERVICES } from '../../../data/services';
 import { CERTIFICATIONS, LANGUAGES, FREE_AREA_LIMIT, FEATURED_AREA_LIMIT, CUSTOM_FAQ_LIMIT, SOCIAL_PLATFORMS, parseAttrs, parseFaq } from '../../../data/attrs';
+import { listPhotos, MAX_PHOTOS } from '../../../lib/photos';
 const owner = await currentOwner(Astro.request);
 if (!owner) return Astro.redirect('/account', 302);
 const id = Number(Astro.params.id);
@@ -17,12 +18,19 @@ const a = parseAttrs(l.attrs);
 const faq = parseFaq(l.custom_faq);
 const msg = Astro.url.searchParams.get('msg');
 const areaLimit = FEATURED_AREA_LIMIT;
+const photos = await listPhotos(id);
+const photoData = photos.map((p) => ({ id: p.id, url: `/img/${p.r2_key}`, alt: p.alt ?? '' }));
 ---
 <Base title={`Edit ${l.name}`} description="Edit your listing." noindex>
   <p class="crumbs"><a href="/account">Your listings</a> › Edit</p>
   <h1>Edit {l.name}</h1>
   <p class="small">Changes go live immediately and are logged. {featured ? 'Your listing is featured, so every section below is live.' : <>The basics show on your free listing now. You can also fill in the <strong>featured sections</strong> below and <a href={`/company/${l.slug}?preview=1`} target="_blank">preview</a> the full profile — they stay hidden to the public until you <a href={`/featured/${l.slug}`}>get featured</a>.</>}</p>
-  {!featured && <p style="margin:2px 0 6px"><a class="btn secondary" href={`/company/${l.slug}?preview=1`} target="_blank">Preview featured profile →</a> <span class="small">Save first to see your latest changes.</span></p>}
+  <div class="editbar">
+    <a class="btn" href={featured ? `/company/${l.slug}` : `/company/${l.slug}?preview=1`} target="_blank" rel="noopener">
+      {featured ? 'View your live profile →' : 'Preview full listing →'}
+    </a>
+    <span class="small">{featured ? 'Opens your public page in a new tab.' : 'See exactly how your page looks featured — photos and all. Save first to include your latest changes.'}</span>
+  </div>
   {msg === 'invalid' && <div class="notice error" role="alert">Something was missing or invalid. Name, phone, at least one service and a description are required.</div>}
   <form action="/api/account/save" method="post" style="max-width:640px">
     <input type="hidden" name="id" value={l.id} />
@@ -38,7 +46,10 @@ const areaLimit = FEATURED_AREA_LIMIT;
     <input id="email" name="email" type="email" maxlength="254" value={l.email ?? ''} />
     <p class="hint">Quote requests from your listing page are sent here.</p>
     <label for="address">Street address <span class="small">(optional)</span></label>
-    <input id="address" name="address" maxlength="200" value={l.address ?? ''} />
+    <div class="ta-wrap" id="addr-wrap">
+      <input id="address" name="address" maxlength="200" value={l.address ?? ''} autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="addr-list" />
+      <ul class="ta-list" id="addr-list" role="listbox" hidden></ul>
+    </div>
     <fieldset style="border:0;padding:0;margin:14px 0 0">
       <legend style="font-weight:600;font-size:.92rem">Services</legend>
       {SERVICES.map((s) => <label style="font-weight:400;margin:6px 0"><input type="checkbox" name="services" value={s.slug} checked={services.includes(s.slug)} style="width:auto;margin-right:8px" />{s.name}</label>)}
@@ -99,4 +110,194 @@ const areaLimit = FEATURED_AREA_LIMIT;
     </fieldset>
     <button class="btn" type="submit" style="margin-top:12px">Save</button>
   </form>
+
+  <section id="photos" class="photos" data-id={l.id} data-max={MAX_PHOTOS} style="max-width:640px">
+    <h2>Photos</h2>
+    <p class="hint" style="margin-top:0">Show your crew, trucks and finished work — up to {MAX_PHOTOS}. They appear as a gallery on your featured profile{!featured && ' (saved now, shown to the public once you get featured)'}. Each upload saves immediately. JPG, PNG or WebP; large images are shrunk automatically.</p>
+    <div id="photo-grid" class="photo-grid" role="list"></div>
+    <div class="photo-actions">
+      <button type="button" class="btn secondary" id="photo-add">Add photos</button>
+      <span id="photo-count" class="small"></span>
+    </div>
+    <input type="file" id="photo-file" accept="image/jpeg,image/png,image/webp" multiple hidden />
+    <p id="photo-msg" class="notice" role="status" hidden></p>
+    <template id="photo-init" data-json={JSON.stringify(photoData)}></template>
+  </section>
 </Base>
+
+<style>
+  .editbar { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; margin: 4px 0 18px; padding: 12px 14px; background: var(--teal-soft, #f0f7f6); border: 1px solid var(--teal, #0f6d6a); border-radius: 12px; }
+  .editbar .btn { width: auto; }
+  .ta-wrap { position: relative; }
+  .ta-list { list-style: none; margin: 4px 0 0; padding: 4px; position: absolute; z-index: 40; left: 0; right: 0; background: #fff; border: 1px solid #d5dbdb; border-radius: 10px; box-shadow: 0 10px 30px rgba(15,23,23,.12); max-height: 260px; overflow: auto; }
+  .ta-list li { padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: .93rem; line-height: 1.35; }
+  .ta-list li[aria-selected="true"], .ta-list li:hover { background: var(--teal-soft, #e8f2f1); }
+  .photos { margin-top: 34px; }
+  .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; margin: 12px 0; }
+  .photo-grid:empty { display: none; }
+  .pcard { position: relative; border: 1px solid #d5dbdb; border-radius: 10px; overflow: hidden; background: #f4f6f6; aspect-ratio: 4 / 3; }
+  .pcard img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pcard .pbar { position: absolute; inset: auto 0 0 0; display: flex; justify-content: space-between; gap: 4px; padding: 4px; background: linear-gradient(to top, rgba(15,23,23,.6), transparent); }
+  .pcard .pbtn { border: 0; background: rgba(255,255,255,.92); color: #123; border-radius: 6px; width: 28px; height: 28px; font-size: 15px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .pcard .pbtn:hover { background: #fff; }
+  .pcard .pbtn.del { color: #b3261e; }
+  .pcard .pbtn:disabled { opacity: .4; cursor: default; }
+  .photo-actions { display: flex; align-items: center; gap: 12px; }
+  .photo-actions .btn { width: auto; }
+  .photos .notice[hidden] { display: none; }
+</style>
+
+<script is:inline>
+(() => {
+  // ---- Photo manager -------------------------------------------------------
+  const root = document.getElementById('photos');
+  if (root) {
+    const id = root.dataset.id, max = Number(root.dataset.max) || 8;
+    const grid = document.getElementById('photo-grid');
+    const fileInput = document.getElementById('photo-file');
+    const addBtn = document.getElementById('photo-add');
+    const countEl = document.getElementById('photo-count');
+    const msg = document.getElementById('photo-msg');
+    let photos = [];
+    try { photos = JSON.parse(document.getElementById('photo-init').dataset.json || '[]'); } catch {}
+
+    const say = (t, err) => { if (!t) { msg.hidden = true; return; } msg.hidden = false; msg.textContent = t; msg.classList.toggle('error', !!err); };
+
+    function render() {
+      grid.innerHTML = '';
+      photos.forEach((p, i) => {
+        const c = document.createElement('div'); c.className = 'pcard'; c.setAttribute('role', 'listitem');
+        const img = document.createElement('img'); img.src = p.url; img.alt = p.alt || 'Listing photo'; img.loading = 'lazy';
+        const bar = document.createElement('div'); bar.className = 'pbar';
+        const left = document.createElement('div');
+        const mkBtn = (label, cls, aria, disabled, fn) => { const b = document.createElement('button'); b.type='button'; b.className='pbtn '+cls; b.textContent=label; b.setAttribute('aria-label', aria); b.disabled=!!disabled; b.onclick=fn; return b; };
+        left.appendChild(mkBtn('‹', 'mv', 'Move left', i === 0, () => move(i, -1)));
+        left.appendChild(mkBtn('›', 'mv', 'Move right', i === photos.length - 1, () => move(i, 1)));
+        bar.appendChild(left);
+        bar.appendChild(mkBtn('✕', 'del', 'Remove photo', false, () => del(p.id)));
+        c.appendChild(img); c.appendChild(bar); grid.appendChild(c);
+      });
+      countEl.textContent = photos.length + ' of ' + max + ' used';
+      addBtn.disabled = photos.length >= max;
+    }
+
+    async function api(fd) {
+      fd.append('id', id);
+      const r = await fetch('/api/account/photo', { method: 'POST', body: fd });
+      const j = await r.json().catch(() => ({ ok: false }));
+      if (!j.ok) throw new Error(j.error || 'failed');
+      photos = j.photos || photos; render();
+    }
+
+    function del(pid) {
+      if (!confirm('Remove this photo?')) return;
+      const fd = new FormData(); fd.append('action', 'delete'); fd.append('photo_id', pid);
+      api(fd).then(() => say('')).catch(() => say('Could not remove that photo. Try again.', true));
+    }
+    function move(i, dir) {
+      const j = i + dir; if (j < 0 || j >= photos.length) return;
+      const arr = photos.slice(); const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+      const fd = new FormData(); fd.append('action', 'reorder'); fd.append('order', arr.map(p => p.id).join(','));
+      api(fd).then(() => say('')).catch(() => say('Could not save the new order.', true));
+    }
+
+    // Downscale in the browser so uploads are small and fast. Longest side capped at 1600px.
+    function resize(file) {
+      return new Promise((resolve) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const MAX = 1600; let { width: w, height: h } = img;
+          if (w > MAX || h > MAX) { const s = MAX / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+          const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+          cv.getContext('2d').drawImage(img, 0, 0, w, h);
+          const done = (blob, type) => resolve(blob ? { blob, type, w, h } : null);
+          cv.toBlob((b) => b ? done(b, 'image/webp') : cv.toBlob((b2) => done(b2, 'image/jpeg'), 'image/jpeg', 0.85), 'image/webp', 0.85);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+        img.src = url;
+      });
+    }
+
+    async function upload(files) {
+      const room = max - photos.length;
+      const list = Array.from(files).slice(0, Math.max(0, room));
+      if (files.length > room) say('You can have up to ' + max + ' photos, so only the first ' + room + ' were added.', true);
+      else say('');
+      for (const f of list) {
+        if (!/^image\/(jpeg|png|webp)$/.test(f.type)) { say('Skipped a file that isn’t a JPG, PNG or WebP image.', true); continue; }
+        addBtn.disabled = true; addBtn.textContent = 'Uploading…';
+        try {
+          const r = await resize(f);
+          const blob = r ? r.blob : f, type = r ? r.type : f.type;
+          const ext = type === 'image/webp' ? 'webp' : type === 'image/png' ? 'png' : 'jpg';
+          const fd = new FormData();
+          fd.append('action', 'upload');
+          fd.append('file', new File([blob], 'photo.' + ext, { type }));
+          if (r) { fd.append('w', r.w); fd.append('h', r.h); }
+          await api(fd);
+        } catch (e) {
+          say(e.message === 'limit' ? 'You’ve reached the ' + max + '-photo limit.' : 'That photo didn’t upload. Try a different image.', true);
+        }
+        addBtn.textContent = 'Add photos';
+      }
+      addBtn.disabled = photos.length >= max;
+    }
+
+    addBtn.onclick = () => fileInput.click();
+    fileInput.onchange = () => { if (fileInput.files.length) upload(fileInput.files); fileInput.value = ''; };
+    render();
+  }
+
+  // ---- Address type-ahead (Photon / OpenStreetMap, keyless) ----------------
+  const addr = document.getElementById('address');
+  const list = document.getElementById('addr-list');
+  if (addr && list) {
+    let items = [], active = -1, timer = null, seq = 0;
+    const close = () => { list.hidden = true; list.innerHTML = ''; items = []; active = -1; addr.setAttribute('aria-expanded', 'false'); };
+    const line = (props) => {
+      const num = [props.housenumber, props.street].filter(Boolean).join(' ');
+      const cityLine = [props.city || props.district || props.county, props.state, props.postcode].filter(Boolean).join(', ');
+      return { street: num || props.name || '', full: [num || props.name, cityLine].filter(Boolean).join(', ') };
+    };
+    const draw = () => {
+      list.innerHTML = '';
+      items.forEach((it, i) => {
+        const li = document.createElement('li'); li.setAttribute('role', 'option'); li.id = 'addr-opt-' + i;
+        li.setAttribute('aria-selected', i === active ? 'true' : 'false'); li.textContent = it.full;
+        li.onmousedown = (e) => { e.preventDefault(); pick(i); };
+        list.appendChild(li);
+      });
+      list.hidden = items.length === 0; addr.setAttribute('aria-expanded', items.length ? 'true' : 'false');
+    };
+    const pick = (i) => { const it = items[i]; if (!it) return; addr.value = it.street || it.full; close(); };
+    async function search(q) {
+      const my = ++seq;
+      try {
+        const r = await fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=6&lang=en&layer=house&layer=street');
+        const j = await r.json();
+        if (my !== seq) return; // a newer keystroke already fired
+        items = (j.features || [])
+          .filter((f) => (f.properties.countrycode || '').toUpperCase() === 'US')
+          .map((f) => line(f.properties))
+          .filter((x) => x.full);
+        active = -1; draw();
+      } catch { /* network/CSP issue: silently leave the plain field usable */ }
+    }
+    addr.addEventListener('input', () => {
+      const q = addr.value.trim(); clearTimeout(timer);
+      if (q.length < 4) { close(); return; }
+      timer = setTimeout(() => search(q), 250);
+    });
+    addr.addEventListener('keydown', (e) => {
+      if (list.hidden) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(active + 1, items.length - 1); draw(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(active - 1, 0); draw(); }
+      else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); pick(active); }
+      else if (e.key === 'Escape') { close(); }
+    });
+    addr.addEventListener('blur', () => setTimeout(close, 150));
+  }
+})();
+</script>

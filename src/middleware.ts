@@ -14,7 +14,8 @@ const CSP = [
   "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
-  "connect-src 'self' https://challenges.cloudflare.com https://cloudflareinsights.com https://static.cloudflareinsights.com",
+  // photon.komoot.io: keyless OpenStreetMap address autocomplete on the listing edit form.
+  "connect-src 'self' https://challenges.cloudflare.com https://cloudflareinsights.com https://static.cloudflareinsights.com https://photon.komoot.io",
   "frame-src https://challenges.cloudflare.com",
   // Stripe Checkout + Billing Portal are hosted redirects: the form posts to /api/stripe/* which
   // 303-redirects to checkout.stripe.com / billing.stripe.com. Without these, form-action blocks the

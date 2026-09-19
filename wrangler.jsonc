@@ -32,6 +32,9 @@
   // Private bucket for customer email attachments (inbound support email). Never public — files are
   // served only through the admin-authed /api/admin/attachment route.
   "r2_buckets": [
-    { "binding": "ATTACH", "bucket_name": "hcf-attachments" }
+    { "binding": "ATTACH", "bucket_name": "hcf-attachments" },
+    // Listing photos. Not a public bucket; every object is served through the /img/ route,
+    // which sets a long immutable cache and its own tight CSP.
+    { "binding": "PHOTOS", "bucket_name": "hcf-photos" }
   ]
 }

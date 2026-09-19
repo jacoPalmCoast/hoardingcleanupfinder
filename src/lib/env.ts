@@ -4,6 +4,7 @@ export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
   ATTACH?: R2Bucket;                // private R2 bucket for inbound support-email attachments
+  PHOTOS?: R2Bucket;                // listing photos, served via the /img/ route
   AI?: { run: (model: string, input: unknown) => Promise<unknown> };  // Workers AI (LLM extraction)
   SITE_URL: string;
   SITE_NAME: string;

@@ -15,6 +15,7 @@ import { parseAttrs, parseFaq, attrFacts, publicAttrs } from '../../data/attrs';
 import { listingIntents } from '../../data/intents';
 import { listingSchema, webPageSchema, breadcrumbSchema } from '../../lib/seo';
 import { trackEvent, waitCtx } from '../../lib/events';
+import { listPhotos } from '../../lib/photos';
 import { env } from '../../lib/env';
 
 const l = await getListingBySlug(Astro.params.slug ?? '');
@@ -46,6 +47,8 @@ const facts = attrFacts(attrs);
 // Custom FAQ and long "About" are featured-only content; if a subscription lapses they stop rendering.
 const customFaq = featured ? parseFaq(l.custom_faq) : [];
 const longAbout = featured && l.long_about ? l.long_about.trim() : '';
+// Photos are featured-only content, like long_about — drafted at any tier, shown only when live/preview.
+const photos = featured ? await listPhotos(l.id) : [];
 const faq = [...customFaq, ...listingIntents(l, services, attrs, serviceNames)];
 const nearby = l.lat && l.lng ? await nearbyListings(l.lat, l.lng, 6, l.id) : [];
 // Guarded so a review-table hiccup can never take down a public company page.
@@ -118,6 +121,19 @@ if (l.is_claimed !== 1) {
       </div>
       <Socials attrs={attrs} />
 
+      {photos.length > 0 && (
+        <section class="gallery-sec">
+          <h2>Photos</h2>
+          <div class="gallery" id="gallery">
+            {photos.map((p, i) => (
+              <button type="button" class="gitem" data-full={`/img/${p.r2_key}`} data-i={i} aria-label={`View photo ${i + 1} of ${photos.length}`}>
+                <img src={`/img/${p.r2_key}`} alt={p.alt || `${l.name} — photo ${i + 1}`} loading="lazy" width="400" height="300" />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       {aboutParas.length > 0 && (
         <section class="prose">
           <h2>About {l.name}</h2>
@@ -154,6 +170,14 @@ if (l.is_claimed !== 1) {
     </article>
     <aside><QuoteForm listingId={l.id} city={l.city} state={l.state} heading={`Request a quote from ${l.name}`} /></aside>
   </div>
+  {photos.length > 0 && (
+    <div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Photo viewer">
+      <button type="button" class="lb-close" id="lb-close" aria-label="Close">✕</button>
+      <button type="button" class="lb-nav lb-prev" id="lb-prev" aria-label="Previous photo">‹</button>
+      <img class="lb-img" id="lb-img" alt="" />
+      <button type="button" class="lb-nav lb-next" id="lb-next" aria-label="Next photo">›</button>
+    </div>
+  )}
 </Base>
 
 <style>
@@ -165,4 +189,45 @@ if (l.is_claimed !== 1) {
   .pb-exit { color: #fff; text-decoration: underline; text-underline-offset: 2px; font-size: .88rem; font-weight: 500; }
   .pb-cta { background: #fff; color: var(--teal); font-weight: 700; font-size: .9rem; padding: 8px 16px; border-radius: 8px; text-decoration: none; white-space: nowrap; }
   .pb-cta:hover { background: #f3f7f6; }
+  .gallery-sec { margin-top: 28px; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+  .gitem { padding: 0; border: 1px solid #dfe4e4; border-radius: 10px; overflow: hidden; background: #f4f6f6; cursor: pointer; aspect-ratio: 4 / 3; }
+  .gitem img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .2s ease; }
+  .gitem:hover img { transform: scale(1.04); }
+  .gitem:focus-visible { outline: 2px solid var(--teal, #0f6d6a); outline-offset: 2px; }
+  .lightbox { position: fixed; inset: 0; z-index: 200; background: rgba(10,16,16,.92); display: flex; align-items: center; justify-content: center; }
+  .lightbox[hidden] { display: none; }
+  .lb-img { max-width: 92vw; max-height: 86vh; object-fit: contain; border-radius: 6px; }
+  .lb-close, .lb-nav { position: absolute; background: rgba(255,255,255,.14); color: #fff; border: 0; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .lb-close:hover, .lb-nav:hover { background: rgba(255,255,255,.28); }
+  .lb-close { top: 16px; right: 16px; width: 44px; height: 44px; font-size: 20px; }
+  .lb-nav { top: 50%; transform: translateY(-50%); width: 52px; height: 64px; font-size: 34px; line-height: 1; }
+  .lb-prev { left: 12px; } .lb-next { right: 12px; }
+  @media (max-width: 560px) { .lb-nav { width: 40px; height: 52px; font-size: 26px; } }
 </style>
+<script is:inline>
+(() => {
+  const gal = document.getElementById('gallery');
+  const lb = document.getElementById('lightbox');
+  if (!gal || !lb) return;
+  const img = document.getElementById('lb-img');
+  const items = Array.from(gal.querySelectorAll('.gitem'));
+  const srcs = items.map((b) => b.dataset.full);
+  const alts = items.map((b) => b.querySelector('img')?.alt || '');
+  let cur = 0, lastFocus = null;
+  const show = (i) => { cur = (i + srcs.length) % srcs.length; img.src = srcs[cur]; img.alt = alts[cur]; };
+  const open = (i) => { lastFocus = document.activeElement; show(i); lb.hidden = false; document.body.style.overflow = 'hidden'; document.getElementById('lb-close').focus(); };
+  const close = () => { lb.hidden = true; img.src = ''; document.body.style.overflow = ''; if (lastFocus) lastFocus.focus(); };
+  items.forEach((b, i) => b.addEventListener('click', () => open(i)));
+  document.getElementById('lb-close').addEventListener('click', close);
+  document.getElementById('lb-prev').addEventListener('click', () => show(cur - 1));
+  document.getElementById('lb-next').addEventListener('click', () => show(cur + 1));
+  lb.addEventListener('click', (e) => { if (e.target === lb) close(); });
+  document.addEventListener('keydown', (e) => {
+    if (lb.hidden) return;
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowLeft') show(cur - 1);
+    else if (e.key === 'ArrowRight') show(cur + 1);
+  });
+})();
+</script>

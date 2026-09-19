@@ -10,6 +10,7 @@ import { isState } from '../../../data/states';
 import { parseAttrs, attrsFromForm, faqFromForm, parseFaq } from '../../../data/attrs';
 import { audit, diff } from '../../../lib/audit';
 import { queueIndexNow, listingPaths } from '../../../lib/indexnow';
+import { deletePhoto } from '../../../lib/photos';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const denied = await requireAdmin(request);
@@ -33,6 +34,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
     await audit('admin', 'admin', id, 'listing.remove', { status: l.status }, { status: 'removed' });
     queueIndexNow(locals, listingPaths(l));
     return redirect('/admin/pending');
+  }
+  if (action === 'photo_delete') {
+    const photoId = Number(clean(form.get('photo_id'), 12));
+    if (Number.isInteger(photoId)) {
+      await deletePhoto(id, photoId);
+      await audit('admin', 'admin', id, 'photo.delete');
+    }
+    return redirect(`/admin/listings?id=${id}&msg=saved`);
   }
   if (action === 'save') {
     const services = form.getAll('services').map(String).filter((s) => isService(s));
