@@ -35,7 +35,25 @@ const annualSave = Number(pricing.monthlyUsd) * 12 - Number(pricing.annualUsd);
   )}
 
   <div class="card" style="margin-bottom:16px">
-    <div class="card-h"><h3>Plan prices in Stripe</h3><span class="hint">{prices.length}</span></div>
+    <div class="card-h"><h3>Plan prices</h3><span class="hint">what the site charges</span></div>
+    <div class="card-b">
+      <p class="fh" style="margin:0 0 14px">Set what a featured listing costs. We create the new price in Stripe, switch the plan to it, and archive the old one — the displayed price updates to match. Current subscribers keep their price until they change plans. Leave a box unchanged to keep that plan as-is.</p>
+      <form action="/api/admin/plans" method="post">
+        <input type="hidden" name="action" value="set_plan_prices" />
+        <div class="two">
+          <div class="field"><label for="pm">Monthly ($ / month)</label><input id="pm" name="monthly" type="number" min="1" step="1" value={pricing.monthlyUsd} required /></div>
+          <div class="field"><label for="pa">Annual ($ / year)</label><input id="pa" name="annual" type="number" min="1" step="1" value={pricing.annualUsd} required /></div>
+        </div>
+        <p class="fh" style="margin:0 0 14px">At these numbers, annual saves customers ${annualSave > 0 ? annualSave.toLocaleString('en-US') : 0} vs. paying monthly.</p>
+        <button class="btn" type="submit" disabled={!configured}>Save plan prices</button>
+        {!configured && <span class="fh" style="margin-left:10px">Add <code>STRIPE_SECRET_KEY</code> first.</span>}
+      </form>
+    </div>
+  </div>
+
+  <details class="card" style="margin-bottom:16px">
+    <summary style="cursor:pointer;padding:16px;font-weight:600">Advanced — all Stripe prices <span class="hint" style="font-weight:400">{prices.length}</span></summary>
+    <div class="card-h" style="border-top:1px solid var(--a-border)"><h3>Plan prices in Stripe</h3><span class="hint">{prices.length}</span></div>
     {prices.length === 0 ? (
       <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7"/></svg></div><b>No plan prices yet</b>Create one below — it's created in Stripe and set as the monthly or annual plan.</div>
     ) : (
@@ -57,7 +75,7 @@ const annualSave = Number(pricing.monthlyUsd) * 12 - Number(pricing.annualUsd);
         </tbody>
       </table></div>
     )}
-  </div>
+  </details>
 
   <div class="two-6-4">
     <div class="card">

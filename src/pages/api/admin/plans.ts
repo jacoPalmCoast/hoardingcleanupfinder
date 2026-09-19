@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { requireAdmin } from '../../../lib/adminGuard';
 import { clean, redirect } from '../../../lib/util';
 import { env } from '../../../lib/env';
-import { getSettings, setSetting } from '../../../lib/settings';
+import { getSettings, setSetting, featuredPricing } from '../../../lib/settings';
 import { createRecurringPrice, archivePrice } from '../../../lib/stripeProducts';
 
 // Manage the Featured product's Stripe prices from admin. Stripe prices are immutable, so changing
@@ -17,6 +17,30 @@ export const POST: APIRoute = async ({ request }) => {
   const action = clean(form.get('action'), 20);
 
   try {
+    // Simple one-step: "set the monthly/annual price to $X". For each amount that actually changed
+    // (or has no managed Stripe price yet), create a new recurring price, point the plan at it, sync
+    // the displayed price, and archive the price the plan used to sell. Existing subscribers keep
+    // their current price until they change plans (standard Stripe behaviour).
+    if (action === 'set_plan_prices') {
+      const cur = await featuredPricing();
+      const plans: { amt: number; interval: 'month' | 'year'; key: string; dkey: string; curAmt: number; curPrice: string }[] = [
+        { amt: Math.round(Number(clean(form.get('monthly'), 12)) || 0), interval: 'month', key: 'stripe_price_monthly', dkey: 'price_monthly_usd', curAmt: Math.round(Number(cur.monthlyUsd) || 0), curPrice: cur.stripeMonthly || '' },
+        { amt: Math.round(Number(clean(form.get('annual'), 12)) || 0), interval: 'year', key: 'stripe_price_annual', dkey: 'price_annual_usd', curAmt: Math.round(Number(cur.annualUsd) || 0), curPrice: cur.stripeAnnual || '' },
+      ];
+      let changed = 0;
+      for (const p of plans) {
+        if (p.amt <= 0) continue;
+        if (p.amt === p.curAmt && p.curPrice) continue; // unchanged and already backed by a Stripe price
+        const price = await createRecurringPrice({ amountUsd: p.amt, interval: p.interval, intervalCount: 1 });
+        const prevOverride = (await getSettings([p.key]))[p.key] || '';
+        await setSetting(p.key, price.id);
+        await setSetting(p.dkey, String(p.amt));
+        if (prevOverride && prevOverride !== price.id) { try { await archivePrice(prevOverride); } catch { /* already gone */ } }
+        changed++;
+      }
+      return redirect(`/admin/pricing?msg=${changed ? 'priced' : 'saved'}`);
+    }
+
     if (action === 'create_price') {
       const role = clean(form.get('role'), 8);                 // 'monthly' | 'annual'
       const intervalIn = clean(form.get('interval'), 6);       // 'month' | 'year'
