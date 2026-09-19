@@ -47,5 +47,5 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const d = diff(before as Record<string, unknown>, after as Record<string, unknown>);
   await audit('owner', owner.email, id, 'listing.save', d.before, d.after);
   queueIndexNow(locals, listingPaths({ ...l, services: JSON.stringify(services) }));
-  return redirect('/account?msg=saved');
+  return redirect(`/account/edit/${id}?msg=saved`);
 };

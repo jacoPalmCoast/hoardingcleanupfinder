@@ -32,6 +32,21 @@ const photoData = photos.map((p) => ({ id: p.id, url: `/img/${p.r2_key}`, alt: p
     <span class="small">{featured ? 'Opens your public page in a new tab.' : 'See exactly how your page looks featured — photos and all. Save first to include your latest changes.'}</span>
   </div>
   {msg === 'invalid' && <div class="notice error" role="alert">Something was missing or invalid. Name, phone, at least one service and a description are required.</div>}
+  {msg === 'saved' && <div class="notice" role="status"><strong>Saved.</strong> Use <em>{featured ? 'View your live profile' : 'Preview full listing'}</em> above to see the result, or keep editing below.</div>}
+
+  <section id="photos" class="photos" data-id={l.id} data-max={MAX_PHOTOS} style="max-width:640px">
+    <h2 style="margin-top:0">Photos</h2>
+    <p class="hint" style="margin-top:0">Show your crew, trucks and finished work — up to {MAX_PHOTOS}. They appear as a gallery on your featured profile{!featured && ' (saved now, shown to the public once you get featured)'}. Each upload saves immediately. JPG, PNG or WebP; large images are shrunk automatically.</p>
+    <div id="photo-grid" class="photo-grid" role="list"></div>
+    <div class="photo-actions">
+      <button type="button" class="btn secondary" id="photo-add">Add photos</button>
+      <span id="photo-count" class="small"></span>
+    </div>
+    <input type="file" id="photo-file" accept="image/jpeg,image/png,image/webp" multiple hidden />
+    <p id="photo-msg" class="notice" role="status" hidden></p>
+    <template id="photo-init" data-json={JSON.stringify(photoData)}></template>
+  </section>
+
   <form action="/api/account/save" method="post" style="max-width:640px">
     <input type="hidden" name="id" value={l.id} />
 
@@ -110,19 +125,6 @@ const photoData = photos.map((p) => ({ id: p.id, url: `/img/${p.r2_key}`, alt: p
     </fieldset>
     <button class="btn" type="submit" style="margin-top:12px">Save</button>
   </form>
-
-  <section id="photos" class="photos" data-id={l.id} data-max={MAX_PHOTOS} style="max-width:640px">
-    <h2>Photos</h2>
-    <p class="hint" style="margin-top:0">Show your crew, trucks and finished work — up to {MAX_PHOTOS}. They appear as a gallery on your featured profile{!featured && ' (saved now, shown to the public once you get featured)'}. Each upload saves immediately. JPG, PNG or WebP; large images are shrunk automatically.</p>
-    <div id="photo-grid" class="photo-grid" role="list"></div>
-    <div class="photo-actions">
-      <button type="button" class="btn secondary" id="photo-add">Add photos</button>
-      <span id="photo-count" class="small"></span>
-    </div>
-    <input type="file" id="photo-file" accept="image/jpeg,image/png,image/webp" multiple hidden />
-    <p id="photo-msg" class="notice" role="status" hidden></p>
-    <template id="photo-init" data-json={JSON.stringify(photoData)}></template>
-  </section>
 </Base>
 
 <style>
@@ -132,7 +134,7 @@ const photoData = photos.map((p) => ({ id: p.id, url: `/img/${p.r2_key}`, alt: p
   .ta-list { list-style: none; margin: 4px 0 0; padding: 4px; position: absolute; z-index: 40; left: 0; right: 0; background: #fff; border: 1px solid #d5dbdb; border-radius: 10px; box-shadow: 0 10px 30px rgba(15,23,23,.12); max-height: 260px; overflow: auto; }
   .ta-list li { padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: .93rem; line-height: 1.35; }
   .ta-list li[aria-selected="true"], .ta-list li:hover { background: var(--teal-soft, #e8f2f1); }
-  .photos { margin-top: 34px; }
+  .photos { margin: 10px 0 26px; padding-bottom: 22px; border-bottom: 1px solid #e7ecec; }
   .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; margin: 12px 0; }
   .photo-grid:empty { display: none; }
   .pcard { position: relative; border: 1px solid #d5dbdb; border-radius: 10px; overflow: hidden; background: #f4f6f6; aspect-ratio: 4 / 3; }
