@@ -9,9 +9,17 @@ const names: Record<number, string> = {};
 if (ids.length) for (const row of (await env.DB.prepare(`SELECT id, name FROM listings WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all<any>()).results) names[row.id] = row.name;
 const STATUS_PILL: Record<string, string> = { new: 'brand', contacted: 'info', sold: 'ok', closed: 'muted', spam: 'bad' };
 const when = (ts: number) => tsToDate(ts)?.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) ?? '—';
+const msg = Astro.url.searchParams.get('msg');
 ---
 <Admin title="Leads">
   <p slot="sub" class="sub">{rows.length.toLocaleString('en-US')} quote request{rows.length === 1 ? '' : 's'} · newest first</p>
+
+  {msg === 'saved' && <div class="notice" role="status">Lead status updated.</div>}
+  {msg === 'deleted' && <div class="notice" role="status">Lead deleted.</div>}
+
+  {rows.length > 0 && (
+    <p class="sub" style="max-width:74ch;margin:2px 0 16px">Each row is a consumer quote request we passed to the companies under <strong>Routed to</strong>. Work it by moving the status <strong>New → Contacted → Sold/Closed</strong> as you follow up — it saves the moment you change the dropdown — or delete spam and tests.</p>
+  )}
 
   {rows.length === 0 ? (
     <div class="card"><div class="empty">
@@ -33,13 +41,20 @@ const when = (ts: number) => tsToDate(ts)?.toLocaleString('en-US', { month: 'sho
               <td class="mut">{r.service}</td>
               <td class="mut">{routed(r.routed_to).map((id: number) => names[id] ?? id).join(', ') || '—'}</td>
               <td style="max-width:300px">{r.message}</td>
-              <td>
-                <form action="/api/admin/lead" method="post"><input type="hidden" name="id" value={r.id} />
-                  <span class={`pill ${STATUS_PILL[r.status] ?? 'muted'}`} style="margin-bottom:6px">{r.status}</span>
-                  <select name="status" aria-label="Lead status">
+              <td style="white-space:nowrap">
+                <form action="/api/admin/lead" method="post">
+                  <input type="hidden" name="id" value={r.id} />
+                  <input type="hidden" name="action" value="status" />
+                  <span class={`pill ${STATUS_PILL[r.status] ?? 'muted'}`} style="display:inline-block;margin-bottom:6px">{r.status}</span>
+                  <select name="status" aria-label="Lead status" onchange="this.form.requestSubmit()">
                     {['new', 'contacted', 'sold', 'closed', 'spam'].map((s) => <option value={s} selected={s === r.status}>{s}</option>)}
                   </select>
                   <button class="btn small secondary" type="submit" style="margin-top:6px">Save</button>
+                </form>
+                <form action="/api/admin/lead" method="post" style="margin-top:8px" onsubmit="return confirm('Delete this lead? This cannot be undone.')">
+                  <input type="hidden" name="id" value={r.id} />
+                  <input type="hidden" name="action" value="delete" />
+                  <button class="linkbtn" type="submit" style="color:var(--a-bad);font-size:.85rem">Delete</button>
                 </form>
               </td>
             </tr>
