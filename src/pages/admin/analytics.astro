@@ -1,7 +1,8 @@
 ---
 import Admin from '../../layouts/Admin.astro';
-import { siteOverview, listingStats, listingSeries, getListingById } from '../../lib/db';
+import { siteOverview, listingStats, listingSeries, listingBreakdown, getListingById } from '../../lib/db';
 import { cfTraffic, cfConfigured, type CfDimCount } from '../../lib/cfAnalytics';
+import AnalyticsDetail from '../../components/AnalyticsDetail.astro';
 
 const daysRaw = Number(Astro.url.searchParams.get('days'));
 const days = [7, 30, 90].includes(daysRaw) ? daysRaw : 30;
@@ -11,6 +12,7 @@ const id = Number.isInteger(idRaw) && idRaw > 0 ? idRaw : 0;
 const listing = id ? await getListingById(id) : null;
 const detail = listing ? await listingStats(listing.id, days) : null;
 const series = listing ? await listingSeries(listing.id, days) : [];
+const breakdown = listing ? await listingBreakdown(listing.id, days) : null;
 const overview = listing ? null : await siteOverview(days);
 const traffic = listing ? null : await cfTraffic(days);
 const trafficReady = cfConfigured();
@@ -35,6 +37,7 @@ const fw = (n: number) => Math.max(2, Math.round((n / base) * 100));
   <p slot="sub" class="sub">{listing ? `${listing.name} · last ${days} days` : `Site-wide performance · last ${days} days`}</p>
   <Fragment slot="actions">
     {listing && <a class="btn secondary small" href={`/admin/analytics?days=${days}`}>← All listings</a>}
+    <a class="btn secondary small" href={`/api/admin/analytics.csv?days=${days}${id ? `&id=${id}` : ''}`}>Export CSV</a>
     <div class="seg">{[7, 30, 90].map((d) => <a class={d === days ? 'on' : ''} href={`/admin/analytics${q(d)}`}>{d} days</a>)}</div>
   </Fragment>
 
@@ -59,7 +62,8 @@ const fw = (n: number) => Math.max(2, Math.round((n / base) * 100));
           ) : <p class="sub" style="margin:0">No views recorded yet in this range.</p>}
         </div>
       </div>
-      <p class="sub" style="margin-top:14px">Call taps and website clicks count how many people tapped to call or clicked through — not connected calls. Impressions are updated after the nightly rollup.</p>
+      {breakdown && <div style="margin-top:16px"><AnalyticsDetail stats={detail} breakdown={breakdown} /></div>}
+      <p class="sub" style="margin-top:14px">Call taps and website clicks count how many people tapped to call or clicked through — not connected calls. Impressions are updated after the nightly rollup. <a href={`/api/admin/analytics.csv?days=${days}&id=${listing.id}`}>Export CSV</a>.</p>
     </>
   ) : overview && t && (
     <>

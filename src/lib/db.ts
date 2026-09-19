@@ -380,6 +380,62 @@ export async function statsForDayRange(listingId: number, startDay: number, endD
   return s;
 }
 
+// Per-listing breakdown by traffic source, device and country. Reads the raw `events` table (kept
+// ~92 days), which is why the analytics UI caps the window at 90 days — the breakdown is always
+// complete for the offered ranges. view/call/website only (impressions carry no per-listing source).
+export interface SourceRow { ref: string; views: number; calls: number; website: number }
+export interface DimRow { label: string; n: number }
+export interface ListingBreakdown { sources: SourceRow[]; devices: DimRow[]; countries: DimRow[] }
+export async function listingBreakdown(listingId: number, days: number): Promise<ListingBreakdown> {
+  const startTs = (Math.floor(now() / 86400) - (days - 1)) * 86400;
+  const rows = (await env.DB.prepare(
+    `SELECT ref, kind, ua, country, COUNT(*) AS n FROM events
+     WHERE listing_id = ?1 AND kind IN ('view','call','website') AND created_at >= ?2
+     GROUP BY ref, kind, ua, country`,
+  ).bind(listingId, startTs).all<{ ref: string | null; kind: string; ua: string | null; country: string | null; n: number }>()).results;
+  const src = new Map<string, SourceRow>();
+  const dev = new Map<string, number>();
+  const cty = new Map<string, number>();
+  for (const r of rows) {
+    const ref = r.ref || 'direct';
+    const s = src.get(ref) ?? { ref, views: 0, calls: 0, website: 0 };
+    if (r.kind === 'view') s.views += r.n; else if (r.kind === 'call') s.calls += r.n; else if (r.kind === 'website') s.website += r.n;
+    src.set(ref, s);
+    if (r.kind === 'view') {
+      dev.set(r.ua || 'unknown', (dev.get(r.ua || 'unknown') || 0) + r.n);
+      cty.set(r.country || '—', (cty.get(r.country || '—') || 0) + r.n);
+    }
+  }
+  const total = (s: SourceRow) => s.views + s.calls + s.website;
+  return {
+    sources: [...src.values()].sort((a, b) => total(b) - total(a)),
+    devices: [...dev.entries()].map(([label, n]) => ({ label, n })).sort((a, b) => b.n - a.n),
+    countries: [...cty.entries()].map(([label, n]) => ({ label, n })).sort((a, b) => b.n - a.n).slice(0, 8),
+  };
+}
+
+// ---------- Search demand ----------
+export interface SearchRow { q: string; service: string; searches: number; avg_results: number; max_featured: number; max_results: number }
+export async function topSearches(days: number, limit = 40): Promise<SearchRow[]> {
+  const startTs = (Math.floor(now() / 86400) - (days - 1)) * 86400;
+  return (await env.DB.prepare(
+    `SELECT q, service, COUNT(*) AS searches, AVG(results_n) AS avg_results, MAX(featured_n) AS max_featured, MAX(results_n) AS max_results
+     FROM searches WHERE created_at >= ?1 GROUP BY q, service ORDER BY searches DESC, q LIMIT ?2`,
+  ).bind(startTs, limit).all<SearchRow>()).results;
+}
+// Queries that never surfaced a featured seller — the sell/recruit opportunity list.
+export async function unmetDemand(days: number, limit = 40): Promise<SearchRow[]> {
+  const startTs = (Math.floor(now() / 86400) - (days - 1)) * 86400;
+  return (await env.DB.prepare(
+    `SELECT q, service, COUNT(*) AS searches, AVG(results_n) AS avg_results, MAX(featured_n) AS max_featured, MAX(results_n) AS max_results
+     FROM searches WHERE created_at >= ?1 GROUP BY q, service HAVING MAX(featured_n) = 0 ORDER BY searches DESC, q LIMIT ?2`,
+  ).bind(startTs, limit).all<SearchRow>()).results;
+}
+export async function searchCount(days: number): Promise<number> {
+  const startTs = (Math.floor(now() / 86400) - (days - 1)) * 86400;
+  return ((await env.DB.prepare(`SELECT COUNT(*) AS n FROM searches WHERE created_at >= ?1`).bind(startTs).first<{ n: number }>())?.n) ?? 0;
+}
+
 export interface DayPoint { day: number; views: number; calls: number; website: number }
 // Dense daily series (oldest→newest), gaps filled with zeros, for a sparkline.
 export async function listingSeries(listingId: number, days: number): Promise<DayPoint[]> {
@@ -497,5 +553,6 @@ export async function pruneEvents(): Promise<void> {
     env.DB.prepare(`DELETE FROM events WHERE kind = 'impression' AND created_at < ?1`).bind(t - 14 * 86400),
     env.DB.prepare(`DELETE FROM events WHERE kind != 'impression' AND created_at < ?1`).bind(t - 92 * 86400),
     env.DB.prepare(`DELETE FROM events_rollup_state WHERE day < ?1`).bind(Math.floor(t / 86400) - 400),
+    env.DB.prepare(`DELETE FROM searches WHERE created_at < ?1`).bind(t - 180 * 86400),
   ]);
 }

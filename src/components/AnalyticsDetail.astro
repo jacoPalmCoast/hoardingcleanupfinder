@@ -1,0 +1,92 @@
+---
+import type { ListingStats, ListingBreakdown } from '../lib/db';
+interface Props { stats: ListingStats; breakdown: ListingBreakdown }
+const { stats, breakdown } = Astro.props;
+
+const SOURCE_LABELS: Record<string, string> = {
+  company: 'Listing page', city: 'City page', service: 'Service page', search: 'Search results',
+  state: 'State page', home: 'Home page', nearby: 'Nearby listings', featured: 'Featured spot', direct: 'Direct / other',
+};
+const sourceLabel = (ref: string) => SOURCE_LABELS[ref] ?? (ref.includes('.') ? `Referral · ${ref}` : ref);
+const DEVICE_LABELS: Record<string, string> = { mobile: 'Mobile', desktop: 'Desktop', unknown: 'Unknown' };
+
+// Funnel: how the audience narrows from "shown in a list" to a real action.
+const imp = stats.impressions, views = stats.unique_views, actions = stats.calls + stats.website;
+const ctr = imp > 0 ? Math.round((views / imp) * 100) : null;         // shown → opened
+const actionRate = views > 0 ? Math.round((actions / views) * 100) : null; // opened → acted
+const pct = (n: number, d: number) => (d > 0 ? Math.max(2, Math.round((n / d) * 100)) : 0);
+const srcTotal = (s: { views: number; calls: number; website: number }) => s.views + s.calls + s.website;
+const devTotal = breakdown.devices.reduce((a, d) => a + d.n, 0);
+const ctyTotal = breakdown.countries.reduce((a, d) => a + d.n, 0);
+---
+<div class="ad-wrap">
+  <div class="card">
+    <div class="card-h"><h3>Featured funnel</h3><span class="hint">shown → opened → acted</span></div>
+    <div class="card-b">
+      <div class="funnel">
+        <div class="fstep"><span class="fn">{imp.toLocaleString('en-US')}</span><span class="fl">Times shown in lists</span><div class="fbar"><i style="width:100%;background:var(--a-brand,#0f6d6a)"></i></div></div>
+        <div class="fstep"><span class="fn">{views.toLocaleString('en-US')}{ctr !== null && <em> · {ctr}% opened</em>}</span><span class="fl">Opened the listing</span><div class="fbar"><i style={`width:${pct(views, imp || views)}%;background:var(--a-info,#3b7ea1)`}></i></div></div>
+        <div class="fstep"><span class="fn">{actions.toLocaleString('en-US')}{actionRate !== null && <em> · {actionRate}% acted</em>}</span><span class="fl">Called or clicked to the site</span><div class="fbar"><i style={`width:${pct(actions, views || actions)}%;background:var(--a-ok,#3a9a5c)`}></i></div></div>
+      </div>
+      <p class="ad-note">{imp === 0 ? 'Impressions build up after the nightly rollup, so the top of the funnel fills in a day after a new listing goes live.' : 'CTR is how often a search/city listing gets opened; the action rate is how often an opened listing turns into a call or website click.'}</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>Where it comes from</h3><span class="hint">by source</span></div>
+    <div class="card-b">
+      {breakdown.sources.length === 0 ? <p class="sub" style="margin:0">No activity in this range yet.</p> : (
+        <div class="table-wrap"><table>
+          <thead><tr><th>Source</th><th style="text-align:right">Views</th><th style="text-align:right">Calls</th><th style="text-align:right">Website</th></tr></thead>
+          <tbody>
+            {breakdown.sources.map((s) => (
+              <tr>
+                <td>{sourceLabel(s.ref)}</td>
+                <td class="tnum" style="text-align:right">{s.views.toLocaleString('en-US')}</td>
+                <td class="tnum" style="text-align:right">{s.calls.toLocaleString('en-US')}</td>
+                <td class="tnum" style="text-align:right">{s.website.toLocaleString('en-US')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+      )}
+    </div>
+  </div>
+
+  <div class="ad-two">
+    <div class="card">
+      <div class="card-h"><h3>Device</h3></div>
+      <div class="card-b">
+        {breakdown.devices.length === 0 ? <p class="sub" style="margin:0">—</p> : breakdown.devices.map((d) => (
+          <div class="drow"><span>{DEVICE_LABELS[d.label] ?? d.label}</span><div class="track"><i style={`width:${pct(d.n, devTotal)}%`}></i></div><span class="tnum">{devTotal > 0 ? Math.round((d.n / devTotal) * 100) : 0}%</span></div>
+        ))}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>Top countries</h3></div>
+      <div class="card-b">
+        {breakdown.countries.length === 0 ? <p class="sub" style="margin:0">—</p> : breakdown.countries.map((c) => (
+          <div class="drow"><span>{c.label}</span><div class="track"><i style={`width:${pct(c.n, ctyTotal)}%`}></i></div><span class="tnum">{c.n.toLocaleString('en-US')}</span></div>
+        ))}
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .ad-wrap { display: grid; gap: 14px; margin-top: 4px; }
+  .ad-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 640px) { .ad-two { grid-template-columns: 1fr; } }
+  .funnel { display: grid; gap: 12px; }
+  .fstep { display: grid; gap: 5px; }
+  .fstep .fn { font-weight: 600; font-size: 1.05rem; }
+  .fstep .fn em { font-style: normal; font-weight: 500; color: var(--a-muted, #6b7280); font-size: .85rem; }
+  .fstep .fl { font-size: .82rem; color: var(--a-muted, #6b7280); }
+  .fbar { background: var(--a-border, #eef2f2); border-radius: 6px; overflow: hidden; height: 10px; }
+  .fbar i { display: block; height: 100%; border-radius: 6px; }
+  .ad-note { font-size: .82rem; color: var(--a-muted, #6b7280); margin: 12px 0 0; }
+  .drow { display: grid; grid-template-columns: 90px 1fr 48px; align-items: center; gap: 10px; margin: 7px 0; font-size: .9rem; }
+  .drow .track { background: var(--a-border, #eef2f2); border-radius: 5px; height: 8px; overflow: hidden; }
+  .drow .track i { display: block; height: 100%; background: var(--a-brand, #0f6d6a); border-radius: 5px; }
+  .drow .tnum { text-align: right; color: var(--a-muted, #6b7280); }
+</style>

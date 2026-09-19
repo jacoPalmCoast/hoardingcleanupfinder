@@ -3,7 +3,8 @@ import Base from '../layouts/Base.astro';
 import SearchForm from '../components/SearchForm.astro';
 import ListingCard from '../components/ListingCard.astro';
 import { searchListings, searchByZip } from '../lib/db';
-import { trackImpressions, waitCtx } from '../lib/events';
+import { trackImpressions, trackSearch, waitCtx } from '../lib/events';
+import { isLive } from '../lib/db';
 import { SERVICE_BY_SLUG, isService } from '../data/services';
 import { STATES } from '../data/states';
 
@@ -21,6 +22,8 @@ if (/^\d{5}$/.test(q)) {
   results = await searchListings(code ?? q, service || undefined);
 }
 if (results.length > 0) trackImpressions(results.map((l) => l.id), Astro.request, 'search', waitCtx(Astro.locals));
+// Log the search itself (demand signal) — only when the visitor actually queried.
+if (q.length >= 2) trackSearch(Astro.request, { q, service, isZip: /^\d{5}$/.test(q), resultsN: results.length, featuredN: results.filter((l) => isLive(l)).length }, waitCtx(Astro.locals));
 const title = q ? `${service ? SERVICE_BY_SLUG[service].name : 'Cleanup companies'} near ${q}` : 'Search';
 ---
 

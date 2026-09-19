@@ -71,6 +71,25 @@ export function trackImpressions(
   })());
 }
 
+// A visitor search. Logged once per results render (real people only), with how many results came
+// back and how many were featured — so the admin demand view can surface unmet demand.
+export function trackSearch(
+  req: Request,
+  s: { q: string; service: string; isZip: boolean; resultsN: number; featuredN: number },
+  ctx?: WaitCtx,
+): void {
+  const ua = req.headers.get('user-agent') ?? '';
+  if (uaClass(ua) === 'bot') return;
+  const q = s.q.trim().slice(0, 60).toLowerCase();
+  if (q.length < 2) return;
+  run(ctx, (async () => {
+    const session = await sessionHash(req, ua);
+    await env.DB.prepare(
+      `INSERT INTO searches(q, service, is_zip, results_n, featured_n, session, country) VALUES (?1,?2,?3,?4,?5,?6,?7)`,
+    ).bind(q, s.service || '', s.isZip ? 1 : 0, s.resultsN, s.featuredN, session, req.headers.get('cf-ipcountry') ?? null).run();
+  })());
+}
+
 // Pull the Worker execution context (for waitUntil) out of Astro locals. On @astrojs/cloudflare
 // this is `locals.cfContext` — note `locals.runtime.ctx` is a getter that THROWS in this version,
 // so never touch it. Falls back to undefined (the write then runs inline) if it's absent.

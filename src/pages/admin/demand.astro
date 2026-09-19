@@ -1,0 +1,72 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { topSearches, unmetDemand, searchCount } from '../../lib/db';
+import { SERVICE_BY_SLUG } from '../../data/services';
+
+const daysRaw = Number(Astro.url.searchParams.get('days'));
+const days = [7, 30, 90].includes(daysRaw) ? daysRaw : 30;
+const [total, top, unmet] = await Promise.all([searchCount(days), topSearches(days, 50), unmetDemand(days, 50)]);
+const svc = (s: string) => (s ? (SERVICE_BY_SLUG[s]?.name ?? s) : 'Any service');
+const q = (d: number) => `?days=${d}`;
+---
+<Admin title="Demand">
+  <p slot="sub" class="sub">What visitors are searching for · last {days} days</p>
+  <Fragment slot="actions">
+    <div class="seg">{[7, 30, 90].map((d) => <a class={d === days ? 'on' : ''} href={`/admin/demand${q(d)}`}>{d} days</a>)}</div>
+  </Fragment>
+
+  <div class="stats" style="margin-bottom:16px">
+    <div class="stat"><b>{total.toLocaleString('en-US')}</b><span>Searches</span></div>
+    <div class="stat"><b>{top.length.toLocaleString('en-US')}</b><span>Distinct queries</span></div>
+    <div class="stat"><b style={unmet.length > 0 ? 'color:var(--a-warn,#a9740d)' : ''}>{unmet.length.toLocaleString('en-US')}</b><span>With no featured seller</span></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-h"><h3>Opportunities — searched, no featured seller</h3><span class="hint">sell / recruit here</span></div>
+    <div class="card-b">
+      {unmet.length === 0 ? (
+        <p class="sub" style="margin:0">{total === 0 ? 'No searches logged yet — this fills as visitors use the search box.' : 'Every search in this range already surfaced a featured seller. Nice.'}</p>
+      ) : (
+        <div class="table-wrap"><table>
+          <thead><tr><th>Search</th><th>Service</th><th style="text-align:right">Searches</th><th style="text-align:right">Listings found</th><th></th></tr></thead>
+          <tbody>
+            {unmet.map((r) => (
+              <tr>
+                <td class="co" style="font-weight:600">{r.q}</td>
+                <td class="mut">{svc(r.service)}</td>
+                <td class="tnum" style="text-align:right">{r.searches.toLocaleString('en-US')}</td>
+                <td class="tnum" style="text-align:right">{Math.round(r.avg_results)}</td>
+                <td class="mut">{r.max_results === 0 ? 'No listings — recruit' : 'Has listings — sell featured'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+      )}
+      <p class="sub" style="margin:10px 0 0">“No listings — recruit” means nobody serves that area yet (add or import listings). “Has listings — sell featured” means companies are there but none are paying for the top spot.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>Top searches</h3><span class="hint">{days} days</span></div>
+    <div class="card-b">
+      {top.length === 0 ? (
+        <p class="sub" style="margin:0">No searches logged yet.</p>
+      ) : (
+        <div class="table-wrap"><table>
+          <thead><tr><th>Search</th><th>Service</th><th style="text-align:right">Searches</th><th style="text-align:right">Avg results</th><th style="text-align:right">Featured shown</th></tr></thead>
+          <tbody>
+            {top.map((r) => (
+              <tr>
+                <td class="co" style="font-weight:600">{r.q}</td>
+                <td class="mut">{svc(r.service)}</td>
+                <td class="tnum" style="text-align:right">{r.searches.toLocaleString('en-US')}</td>
+                <td class="tnum" style="text-align:right">{Math.round(r.avg_results)}</td>
+                <td class="tnum" style="text-align:right">{r.max_featured > 0 ? '✓' : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+      )}
+    </div>
+  </div>
+</Admin>
