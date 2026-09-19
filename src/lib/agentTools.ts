@@ -90,7 +90,7 @@ export async function runReadTool(name: string, input: any): Promise<unknown> {
     case 'list_feedback': {
       const status = typeof input?.status === 'string' ? input.status : undefined;
       const rows = await listFeedback(status, Math.max(1, Math.min(40, Number(input?.limit) || 25)));
-      return rows.map((f) => ({ id: f.id, type: f.type, status: f.status, score: f.score, reporters: f.reporters, priority: f.priority, message: f.message.slice(0, 400), page: f.page_url }));
+      return rows.map((f) => ({ id: f.id, type: f.type, severity: f.severity, status: f.status, score: f.score, reporters: f.reporters, priority: f.priority, has_screenshot: !!f.shot_key, message: f.message.slice(0, 400), page: f.page_url }));
     }
     default:
       return { error: `unknown tool ${name}` };

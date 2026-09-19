@@ -8,7 +8,10 @@ export const POST: APIRoute = async ({ request }) => {
   if (denied) return denied;
   const form = await request.formData();
   const action = clean(form.get('action'), 20);
-  const back = `/admin/feedback${clean(form.get('tab'), 12) ? `?tab=${clean(form.get('tab'), 12)}` : ''}`;
+  const backParam = clean(form.get('back'), 40);
+  const back = /^\/admin\/feedback\/\d+$/.test(backParam)
+    ? backParam
+    : `/admin/feedback${clean(form.get('tab'), 12) ? `?tab=${clean(form.get('tab'), 12)}` : ''}`;
 
   const ids = form.getAll('ids').map((v) => Number(clean(v, 12))).filter(Number.isInteger);
   const singleId = Number(clean(form.get('id'), 12));

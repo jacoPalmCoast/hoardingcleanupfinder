@@ -17,22 +17,34 @@ export function clusterKey(message: string): string {
   return uniq.slice(0, 6).join('-') || message.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20) || 'misc';
 }
 
-export async function addFeedback(f: { type: FeedbackType; message: string; email?: string | null; pageUrl?: string | null; session?: string | null }): Promise<number | null> {
+export type FeedbackSeverity = 'blocker' | 'annoying' | 'minor';
+export const isSeverity = (s: string): s is FeedbackSeverity => s === 'blocker' || s === 'annoying' || s === 'minor';
+
+export async function addFeedback(f: { type: FeedbackType; message: string; email?: string | null; pageUrl?: string | null; session?: string | null; severity?: string | null; shotKey?: string | null; context?: string | null }): Promise<number | null> {
   const t = now();
   const res = await env.DB.prepare(
-    `INSERT INTO feedback(type, message, email, page_url, cluster_key, session, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?7)`,
-  ).bind(f.type, f.message, f.email ?? null, f.pageUrl ?? null, clusterKey(f.message), f.session ?? null, t).run();
+    `INSERT INTO feedback(type, message, email, page_url, cluster_key, session, severity, shot_key, context, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10)`,
+  ).bind(f.type, f.message, f.email ?? null, f.pageUrl ?? null, clusterKey(f.message), f.session ?? null, f.severity ?? null, f.shotKey ?? null, f.context ?? null, t).run();
   return Number(res.meta.last_row_id) || null;
 }
 
 export interface FeedbackRow {
   id: number; type: string; message: string; email: string | null; page_url: string | null;
   status: string; priority: number | null; cluster_key: string | null; admin_notes: string | null;
+  severity: string | null; shot_key: string | null; context: string | null;
   created_at: number; reporters: number; score: number;
 }
 const TYPE_WEIGHT: Record<string, number> = { bug: 300, idea: 200, other: 100 };
-const scoreOf = (r: { type: string; reporters: number; priority: number | null }) =>
-  (r.priority ?? 0) * 1000 + (TYPE_WEIGHT[r.type] ?? 100) + Math.max(0, r.reporters - 1) * 20;
+const SEV_WEIGHT: Record<string, number> = { blocker: 150, annoying: 60, minor: 10 };
+const scoreOf = (r: { type: string; reporters: number; priority: number | null; severity?: string | null }) =>
+  (r.priority ?? 0) * 1000 + (TYPE_WEIGHT[r.type] ?? 100) + (r.severity ? (SEV_WEIGHT[r.severity] ?? 0) : 0) + Math.max(0, r.reporters - 1) * 20;
+
+export async function getFeedback(id: number): Promise<FeedbackRow | null> {
+  const r = await env.DB.prepare(
+    `SELECT f.*, (SELECT COUNT(*) FROM feedback g WHERE g.cluster_key = f.cluster_key) AS reporters FROM feedback f WHERE f.id = ?1`,
+  ).bind(id).first<Omit<FeedbackRow, 'score'>>();
+  return r ? { ...r, score: scoreOf(r) } : null;
+}
 
 // Newest data, ranked by score (manual priority dominates, then type, then how many reported it).
 export async function listFeedback(status?: string, limit = 300): Promise<FeedbackRow[]> {

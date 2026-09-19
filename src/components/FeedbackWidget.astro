@@ -1,0 +1,193 @@
+---
+// Site-wide feedback widget: a pill that opens a slide-over on the current page, captures a
+// screenshot of that page (bundled html2canvas, no third-party script, no permission prompt),
+// gathers technical context, and submits to /api/feedback via multipart AJAX. The plain /feedback
+// page remains as a no-JS fallback (linked in the footer).
+---
+<div id="fbw" data-open="false">
+  <button type="button" class="fbw-pill" id="fbw-open" aria-haspopup="dialog" aria-expanded="false" aria-label="Send feedback">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <span>Feedback</span>
+  </button>
+
+  <div class="fbw-backdrop" id="fbw-backdrop" hidden></div>
+  <div class="fbw-panel" id="fbw-panel" role="dialog" aria-modal="true" aria-label="Send feedback" hidden>
+    <div class="fbw-head">
+      <strong>Send feedback</strong>
+      <button type="button" class="fbw-x" id="fbw-close" aria-label="Close">✕</button>
+    </div>
+    <div class="fbw-body">
+      <form id="fbw-form">
+        <label for="fbw-type">This is…</label>
+        <select id="fbw-type" name="type">
+          <option value="idea">An idea / improvement</option>
+          <option value="bug">A bug / something broken</option>
+          <option value="other">Something else</option>
+        </select>
+
+        <div id="fbw-sevwrap" hidden>
+          <label for="fbw-sev">How bad is it?</label>
+          <select id="fbw-sev" name="severity">
+            <option value="minor">Minor — cosmetic</option>
+            <option value="annoying" selected>Annoying — gets in the way</option>
+            <option value="blocker">Blocker — can't continue</option>
+          </select>
+        </div>
+
+        <label for="fbw-msg">What's on your mind?</label>
+        <textarea id="fbw-msg" name="message" required maxlength="2000" minlength="4" style="min-height:96px" placeholder="Describe the problem or idea."></textarea>
+
+        <label for="fbw-email">Email <span class="fbw-dim">(optional)</span></label>
+        <input id="fbw-email" name="email" type="email" maxlength="254" />
+
+        <label class="fbw-shot-row"><input type="checkbox" id="fbw-shot" checked /> Include a screenshot of this page</label>
+        <div class="fbw-thumb" id="fbw-thumb" hidden><img id="fbw-thumb-img" alt="Screenshot preview" /></div>
+        <p class="fbw-dim" id="fbw-shotnote" style="margin:4px 0 0">Capturing this page…</p>
+
+        <!-- honeypot: real people never fill this -->
+        <input type="text" id="fbw-hp" name="company_website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true" />
+
+        <p class="fbw-note">We'll include a screenshot of this page and basic browser info (screen size, browser) to help us fix things.</p>
+        <div class="fbw-actions">
+          <button class="btn" type="submit" id="fbw-send">Send feedback</button>
+          <span id="fbw-status" class="fbw-dim" role="status"></span>
+        </div>
+      </form>
+      <div id="fbw-done" hidden>
+        <p><strong>Thank you.</strong> Your feedback is in — we read every one.</p>
+        <button type="button" class="btn secondary" id="fbw-again">Send another</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  #fbw { position: fixed; z-index: 2000; }
+  .fbw-pill { position: fixed; right: 16px; bottom: 16px; display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; background: var(--teal, #0f6d6a); color: #fff; border: 0; border-radius: 999px; font-size: .85rem; font-weight: 600; cursor: pointer; box-shadow: 0 6px 20px rgba(15,109,106,.28); }
+  .fbw-pill:hover { background: var(--teal-dark, #0c5b58); }
+  .fbw-backdrop { position: fixed; inset: 0; background: rgba(12,20,20,.45); z-index: 2001; }
+  .fbw-panel { position: fixed; top: 0; right: 0; height: 100%; width: min(420px, 92vw); background: #fff; z-index: 2002; box-shadow: -8px 0 40px rgba(0,0,0,.18); display: flex; flex-direction: column; }
+  .fbw-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid #e6ecec; }
+  .fbw-x { border: 0; background: none; font-size: 18px; cursor: pointer; color: #4a5757; line-height: 1; }
+  .fbw-body { padding: 16px 18px; overflow: auto; }
+  .fbw-body label { display: block; font-weight: 600; font-size: .9rem; margin: 12px 0 4px; }
+  .fbw-body label.fbw-shot-row { font-weight: 400; display: flex; align-items: center; gap: 8px; }
+  .fbw-body input[type=text], .fbw-body input[type=email], .fbw-body select, .fbw-body textarea { width: 100%; }
+  .fbw-dim { color: #6b7777; font-weight: 400; font-size: .82rem; }
+  .fbw-thumb { margin-top: 8px; border: 1px solid #dfe4e4; border-radius: 8px; overflow: hidden; max-height: 160px; }
+  .fbw-thumb img { width: 100%; display: block; }
+  .fbw-note { font-size: .78rem; color: #6b7777; margin: 12px 0 0; }
+  .fbw-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .fbw-actions .btn { width: auto; }
+  @media (max-width: 560px) { .fbw-pill span { display: none; } .fbw-pill { padding: 11px; } }
+  @media print { #fbw { display: none; } }
+</style>
+
+<script>
+// @ts-nocheck
+(() => {
+  const root = document.getElementById('fbw');
+  if (!root) return;
+  const openBtn = document.getElementById('fbw-open');
+  const panel = document.getElementById('fbw-panel');
+  const backdrop = document.getElementById('fbw-backdrop');
+  const closeBtn = document.getElementById('fbw-close');
+  const form = document.getElementById('fbw-form');
+  const typeSel = document.getElementById('fbw-type');
+  const sevWrap = document.getElementById('fbw-sevwrap');
+  const shotChk = document.getElementById('fbw-shot');
+  const thumb = document.getElementById('fbw-thumb');
+  const thumbImg = document.getElementById('fbw-thumb-img');
+  const shotNote = document.getElementById('fbw-shotnote');
+  const statusEl = document.getElementById('fbw-status');
+  const doneEl = document.getElementById('fbw-done');
+  const sendBtn = document.getElementById('fbw-send');
+  let shotBlob = null;
+
+  // Buffer recent JS errors on every page so bug reports carry them.
+  const errbuf = (window.__hcfErrors = window.__hcfErrors || []);
+
+  function toggleSev() { sevWrap.hidden = typeSel.value !== 'bug'; }
+  typeSel.addEventListener('change', toggleSev);
+
+  async function capture() {
+    shotBlob = null; thumb.hidden = true; shotNote.textContent = 'Capturing this page…';
+    if (!shotChk.checked) { shotNote.textContent = 'Screenshot off.'; return; }
+    try {
+      const { default: html2canvas } = await import('html2canvas'); // lazy — only when the panel opens
+      const canvas = await html2canvas(document.documentElement, {
+        ignoreElements: (el) => el.id === 'fbw',
+        backgroundColor: '#ffffff', logging: false, useCORS: true, scale: 1,
+        windowWidth: document.documentElement.clientWidth,
+        windowHeight: document.documentElement.clientHeight,
+        width: document.documentElement.clientWidth,
+        height: document.documentElement.clientHeight,
+      });
+      // Downscale to max 1000px wide.
+      const maxW = 1000;
+      const scale = canvas.width > maxW ? maxW / canvas.width : 1;
+      const out = document.createElement('canvas');
+      out.width = Math.round(canvas.width * scale); out.height = Math.round(canvas.height * scale);
+      out.getContext('2d').drawImage(canvas, 0, 0, out.width, out.height);
+      shotBlob = await new Promise((res) => out.toBlob(res, 'image/jpeg', 0.8));
+      if (shotBlob) { thumbImg.src = URL.createObjectURL(shotBlob); thumb.hidden = false; shotNote.textContent = 'Screenshot attached — it captures what you see now.'; }
+      else shotNote.textContent = 'Couldn’t capture a screenshot, but your message will still send.';
+    } catch {
+      shotNote.textContent = 'Couldn’t capture a screenshot, but your message will still send.';
+    }
+  }
+
+  function open() {
+    root.dataset.open = 'true';
+    backdrop.hidden = false; panel.hidden = false;
+    openBtn.setAttribute('aria-expanded', 'true');
+    doneEl.hidden = true; form.hidden = false;
+    document.getElementById('fbw-msg').focus();
+    toggleSev();
+    capture();
+  }
+  function close() {
+    root.dataset.open = 'false';
+    backdrop.hidden = true; panel.hidden = true;
+    openBtn.setAttribute('aria-expanded', 'false');
+    openBtn.focus();
+  }
+
+  openBtn.addEventListener('click', open);
+  closeBtn.addEventListener('click', close);
+  backdrop.addEventListener('click', close);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && root.dataset.open === 'true') close(); });
+  shotChk.addEventListener('change', capture);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('fbw-msg').value.trim();
+    if (msg.length < 4) { statusEl.textContent = 'Please add a bit more detail.'; return; }
+    sendBtn.disabled = true; statusEl.textContent = 'Sending…';
+    const ctx = {
+      full_url: location.href,
+      viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 },
+      ua: navigator.userAgent,
+      referrer: document.referrer || '',
+      errors: errbuf.slice(-5),
+    };
+    const fd = new FormData();
+    fd.append('type', typeSel.value);
+    if (typeSel.value === 'bug') fd.append('severity', document.getElementById('fbw-sev').value);
+    fd.append('message', msg);
+    fd.append('email', document.getElementById('fbw-email').value);
+    fd.append('page_url', location.pathname + location.search);
+    fd.append('context', JSON.stringify(ctx));
+    fd.append('company_website', document.getElementById('fbw-hp').value); // honeypot
+    if (shotBlob && shotChk.checked) fd.append('file', new File([shotBlob], 'screen.jpg', { type: 'image/jpeg' }));
+    try {
+      const r = await fetch('/api/feedback', { method: 'POST', body: fd, headers: { 'x-fbw': '1' } });
+      const j = await r.json().catch(() => ({ ok: r.ok }));
+      if (j.ok || r.ok) { form.hidden = true; doneEl.hidden = false; form.reset(); }
+      else { statusEl.textContent = 'Something went wrong — please try again.'; sendBtn.disabled = false; }
+    } catch { statusEl.textContent = 'Something went wrong — please try again.'; sendBtn.disabled = false; }
+  });
+
+  document.getElementById('fbw-again').addEventListener('click', () => { doneEl.hidden = true; form.hidden = false; statusEl.textContent = ''; sendBtn.disabled = false; capture(); });
+})();
+</script>

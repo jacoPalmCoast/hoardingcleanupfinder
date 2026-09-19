@@ -35,6 +35,8 @@
     { "binding": "ATTACH", "bucket_name": "hcf-attachments" },
     // Listing photos. Not a public bucket; every object is served through the /img/ route,
     // which sets a long immutable cache and its own tight CSP.
-    { "binding": "PHOTOS", "bucket_name": "hcf-photos" }
+    { "binding": "PHOTOS", "bucket_name": "hcf-photos" },
+    // Feedback screenshots. Private; served only through the admin-authed /api/admin/feedback-shot route.
+    { "binding": "FEEDBACK", "bucket_name": "hcf-feedback" }
   ]
 }
