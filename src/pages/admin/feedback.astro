@@ -1,0 +1,109 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import { listFeedback, feedbackCounts, FEEDBACK_STATUSES } from '../../lib/feedback';
+import { tsToDate } from '../../lib/util';
+
+const tab = (Astro.url.searchParams.get('tab') ?? 'new');
+const status = tab === 'all' || (FEEDBACK_STATUSES as readonly string[]).includes(tab) ? tab : 'new';
+const [rows, counts] = await Promise.all([listFeedback(status), feedbackCounts()]);
+const when = (t: unknown) => { const d = tsToDate(t); return d ? d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'; };
+const TYPE_PILL: Record<string, string> = { bug: 'bad', idea: 'brand', other: 'muted' };
+const STATUS_PILL: Record<string, string> = { new: 'brand', triaged: 'info', planned: 'warn', shipped: 'ok', declined: 'muted' };
+const TABS = ['new', 'triaged', 'planned', 'shipped', 'declined', 'all'] as const;
+---
+<Admin title="Feedback">
+  <p slot="sub" class="sub">Visitor ideas & bug reports — triage, rank, then export a build run</p>
+  <Fragment slot="actions">
+    <a class="btn secondary small" href="/api/admin/feedback-buildrun">Export build run ↓</a>
+  </Fragment>
+
+  <div class="tabs" style="margin-bottom:14px">
+    {TABS.map((tb) => (
+      <a class={`tab ${status === tb ? 'on' : ''}`} href={`/admin/feedback?tab=${tb}`}>
+        {tb[0].toUpperCase() + tb.slice(1)} <span class="tcount">{counts[tb] ?? 0}</span>
+      </a>
+    ))}
+  </div>
+
+  {rows.length === 0 ? (
+    <div class="card"><div class="empty">
+      <b>Nothing here</b>
+      {status === 'new' ? 'New feedback from the site will land here, ranked by importance.' : `No ${status} items.`}
+    </div></div>
+  ) : (
+    <form action="/api/admin/feedback" method="post">
+      <input type="hidden" name="tab" value={status} />
+      <div class="card">
+        <div class="card-h"><h3>{status === 'all' ? 'All feedback' : status[0].toUpperCase() + status.slice(1)}</h3><span class="hint">{rows.length} · ranked</span></div>
+        <div class="bulkbar">
+          <label class="small"><input type="checkbox" id="selAll" /> Select</label>
+          <div class="spacer"></div>
+          <select name="status" aria-label="Set status for selected">
+            {FEEDBACK_STATUSES.map((s) => <option value={s}>{s}</option>)}
+          </select>
+          <button class="btn small secondary" type="submit" formaction="/api/admin/feedback" name="action" value="bulk_status">Apply to selected</button>
+          <button class="btn small danger" type="submit" name="action" value="bulk_delete" onclick="return confirm('Delete the selected feedback? This cannot be undone.')">Delete</button>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th style="width:28px"></th><th>Feedback</th><th>Score</th><th>Status</th><th>Priority</th><th>When</th></tr></thead>
+          <tbody>
+            {rows.map((f) => (
+              <tr>
+                <td><input type="checkbox" name="ids" value={f.id} class="rowck" /></td>
+                <td style="max-width:440px">
+                  <span class={`pill ${TYPE_PILL[f.type] ?? 'muted'}`} style="margin-right:6px">{f.type}</span>
+                  {f.reporters > 1 && <span class="pill info" style="margin-right:6px">{f.reporters}× reported</span>}
+                  <div style="margin-top:4px;white-space:pre-wrap">{f.message}</div>
+                  <div class="sub2" style="margin-top:4px">{f.email ?? 'no email'}{f.page_url ? ` · ${f.page_url}` : ''}</div>
+                  {f.admin_notes && <div class="sub2" style="margin-top:2px">📝 {f.admin_notes}</div>}
+                </td>
+                <td class="tnum" style="font-weight:600">{f.score}</td>
+                <td>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    <span class={`pill ${STATUS_PILL[f.status] ?? 'muted'}`}>{f.status}</span>
+                  </div>
+                  <select aria-label="Status" onchange={`var fm=document.getElementById('sf${f.id}');fm.querySelector('[name=status]').value=this.value;fm.requestSubmit();`} style="margin-top:6px">
+                    {FEEDBACK_STATUSES.map((s) => <option value={s} selected={s === f.status}>{s}</option>)}
+                  </select>
+                </td>
+                <td>
+                  <input form={`pf${f.id}`} type="number" name="priority" min="0" max="9" value={f.priority ?? ''} placeholder="—" style="width:56px" onchange="this.form.requestSubmit()" aria-label="Priority 0-9" />
+                </td>
+                <td class="mut" style="white-space:nowrap">{when(f.created_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+      </div>
+    </form>
+  )}
+
+  {/* Hidden per-row forms so the inline status/priority controls submit without nesting forms. */}
+  {rows.map((f) => (
+    <>
+      <form id={`sf${f.id}`} action="/api/admin/feedback" method="post" hidden><input type="hidden" name="action" value="status" /><input type="hidden" name="id" value={f.id} /><input type="hidden" name="tab" value={status} /><input type="hidden" name="status" value={f.status} /></form>
+      <form id={`pf${f.id}`} action="/api/admin/feedback" method="post" hidden><input type="hidden" name="action" value="priority" /><input type="hidden" name="id" value={f.id} /><input type="hidden" name="tab" value={status} /></form>
+    </>
+  ))}
+
+  <p class="sub" style="margin-top:14px">Score = manual priority (0–9, weighted highest), then type (bug &gt; idea &gt; other), then how many people reported the same thing. “Export build run” downloads everything not shipped/declined as a ranked Markdown brief. The admin agent can see all of this too.</p>
+
+  <script is:inline>
+    (function () {
+      var all = document.getElementById('selAll');
+      if (!all) return;
+      all.addEventListener('change', function () {
+        document.querySelectorAll('.rowck').forEach(function (c) { c.checked = all.checked; });
+      });
+    })();
+  </script>
+</Admin>
+
+<style>
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tab { padding: 6px 12px; border-radius: 999px; text-decoration: none; font-size: .88rem; font-weight: 500; color: var(--a-text, #1a2b2b); background: var(--a-soft, #eef3f3); }
+  .tab.on { background: var(--a-brand, #0f6d6a); color: #fff; }
+  .tab .tcount { opacity: .7; font-variant-numeric: tabular-nums; margin-left: 3px; }
+  .bulkbar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--a-border, #e6ecec); flex-wrap: wrap; }
+  .bulkbar .spacer { flex: 1; }
+</style>

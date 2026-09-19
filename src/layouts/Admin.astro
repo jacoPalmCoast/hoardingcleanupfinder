@@ -16,6 +16,7 @@ if (!ok) return Astro.redirect('/admin/login', 302);
 const c = (await adminCounts().catch(() => ({} as Record<string, number>))) as Record<string, number>;
 const support = await pendingTicketCount().catch(() => 0);
 const claimsPending = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM claims WHERE status = 'review'`).first<{ n: number }>().catch(() => null))?.n ?? 0;
+const feedbackNew = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM feedback WHERE status = 'new'`).first<{ n: number }>().catch(() => null))?.n ?? 0;
 
 const path = (Astro.url.pathname.replace(/\/+$/, '') || '/admin');
 const active = (href: string, exact = false) => (exact ? path === href : path === href || path.startsWith(href + '/'));
@@ -67,6 +68,7 @@ const groups: { title?: string; items: Item[] }[] = [
   { title: 'Insights', items: [
     { href: '/admin/analytics', label: 'Analytics', icon: 'analytics' },
     { href: '/admin/demand', label: 'Demand', icon: 'search' },
+    { href: '/admin/feedback', label: 'Feedback', icon: 'bell', count: feedbackNew, hot: feedbackNew > 0 },
     { href: '/admin/emails', label: 'Email', icon: 'email' },
     { href: '/admin/automation', label: 'Automation', icon: 'automation' },
   ]},

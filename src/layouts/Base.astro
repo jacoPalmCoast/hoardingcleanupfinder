@@ -96,6 +96,7 @@ const ld = { '@context': 'https://schema.org', '@graph': graph };
             <li><a href="/account">Advertiser Login</a></li>
             <li><a href="/about">About and listing policy</a></li>
             <li><a href="/support">Contact / support</a></li>
+            <li><a href="/feedback">Send feedback</a></li>
             <li><a href="/privacy">Privacy</a></li>
             <li><a href="/terms">Terms of Service</a></li>
             <li><a href="/refunds">Cancellation &amp; refunds</a></li>
@@ -104,7 +105,16 @@ const ld = { '@context': 'https://schema.org', '@graph': graph };
       </div>
       <div class="wrap small" style="margin-top:20px">If you are in immediate danger or someone needs urgent medical help, call 911. Information on this site is general and not medical or legal advice.</div>
     </footer>
+    <a class="fb-fab" href="/feedback" aria-label="Send feedback">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span>Feedback</span>
+    </a>
     <script is:inline>
+      // Carry the current page path into the feedback form so admin sees where an issue was seen.
+      (function () {
+        var fab = document.querySelector('.fb-fab');
+        if (fab) fab.setAttribute('href', '/feedback?from=' + encodeURIComponent(location.pathname));
+      })();
       // Insert a "Back" control just under the breadcrumbs on every page that has them.
       // Goes to the previous page when the visitor arrived from within the site; otherwise
       // falls back to the parent breadcrumb (or home) so a direct/search landing still works.

@@ -235,3 +235,10 @@ th { background: var(--grey-1); font-weight: 600; color: var(--ink); }
 
 /* ---------- section rhythm ---------- */
 section + section { margin-top: clamp(28px, 4vw, 44px); }
+
+/* Site-wide feedback affordance — restrained pill, bottom-right, out of the way. */
+.fb-fab { position: fixed; right: 16px; bottom: 16px; z-index: 50; display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; background: var(--teal, #0f6d6a); color: #fff; border-radius: 999px; font-size: .85rem; font-weight: 600; text-decoration: none; box-shadow: 0 6px 20px rgba(15,109,106,.28); }
+.fb-fab:hover { background: var(--teal-dark, #0c5b58); }
+.fb-fab svg { flex: none; }
+@media (max-width: 560px) { .fb-fab span { display: none; } .fb-fab { padding: 11px; } }
+@media print { .fb-fab { display: none; } }

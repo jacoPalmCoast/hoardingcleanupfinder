@@ -1,0 +1,32 @@
+---
+import Base from '../layouts/Base.astro';
+import { env } from '../lib/env';
+const siteKey = env.TURNSTILE_SITE_KEY ?? '';
+const from = Astro.url.searchParams.get('from') ?? '';
+const msg = Astro.url.searchParams.get('msg');
+---
+<Base title="Send feedback" description="Report a problem or suggest an improvement for Hoarding Cleanup Finder." noindex>
+  <h1>Feedback</h1>
+  <p class="small" style="max-width:60ch">Found a bug or have an idea to make the site better? Tell us here. Email is optional — leave it if you'd like a reply.</p>
+
+  {msg === 'sent' && <div class="notice" role="status"><strong>Thank you.</strong> Your feedback is in — we read every one. You can send another below any time.</div>}
+  {msg === 'captcha' && <div class="notice error" role="alert">The spam check didn't pass. Please go back and try again.</div>}
+  {msg === 'rate-limited' && <div class="notice error" role="alert">That's a few too many submissions in a short time. Please wait a little while.</div>}
+
+  <form action="/api/feedback" method="post" style="max-width:560px">
+    <input type="hidden" name="page_url" value={from} />
+    <label for="type">This is…</label>
+    <select id="type" name="type" required>
+      <option value="idea">An idea / improvement</option>
+      <option value="bug">A bug / something broken</option>
+      <option value="other">Something else</option>
+    </select>
+    <label for="message">What's on your mind?</label>
+    <textarea id="message" name="message" required maxlength="2000" minlength="4" style="min-height:130px" placeholder="Describe the problem or idea. If it's a bug, what did you do and what happened?"></textarea>
+    <label for="email">Email <span class="small">(optional)</span></label>
+    <input id="email" name="email" type="email" maxlength="254" />
+    {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-size="flexible" style="margin-top:12px"></div>}
+    <button class="btn" type="submit" style="margin-top:14px">Send feedback</button>
+  </form>
+  {siteKey && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
+</Base>
